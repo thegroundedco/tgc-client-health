@@ -225,16 +225,100 @@ transient outage cannot overwrite real data with emptiness.
 
 ## 9. Visual design
 
-Match The Grounded Company's brand exactly. Required assets: brand hex values
-(primary, accent, neutrals), headline and body typefaces (with font files if
-licensed rather than Google Fonts), and the logo as SVG.
+Source: `Grounded_Styleguide_Final.ai` (16 pages, 2025). Values below are read
+directly from the guide, not approximated.
 
-**Pending.** Until supplied, v1's palette stands in as a placeholder — warm paper
-`#F6F4EE`, ink `#211E19`, deep green accent `#28463A`, bands green `#3F7A52` /
-amber `#B4822C` / red `#AE3B2C`, with Fraunces, Inter, and IBM Plex Mono. All of
-it is defined as CSS custom properties in one file so the swap is a single edit.
+### 9.1 Palette
 
-Band thresholds carry from v1: Healthy 18–25, Watch 11–17, At risk 0–10.
+| Token | Brand name | Hex | RGB |
+|---|---|---|---|
+| `--ink` | Rich Black | `#1F1F1F` | 31 31 31 |
+| `--paper` | Spot Cream | `#FBF7EB` | 251 247 235 |
+| `--teal` | PMS 4174 C | `#83C1C0` | 131 193 192 |
+| `--blush` | PMS 169 C | `#FFB3AB` | 255 179 171 |
+| `--red` | PMS Warm Red C | `#F9423A` | 249 66 58 |
+
+The guide also defines tint ramps beneath each core color, and the separations
+carry PMS 3556 C and 6045 C which do not appear on the palette page — treated as
+out of scope unless you say otherwise.
+
+Usage proportion from the guide's color-usage page: Rich Black and Spot Cream
+dominate; teal and warm red are accents; blush is a supporting tone.
+
+### 9.2 Contrast — measured, and it constrains the UI
+
+| Foreground | On cream `#FBF7EB` | On black `#1F1F1F` |
+|---|---|---|
+| Rich Black | **15.39:1** | — |
+| Warm Red | 3.34:1 — large text only | **4.61:1** |
+| Teal | 1.89:1 — **unusable as text** | **8.13:1** |
+| Blush | 1.60:1 — **unusable as text** | **9.64:1** |
+
+Consequences, which are not negotiable if the tool is to stay readable:
+
+- **Teal and blush are fills, never text on cream.** They carry dark text on top
+  (8.13:1 and 9.64:1 respectively) but cannot themselves be read against the
+  background. The styleguide uses teal as display type at poster scale; that does
+  not transfer to 13px UI labels.
+- **Warm red is display-scale only on cream** (3.34:1 passes large-text, fails
+  body). Error text on cream uses Rich Black with a red icon or rule, not red text.
+- **Body copy is Rich Black on Spot Cream.** Everything else is decoration.
+
+### 9.3 Status colors — a gap in the brand palette
+
+The brand has no green and no amber, and blush versus warm red measure only
+**2.09:1** apart — far too close to encode two adjacent health bands that users
+must tell apart at a glance.
+
+Resolution: health bands use **one functional amber outside the brand palette**,
+reserved exclusively for status and never used as brand expression.
+
+| Band | Score | Fill | Rationale |
+|---|---|---|---|
+| Healthy | 18–25 | Teal `#83C1C0` | On-brand, clearly separated from red |
+| Watch | 11–17 | Functional amber (TBD, ~`#D98A2B`) | Fills the palette gap |
+| At risk | 0–10 | Warm Red `#F9423A` | On-brand, and red already means trouble |
+
+**Color is never the only signal.** Every band badge carries its text label, so the
+distinction survives greyscale printing and color blindness alike.
+
+### 9.4 Typography
+
+The guide's entire system is **Field Gothic**, used across widths and weights:
+
+| Role | Face |
+|---|---|
+| Headline / primary read | Field Gothic No. 85 XBold XWide |
+| Second-level header | Field Gothic No. 34 Demi XCondensed |
+| Micro details / eyebrow | Field Gothic No. 70 XLight Wide |
+| Lead paragraph, emphasis | Field Gothic No. 64 Demi |
+| Body | Field Gothic No. 62 Regular; bold No. 66 XBold |
+| Small caption | Field Gothic No. 25 Bold XXCondensed |
+| Alternative display | Duc De Berry LT (blackletter) |
+
+**Open licensing question.** Field Gothic is a commercial family and is not on
+Google Fonts. Using it on the web needs a *webfont* licence and WOFF2 files —
+a desktop licence covering the Illustrator file does not extend to web embedding.
+Two paths:
+
+1. Supply the licensed WOFF2 files → exact brand match.
+2. Substitute **Archivo** (Google Fonts, variable, width axis 62–125 and weight
+   100–900), which reproduces Field Gothic's wide/condensed range from one
+   family and is free to embed.
+
+Until resolved, the build uses Archivo and defines every face as a CSS custom
+property in one file, so switching to Field Gothic is a single edit.
+
+The display faces (Duc De Berry, Sloop Script, Fatboy Slim, ZITZ) have no role in
+this tool and are ignored.
+
+### 9.5 Logo
+
+Wordmark is "GROUNDED" with the kiwi icon replacing the O; variants include
+stacked lockups, a TGC monogram, and circular badges. **Needs an SVG export from
+Illustrator** — extracting clean vectors from the 226MB `.ai` is not worth the
+effort when an export takes seconds. The app needs the horizontal lockup and the
+standalone kiwi icon (for the favicon).
 
 ## 10. Testing
 
@@ -270,8 +354,11 @@ deployed and usable. Abandoning after any phase still leaves a working tool.
 
 ## 12. Open items
 
-1. **Brand assets** — blocks final UI styling only.
-2. **Private repo hosting** — GitHub Pages needs a paid plan for private repos;
+1. **Field Gothic webfont licence** — determines exact brand match versus the
+   Archivo substitute. Blocks final styling only, not the build.
+2. **Logo SVG export** — horizontal lockup plus the standalone kiwi icon.
+3. **Functional amber** — confirm the exact value for the Watch band.
+4. **Private repo hosting** — GitHub Pages needs a paid plan for private repos;
    alternative is a public repo or a third-party host. Decide at deploy.
-3. **Starter client roster** — the real client list to seed. v1 had a hardcoded
+5. **Starter client roster** — the real client list to seed. v1 had a hardcoded
    starter set; v2 will take it from you, or start empty and add via the UI.
