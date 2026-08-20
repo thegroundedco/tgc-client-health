@@ -276,11 +276,17 @@ reserved exclusively for status and never used as brand expression.
 | Band | Score | Fill | Rationale |
 |---|---|---|---|
 | Healthy | 18–25 | Teal `#83C1C0` | On-brand, clearly separated from red |
-| Watch | 11–17 | Functional amber (TBD, ~`#D98A2B`) | Fills the palette gap |
+| Watch | 11–17 | Functional amber `#E8A33D` | Fills the palette gap; 7.64:1 for dark text on it |
 | At risk | 0–10 | Warm Red `#F9423A` | On-brand, and red already means trouble |
 
-**Color is never the only signal.** Every band badge carries its text label, so the
-distinction survives greyscale printing and color blindness alike.
+**Luminance separation between the three fills is inherently weak** — teal against
+warm red is only 1.76:1, and every candidate amber lands within 1.9:1 of red. All
+three bands sit at mid lightness, so no colour choice fixes this.
+
+The distinction therefore rests on **hue plus a mandatory text label**, never on
+brightness. This is why the label rule is structural rather than cosmetic: in
+greyscale, or for a red-green colour-blind viewer, the word "Watch" is what carries
+the meaning. Any future status indicator follows the same rule.
 
 ### 9.4 Typography
 
@@ -306,8 +312,8 @@ Two paths:
    100–900), which reproduces Field Gothic's wide/condensed range from one
    family and is free to embed.
 
-Until resolved, the build uses Archivo and defines every face as a CSS custom
-property in one file, so switching to Field Gothic is a single edit.
+**Decided: Archivo**, with every face defined as a CSS custom property in one file
+so switching to Field Gothic later is a single edit.
 
 The display faces (Duc De Berry, Sloop Script, Fatboy Slim, ZITZ) have no role in
 this tool and are ignored.
@@ -354,11 +360,9 @@ deployed and usable. Abandoning after any phase still leaves a working tool.
 
 ## 12. Open items
 
-1. **Field Gothic webfont licence** — determines exact brand match versus the
-   Archivo substitute. Blocks final styling only, not the build.
-2. **Logo SVG export** — horizontal lockup plus the standalone kiwi icon.
-3. **Functional amber** — confirm the exact value for the Watch band.
-4. **Private repo hosting** — GitHub Pages needs a paid plan for private repos;
+1. **Logo SVG export** — horizontal lockup plus the standalone kiwi icon for the
+   favicon. Needed before final styling; nothing else blocks on it.
+2. **Private repo hosting** — GitHub Pages needs a paid plan for private repos;
    alternative is a public repo or a third-party host. Decide at deploy.
-5. **Starter client roster** — the real client list to seed. v1 had a hardcoded
+3. **Starter client roster** — the real client list to seed. v1 had a hardcoded
    starter set; v2 will take it from you, or start empty and add via the UI.
