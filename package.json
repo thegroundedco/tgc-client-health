@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:privileges": "npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",

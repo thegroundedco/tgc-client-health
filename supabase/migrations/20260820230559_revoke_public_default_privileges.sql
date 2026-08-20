@@ -40,9 +40,26 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   revoke all on sequences from anon, authenticated;
 
--- Function defaults are intentionally NOT revoked. The plan revokes `execute`
--- explicitly on each function it creates, and broadly revoking function defaults
--- in public risks breaking Supabase-managed helpers that expect to be callable.
+-- CORRECTION (comment only; the statements above are exactly what was applied).
+-- This migration originally deferred function defaults, claiming that a broad
+-- revoke "risks breaking Supabase-managed helpers that expect to be callable".
+-- That reasoning was wrong and the deferral left a real gap.
+--
+-- It cannot break an existing helper: ALTER DEFAULT PRIVILEGES FOR ROLE postgres
+-- changes what happens when postgres creates a *future* object and never touches
+-- one that already exists. Nor can it reach Supabase's helpers, which are
+-- covered by a separate pg_default_acl row -- public/supabase_admin/f, distinct
+-- from public/postgres/f.
+--
+-- The gap: public/postgres/f still granted EXECUTE to anon and authenticated, so
+-- any later `create function public.x()` would have been anon-callable the moment
+-- it existed. Addressed in 20260820232223_revoke_public_function_defaults.sql.
+--
+-- That follow-up then turned up something further: Postgres's own hardcoded
+-- default grants EXECUTE on new functions to PUBLIC, which no ALTER DEFAULT
+-- PRIVILEGES on this project could suppress. See
+-- 20260820232429_revoke_public_function_execute_from_public.sql for the
+-- measurements and for what actually enforces the boundary instead.
 --
 -- Existing tables keep the privileges they were already granted -- default
 -- privileges apply at CREATE time only. public.profiles was already corrected in
