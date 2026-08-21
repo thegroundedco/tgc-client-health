@@ -51,9 +51,15 @@ describe('bandFor', () => {
 
 describe('the scoring vocabulary', () => {
   it('puts the maximum at 25, which is the denominator every screen prints', () => {
-    // Asserted as a literal on purpose. Board.tsx and CheckIn.tsx both print
-    // "of 25" beside a total; if the pillar count or the per-pillar maximum
-    // ever changes, this fails instead of the two screens quietly lying.
+    // Asserted as a literal on purpose. Every screen that prints a total
+    // prints "of 25" beside it, so if the pillar count or the per-pillar
+    // maximum ever changes, this fails here rather than leaving a screen
+    // quietly claiming the wrong denominator.
+    //
+    // The literal is only worth asserting while the screens read MAX_TOTAL
+    // rather than spelling 25 themselves. Board.tsx spelled it out until this
+    // commit and would have gone on lying regardless of this test; it now
+    // reads the token.
     expect(MAX_TOTAL).toBe(25)
     expect(MAX_PILLAR_SCORE).toBe(5)
     expect(SCORE_VALUES).toEqual([1, 2, 3, 4, 5])

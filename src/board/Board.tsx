@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
-import { BAND_LABELS, PILLARS, bandFor } from '../lib/score'
+import { BAND_LABELS, MAX_TOTAL, PILLARS, bandFor } from '../lib/score'
 import type { Pillar } from '../lib/score'
 import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
@@ -172,7 +172,7 @@ export function Board({ profile }: Props) {
                   {total === null ? '—' : total}
                 </span>
                 <span className="t-caption">
-                  {total === null ? 'not scored' : 'of 25'}
+                  {total === null ? 'not scored' : `of ${MAX_TOTAL}`}
                 </span>
               </p>
               <div className={styles.cardFoot}>
