@@ -42,7 +42,8 @@ export type UseCheckin = {
 }
 
 // The form's shape, from a stored row. Kept here rather than in draftCache
-// because it is the only place a database row and a local draft meet.
+// because this is the only place a row is turned into a draft -- the reverse
+// mapping, a draft into the row's columns, lives in submit() below.
 function draftFromRow(row: CheckinRow | null): Draft {
   if (!row) return EMPTY_DRAFT
   const pillars: PillarScores = {}
@@ -76,7 +77,21 @@ export function useCheckin(
   // stops the ordinary case's edges.
   const inFlight = useRef(false)
 
-  const load = useCallback(async () => {
+  // `isCancelled` guards every write below, once the request resolves --
+  // the same pattern src/auth/useProfile.ts uses (a `cancelled` flag set in
+  // an effect's cleanup). Defensive rather than reachable today: CheckIn is
+  // only ever rendered via `if (selected) return <CheckIn ... />`, so a
+  // changed client fully unmounts this hook instead of re-running `load` on
+  // a live instance, and there is no in-screen period switcher to change
+  // `period` under a mounted CheckIn either. But this callback's own
+  // dependency array below -- [clientId, period, lastPeriod] -- is written
+  // as though those can change while the effect stays mounted, and if that
+  // ever became true, a slow response for the *previous* client or period
+  // resolving after a newer request had already started would silently
+  // overwrite the screen with another client's scores and draft, with
+  // nothing on screen saying so. One check, right after the await: every
+  // line below it is synchronous, so it guards every write that follows.
+  const load = useCallback(async (isCancelled: () => boolean = () => false) => {
     setStatus('loading')
     // One query for both months. §5.2: fewer round trips and one failure mode
     // rather than three. `.in` rather than two `.eq` calls, so a partial
@@ -88,6 +103,8 @@ export function useCheckin(
         .select('*')
         .eq('client_id', clientId)
         .in('period', [lastPeriod, period])
+
+      if (isCancelled()) return
 
       if (error) {
         // describeError, not error.message: an empty message is falsy, and the
@@ -129,6 +146,7 @@ export function useCheckin(
       dispatch({ type: 'loaded' })
       if (differs) dispatch({ type: 'edited' })
     } catch (thrown) {
+      if (isCancelled()) return
       // postgrest-js resolves most failures into `error` rather than rejecting,
       // so this is defensive -- and it is here because the failure it guards is
       // invisible. An unobserved rejection leaves `status` on 'loading' for
@@ -139,7 +157,16 @@ export function useCheckin(
   }, [clientId, period, lastPeriod])
 
   useEffect(() => {
-    void load()
+    // A fresh flag per run, exactly as in useProfile: if `load`'s identity
+    // changes (clientId, period or lastPeriod changed) while this effect is
+    // still mounted, the cleanup below marks the old run's flag cancelled
+    // before the new run's effect body executes, and the same flag is
+    // marked cancelled on unmount.
+    let cancelled = false
+    void load(() => cancelled)
+    return () => {
+      cancelled = true
+    }
   }, [load])
 
   // One place that both updates the form and persists it, so no edit path can
