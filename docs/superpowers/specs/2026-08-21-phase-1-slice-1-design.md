@@ -40,8 +40,18 @@ column-grant sweep beyond `profiles`.
 
 Five steps, each independently deployable, in this order:
 
-1. **Staging project.** Josh creates `tgc-client-health-staging`; link it, push the seven existing
-   migrations, repoint `.env.local`. Production stops being a workbench.
+1. **New Supabase account, two projects.** The free-plan quota is two projects **per account**,
+   across every organisation where you are Owner or Administrator — a second organisation under
+   the same account buys nothing. Josh's original account was already at its limit, one of the two
+   projects being unrelated to this work and out of scope. He therefore created a second account;
+   production and
+   staging are both recreated under it, giving one CLI login and freeing the original account.
+   Recreated rather than transferred: seven migrations in git, one test row of data, no storage
+   and no edge functions make a fresh `db push` cheaper and less exotic than a cross-organisation
+   transfer. A project created now is also born after Supabase's 2026-04-28 default-privileges
+   change, so it will not carry the trap that cost Slice 0 the most time — the migration that
+   fixes that history becomes a harmless no-op, and `verify-privileges.sql` asserts end states
+   rather than history, so it still passes.
 2. **Token foundation applied to existing screens** — sign-in, access-pending, the four error
    states, the current board. Nothing new is built. This step proves the font.
 3. **Check-in screen.** Five pillars with anchors, notes, last month alongside, submit with
@@ -213,7 +223,36 @@ Two Supabase projects, the same seven migrations pushed to both. `.env.local` po
 the deploy keeps reading production from GitHub Actions secrets. No code changes, and no path by
 which the deployed site talks to staging.
 
-### 7.1 The hazard this introduces, and the mitigation
+### 7.1 There are no backups, and that is a bigger risk than the missing staging environment
+
+**The free plan includes no automated backups and no point-in-time recovery.** Supabase's own
+guidance for free projects is to export regularly with the CLI and keep the result off-site. So
+before any real client data lands, the honest statement of risk is not "we have nowhere to
+rehearse a migration" — it is "if this database is lost, there is nothing to restore from."
+
+**`supabase db dump` cannot be used here. It requires Docker.** Measured 2026-08-21 on this
+machine: `db dump --linked` and `db dump --linked --data-only` both fail with
+`LegacyDockerRunError` and write a zero-byte file. Docker Desktop is absent, and so is Homebrew.
+
+What does work, measured the same day, is `supabase db query --linked -f <file>`, which is how
+`verify:privileges` already runs. So `npm run db:dump` is built on that: a SQL file whose rows are
+generated `insert` statements, extracted from the CLI's JSON output into a re-runnable `.sql`
+file. The data volume makes this comfortable — eleven clients scored monthly is on the order of
+130 rows a year.
+
+Two rules attached to it:
+
+- **Output is gitignored, and never committed.** It contains real client data.
+- **No automated dump in GitHub Actions.** Supabase documents an Actions cron for exactly this,
+  and it is the wrong tool here: **this repository is public, and workflow artifacts on a public
+  repository are downloadable by anyone.** An automated dump would publish the client data it
+  exists to protect. The dump stays a local command, run deliberately, writing somewhere Josh
+  controls.
+
+A manual fallback needing no tooling at all: the dashboard SQL editor runs a select and downloads
+the result as CSV.
+
+### 7.2 The hazard the two projects introduce, and the mitigation
 
 Which project a command targets lives in one gitignored file, `supabase/.temp/project-ref`, and
 nothing prints it. `npm run verify:privileges` runs `--linked` and has a known side effect: it
@@ -225,7 +264,7 @@ called first inside `verify:privileges` and inside a new `npm run db:push` wrapp
 script exists yet; both are built in step 1 — so the check cannot be skipped. Production is linked
 deliberately, one command at a time, never left linked.
 
-### 7.2 The roster is a seed, not a migration
+### 7.3 The roster is a seed, not a migration
 
 Migrations run in every environment; the real client list must not. `scripts/seed-clients.sql`,
 idempotent, run by hand against staging and then production. Josh supplies the list; v1's starter
@@ -255,7 +294,9 @@ the user nothing. The fix is procedural, so it lives in the plan where it cannot
 | Light theme only | A dark-mode request later means redoing §9.2's contrast work for a second ground |
 | Partial check-ins persist | One more state on the board. Buys an honest progress count and cross-machine resume |
 | State-based navigation | No linkable check-in URLs until a router and the Pages 404 trick arrive |
-| Staging as a second cloud project | Free projects pause after 7 days idle and need a dashboard click to wake |
+| Staging as a second cloud project, on a new account | Free projects pause after 7 days idle and need a dashboard click to wake. Two accounts to keep track of, and the new one owns the agency's data — registered on an alias of Josh's address, which is a governance question to revisit if this becomes a team tool |
+| `db:dump` built on `db query` rather than `db dump` | If the generated-insert approach proves fragile, the fallbacks are the dashboard's CSV download or installing Postgres.app for a real `pg_dump`, which needs the database password from the dashboard |
+| No automated backups anywhere | Every dump depends on somebody remembering. Automating it needs a private place to put the output, which a public repository is not |
 | Sort chips and archive toggle cut | The board is unsorted beyond its default until Slice 2 |
 
 ## 10. Open items carried forward
