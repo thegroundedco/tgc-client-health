@@ -169,7 +169,11 @@ revoked**. Making one AM an exception is a checkbox, not a new role.
 
 ### 7.2 Enforcement
 
-Every table has RLS enabled and forced. Policies call a
+Every table has RLS enabled, but not forced — forcing it would also subject the
+table owner (`postgres`) and `service_role` to the policies, breaking the
+`security definer` signup trigger and any server-side administrative access, so
+`scripts/verify-privileges.sql` §7 asserts `relforcerowsecurity = false` on
+purpose. Policies call a
 `private.has_capability(text)` helper — `security definer`, `set search_path = ''`
 — which resolves the caller's role and overrides and requires `is_active`.
 Policies wrap it in a subselect so Postgres evaluates it once per statement
