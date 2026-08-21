@@ -294,7 +294,21 @@ describe.runIf(url && key)('RLS with no session', () => {
     expect(response.status).toBe(406)
     const body = (await response.json()) as { code?: string; hint?: string }
     expect(body.code).toBe('PGRST106')
-    expect(body.hint ?? '').not.toMatch(/\bprivate\b/)
+
+    // The hint's existence is asserted before its content. It used to read
+    // `expect(body.hint ?? '')`, which quietly passed if PostgREST ever stopped
+    // sending a hint at all — a vacuous assertion of exactly the kind this
+    // branch spent its last wave removing. Its *presence* is checked here and
+    // its *wording* deliberately is not, since the wording belongs to PostgREST
+    // and asserting it would make this test break on their release notes rather
+    // than on our configuration.
+    expect(
+      typeof body.hint,
+      'PostgREST no longer returns a hint listing the exposed schemas, so this ' +
+        'test can no longer see whether `private` is among them. Re-establish the ' +
+        'check against whatever it returns now — do not delete it.',
+    ).toBe('string')
+    expect(body.hint).not.toMatch(/\bprivate\b/)
   })
 
   it('cannot call private.is_active_user() as an RPC', async () => {

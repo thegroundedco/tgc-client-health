@@ -28,13 +28,27 @@
 do $$
 declare
   problems  text[] := '{}';
+
+  -- Kept SEPARATE from `problems` on purpose, and the distinction is the whole
+  -- point of having two arrays. A "problem" is a security finding: something is
+  -- open that should be shut, or shut that must be open. A "precondition" is
+  -- "there is not enough data here to run that check yet" -- no activated
+  -- account, no client rows, no check-in rows. Both still exit non-zero, because
+  -- a check that could not run must never read as a check that passed. But they
+  -- are reported under different headings, because an operator on a freshly
+  -- rebuilt project needs to tell "not enough data to check yet" apart from
+  -- "something is wrong", and the old single-array version told them their brand
+  -- new empty database had a privilege violation.
+  preconditions text[] := '{}';
+
   r         record;
   n_tables  int;
 
   -- Section 10 (policy behaviour) only.
-  active_uid uuid;
-  n_seen     bigint;
-  n_total    bigint;
+  active_uid      uuid;
+  n_seen          bigint;
+  n_clients_total bigint;
+  n_checkins_total bigint;
 
   -- The subject for every negative case in section 10: a syntactically valid
   -- uuid that has no row in public.profiles, so private.is_active_user() must
@@ -508,6 +522,10 @@ begin
   --     happening the block raises to roll its own subtransaction back. Neither
   --     outcome can leave a row behind.
   --
+  --     TWO KINDS OF FAILURE. Findings go into `problems`; "this database does
+  --     not contain enough data to run that check" goes into `preconditions`.
+  --     Both exit non-zero, under different headings. See the declarations.
+  --
   --     Every negative assertion here FAILS if its policy is widened to
   --     `using (true)`. That was verified by doing it: the six policies were
   --     rewritten as `using (true)` / `with check (true)` inside a transaction
@@ -524,6 +542,38 @@ begin
       absent_uid)::text;
   end if;
 
+  -- 10a2. DATA PRECONDITIONS, read once as the table owner and then reused by
+  --       10b, 10c and 10d alike.
+  --
+  --       Read here rather than inside 10b because 10c and 10d run whether or
+  --       not an account is activated, and they depend on these tables being
+  --       non-empty just as much as 10b does. An emptiness check that lived
+  --       inside 10b would guard 10b's comparison and leave 10c's and 10d's
+  --       `n_seen <> 0` reading `0 = 0` -- true for the wrong reason.
+  --
+  --       WHY THIS IS NOT PEDANTRY. Every assertion in section 10 compares a row
+  --       count. Against an empty table every one of them holds no matter what
+  --       the policy says, so in the reachable state
+  --         {one activated profile, one or more clients, ZERO check-ins}
+  --       the run reported OK while all three of the check-in assertions had gone
+  --       unexercised in either direction -- and
+  --       `checkins_select_active_users` widened to `using (true)` would have
+  --       passed. `clients` was guarded from the start and `checkins` was not,
+  --       which is exactly the defect class this whole file exists to eliminate,
+  --       sitting inside the guard built to eliminate it. Both tables are guarded
+  --       now, and the guards are here so that one check covers all three
+  --       sections.
+  select count(*) into n_clients_total  from public.clients;
+  select count(*) into n_checkins_total from public.checkins;
+
+  if n_clients_total = 0 then
+    preconditions := preconditions || 'public.clients is empty, so every assertion about who can read a client row is true for the wrong reason (0 = 0) and the clients policies went UNEXERCISED -- seed one client and re-run (README: "Seeding the first client")'::text;
+  end if;
+
+  if n_checkins_total = 0 then
+    preconditions := preconditions || 'public.checkins is empty, so every assertion about who can read a check-in is true for the wrong reason (0 = 0) and the checkins policies went UNEXERCISED -- save one check-in from the app, or seed one, and re-run (README: "Rebuilding this project from scratch")'::text;
+  end if;
+
   -- 10b. The positive case: an active account sees the data.
   --
   --      Asserted as "sees ALL of them" rather than "sees at least one", so it
@@ -531,10 +581,14 @@ begin
   --      `using (false)` -- the outage direction -- fails here rather than
   --      looking like an empty month.
   --
-  --      A missing subject or an empty table is reported as a violation rather
-  --      than skipped. A run that verified nothing must not look like a run that
-  --      verified everything; that is the same rule the unconditional
-  --      credentials test in src/lib/rls.test.ts exists to enforce.
+  --      A missing subject is reported (as a PRECONDITION, see the `preconditions`
+  --      declaration) rather than skipped. A run that verified nothing must not
+  --      look like a run that verified everything; that is the same rule the
+  --      unconditional credentials test in src/lib/rls.test.ts exists to enforce.
+  --      It is a precondition and not a violation because on a freshly rebuilt
+  --      project it is the expected state, and telling the operator their new
+  --      empty database has a privilege violation is how a real finding gets
+  --      ignored later.
   select id into active_uid
   from public.profiles
   where is_active
@@ -542,14 +596,9 @@ begin
   limit 1;
 
   if active_uid is null then
-    problems := problems || 'public.profiles contains no active row, so the positive half of section 10 could not run and the read path is UNVERIFIED -- activate an account (README: "Activating the first admin") and re-run'::text;
+    preconditions := preconditions || 'public.profiles contains no active row, so nothing could be checked from a signed-in point of view and the read path is UNVERIFIED -- activate an account (README: "Activating the first admin") and re-run'::text;
   else
     begin
-      select count(*) into n_total from public.clients;
-      if n_total = 0 then
-        problems := problems || 'public.clients is empty, so "an active user can read clients" could not be exercised and the read path is UNVERIFIED -- add a client and re-run'::text;
-      end if;
-
       perform set_config(
         'request.jwt.claims',
         json_build_object('sub', active_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
@@ -557,10 +606,10 @@ begin
       set local role authenticated;
 
       select count(*) into n_seen from public.clients;
-      if n_seen <> n_total then
+      if n_seen <> n_clients_total then
         problems := problems || format(
           'an ACTIVE user sees %s of %s rows in public.clients -- clients_select_active_users is denying rows it should return, which is an outage for every signed-in user',
-          n_seen, n_total)::text;
+          n_seen, n_clients_total)::text;
       end if;
 
       select count(*) into n_seen from public.profiles;
@@ -570,19 +619,11 @@ begin
           n_seen)::text;
       end if;
 
-      reset role;
-
-      select count(*) into n_total from public.checkins;
-      perform set_config(
-        'request.jwt.claims',
-        json_build_object('sub', active_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
-        true);
-      set local role authenticated;
       select count(*) into n_seen from public.checkins;
-      if n_seen <> n_total then
+      if n_seen <> n_checkins_total then
         problems := problems || format(
           'an ACTIVE user sees %s of %s rows in public.checkins -- checkins_select_active_users is denying rows it should return',
-          n_seen, n_total)::text;
+          n_seen, n_checkins_total)::text;
       end if;
 
       reset role;
@@ -600,8 +641,6 @@ begin
   --      design: a subject with no profile row -- so is_active_user() is false
   --      -- sees zero rows on both tables and cannot write.
   begin
-    select count(*) into n_total from public.clients;
-
     perform set_config(
       'request.jwt.claims',
       json_build_object('sub', absent_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
@@ -775,9 +814,35 @@ begin
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('r','p');
 
+  -- Two outcomes, two headings, and the difference matters more than it looks.
+  --
+  -- A VIOLATION is a security finding. A PRECONDITION is "there is not enough
+  -- data in this database to run that check yet". Both exit non-zero -- a check
+  -- that could not run must never read as a check that passed -- but conflating
+  -- them is actively harmful in both directions: an operator on a fresh project
+  -- is told their empty database has a privilege violation, learns that this
+  -- script cries wolf, and is then in the habit of ignoring it on the day it is
+  -- right.
+  --
+  -- Violations are reported first and on their own, so a real finding is never
+  -- buried under bookkeeping. If any exist, the unmet preconditions are appended
+  -- as a footnote so the operator still knows part of the run was unverified.
   if array_length(problems, 1) > 0 then
-    raise exception E'verify:privileges FAILED with % violation(s):\n  - %',
-      array_length(problems, 1), array_to_string(problems, E'\n  - ');
+    raise exception E'verify:privileges FAILED with % violation(s):\n  - %\n%',
+      array_length(problems, 1),
+      array_to_string(problems, E'\n  - '),
+      case
+        when array_length(preconditions, 1) > 0 then
+          format(E'\nAND % check(s) could not be run at all:\n  - %',
+            array_length(preconditions, 1),
+            array_to_string(preconditions, E'\n  - '))
+        else ''
+      end;
+  end if;
+
+  if array_length(preconditions, 1) > 0 then
+    raise exception E'verify:privileges COULD NOT VERIFY the read path -- % precondition(s) unmet.\n\nNO SECURITY VIOLATION WAS FOUND. Every grant check and every policy check that could be run PASSED. This is a "not enough data in the database to check that yet" result, not a "something is wrong" result, and it is the expected outcome on a freshly created or freshly rebuilt project. Work through the list, then re-run -- README: "Rebuilding this project from scratch".\n\n  - %',
+      array_length(preconditions, 1), array_to_string(preconditions, E'\n  - ');
   end if;
 
   raise notice 'verify:privileges OK -- % table(s) in public, boundary intact', n_tables;
