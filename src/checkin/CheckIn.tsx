@@ -62,7 +62,6 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
     block,
     scored,
     storedUpdatedAt: stored?.updated_at ?? null,
-    storedSubmitted,
   })
   const saving = saveState.kind === 'saving'
 
@@ -155,14 +154,18 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </div>
       </div>
 
-      {/* Fix round 1: always mounted, once the screen is ready, with the
-          condition on the contents rather than on the element -- a live
-          region has to already exist before its content changes to be
-          reliably announced, the same rule the save-status region below
-          already followed. Empty most of the time (no earlier-visit draft),
-          so :empty collapses it out of the flex flow in CheckIn.module.css
-          rather than through .screen's gap, which would otherwise add a
-          blank var(--space-5) gap in the common case. */}
+      {/* Fix round 1: mounted unconditionally, once the screen is ready,
+          with the condition moved onto the contents -- matching the shape of
+          the save-status region below, rather than appearing and
+          disappearing with `unsavedFromEarlierVisit` itself. As this screen
+          is wired today that value is fixed in the same commit that first
+          renders this branch (see useCheckin.ts's load()), so it can only go
+          true to false after mount, never false to true; there is no
+          post-mount announcement this specific change makes happen. Empty
+          most of the time (no earlier-visit draft), so :empty collapses it
+          out of the flex flow in CheckIn.module.css rather than through
+          .screen's gap, which would otherwise add a blank var(--space-5) gap
+          in the common case. */}
       <p className={`alert prose ${styles.earlierVisit}`} role="status">
         {unsavedFromEarlierVisit && (
           <>
@@ -223,15 +226,18 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
             feedback that a save succeeded, so a save that worked looked exactly
             like one that failed.
 
-            Fix round 1: the per-kind JSX chain this used to be left two
-            combinations with no branch at all -- a routine `clean` draft
-            rendered nothing, and a blocked `dirty` press never showed why.
+            Fix round 1: the per-kind JSX chain this used to be had a real
+            gap in `clean` + not blocked (no branch at all -- a routine saved
+            draft, reopened, said nothing) and an incomplete branch in `dirty`
+            + blocked (it rendered "Unsaved changes." but never the reason).
             saveStatus() in saveState.ts is the same decision made exhaustive
             (a `never` check catches an unhandled kind at compile time) and
-            tested (saveState.test.ts sweeps every kind against every block/
-            storedSubmitted combination and asserts the result is never
-            empty), so this is now a map over its result rather than a chain
-            of conditions nothing could prove complete. */}
+            tested both as a value (saveState.test.ts sweeps every kind
+            against every shape `block` can take) and as rendered markup
+            (CheckIn.test.tsx renders this component with useCheckin mocked
+            and asserts the #checkin-save-status text), so this is now a map
+            over its result rather than a chain of conditions nothing
+            checked for completeness. */}
         <p className={styles.saveStatus} id="checkin-save-status" role="status">
           {statusLines.map((line, index) => (
             <span key={line.tone + index} className={TONE_CLASS[line.tone]}>

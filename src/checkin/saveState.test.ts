@@ -240,12 +240,15 @@ describe('displayedTotal', () => {
 
 describe('saveStatus', () => {
   // Fix round 1, Critical 1 and 2: the save-status region used to be a chain
-  // of JSX conditions, and two ordinary combinations fell through it with no
-  // branch at all -- a routine `clean` draft rendered nothing, and a blocked
-  // `dirty` press never showed why. saveStatus() is that decision made a
-  // value instead of a chain, so completeness is something this file can
-  // assert rather than something a reviewer has to notice missing in a
-  // browser.
+  // of JSX conditions. `clean` + not blocked had no branch at all -- a
+  // routine `clean` draft rendered nothing. `dirty` + blocked did have a
+  // branch, but an incomplete one: it always rendered "Unsaved changes." and
+  // never the reason the button had just been disabled for. saveStatus() is
+  // that decision made a value instead of a chain, so completeness is
+  // something this file can assert rather than something a reviewer has to
+  // notice missing in a browser -- and src/checkin/CheckIn.test.tsx checks
+  // the same completeness again in the rendered markup, since nothing here
+  // proves CheckIn.tsx actually uses this function's result correctly.
 
   const BLOCKED = (reason = 'test reason'): { blocked: true; reason: string } => ({
     blocked: true,
@@ -259,30 +262,29 @@ describe('saveStatus', () => {
 
   it('never returns nothing, for any combination of state, block and stored facts', () => {
     // The property, not a case list: every SaveState kind, crossed with
-    // whether submitBlock happened to block, whether there is anything to
-    // report as saved, and whether the stored row is already submitted.
-    // `block` is constructed directly here rather than run through
-    // submitBlock -- some of the 40 combinations below (e.g. `saved` with
-    // `blocked: false`) cannot actually occur through submitBlock, and the
-    // point of this sweep is that saveStatus's own switch must not go silent
-    // on ANY input shape, reachable today or not.
+    // whether submitBlock happened to block and whether there is anything to
+    // report as saved. `block` is constructed directly here rather than run
+    // through submitBlock -- some of the 20 combinations below (e.g. `saved`
+    // with `blocked: false`) cannot actually occur through submitBlock, and
+    // the point of this sweep is that saveStatus's own switch must not go
+    // silent on ANY input shape, reachable today or not. `storedSubmitted`
+    // is not swept here: saveStatus's signature does not take it (removed in
+    // fix round 2 -- `block` already folds in everything submitBlock decided
+    // from it), so there is nothing left for this function to vary on.
     for (const state of ALL_STATES) {
       for (const block of [BLOCKED(), UNBLOCKED]) {
         for (const hasContent of [true, false]) {
-          for (const storedSubmitted of [true, false]) {
-            const lines = saveStatus({
-              state,
-              block,
-              scored: hasContent ? 3 : 0,
-              storedUpdatedAt: hasContent ? '2026-08-21T15:42:00.000Z' : null,
-              storedSubmitted,
-            })
-            expect(
-              nonEmptyText(lines),
-              `${state.kind} + blocked:${block.blocked} + hasContent:${hasContent} ` +
-                `+ storedSubmitted:${storedSubmitted} produced ${JSON.stringify(lines)}`,
-            ).toBe(true)
-          }
+          const lines = saveStatus({
+            state,
+            block,
+            scored: hasContent ? 3 : 0,
+            storedUpdatedAt: hasContent ? '2026-08-21T15:42:00.000Z' : null,
+          })
+          expect(
+            nonEmptyText(lines),
+            `${state.kind} + blocked:${block.blocked} + hasContent:${hasContent} ` +
+              `produced ${JSON.stringify(lines)}`,
+          ).toBe(true)
         }
       }
     }
@@ -298,7 +300,6 @@ describe('saveStatus', () => {
       block: UNBLOCKED,
       scored: 3,
       storedUpdatedAt: '2026-08-21T15:42:00.000Z',
-      storedSubmitted: false,
     })
     expect(nonEmptyText(lines)).toBe(true)
     expect(lines[0].text).toMatch(/draft saved/i)
@@ -311,7 +312,6 @@ describe('saveStatus', () => {
       block: UNBLOCKED,
       scored: 3,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(lines[0].text).not.toMatch(/invalid date/i)
     // No trailing space before the period where a date would otherwise sit --
@@ -332,7 +332,6 @@ describe('saveStatus', () => {
       block,
       scored: 0,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(lines).toHaveLength(2)
     expect(lines[0].text).toBe('Unsaved changes.')
@@ -340,15 +339,18 @@ describe('saveStatus', () => {
   })
 
   it('does not echo the block reason when the state line already says it', () => {
-    // `saving` and `saved` both have a submitBlock reason that restates the
-    // state itself ("Saving…", "Saved. Change something to save again.").
-    // Appending it would read as the same sentence twice.
+    // `saving` and `saved` never call blockedReason() at all -- see the
+    // comment above the switch in saveState.ts. For `saving` the reason is
+    // always "Saving…"; for `saved` it is usually "Saved. Change something
+    // to save again." too, though not for every input (a `saved` state paired
+    // with `hasContent: false` gets a different reason from submitBlock --
+    // see the property test above, which feeds that exact shape). Either
+    // way, only one line comes back here, because the reason is never read.
     const saving = saveStatus({
       state: SAVING,
       block: BLOCKED('Saving…'),
       scored: 3,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(saving).toHaveLength(1)
 
@@ -357,9 +359,19 @@ describe('saveStatus', () => {
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 5,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(saved).toHaveLength(1)
+
+    // The shape the comment above names explicitly: `saved` with a reason
+    // that does NOT restate the state, because submitBlock reached it via the
+    // `!hasContent` check rather than the `saved` check. Still one line.
+    const savedEmpty = saveStatus({
+      state: SAVED,
+      block: BLOCKED('Score at least one pillar, or write a note, before saving.'),
+      scored: 0,
+      storedUpdatedAt: null,
+    })
+    expect(savedEmpty).toHaveLength(1)
   })
 
   it('names the time, the person, and how far along a draft is', () => {
@@ -368,7 +380,6 @@ describe('saveStatus', () => {
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 5,
       storedUpdatedAt: null,
-      storedSubmitted: true,
     })
     expect(submitted[0].text).toMatch(/^Check-in submitted /)
     expect(submitted[0].text).toContain('by you.')
@@ -379,7 +390,6 @@ describe('saveStatus', () => {
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 4,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(draft[0].text).toMatch(/^Draft saved /)
     expect(draft[0].text).toContain(`4 of ${PILLARS.length} pillars scored`)
@@ -391,7 +401,6 @@ describe('saveStatus', () => {
       block: UNBLOCKED,
       scored: 3,
       storedUpdatedAt: null,
-      storedSubmitted: false,
     })
     expect(lines).toHaveLength(1)
     expect(lines[0].text).toContain('network refused')

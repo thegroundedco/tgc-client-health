@@ -47,13 +47,18 @@
   line-height: var(--leading-numeric);
 }
 
-/* Fix round 1: this region is now always mounted (see CheckIn.tsx) so it is an
-   established live region before its content changes, not a node that
-   appears already carrying its first announcement. Empty most of the time --
-   no earlier-visit draft is the common case -- so :empty removes its own box
-   from the flex flow entirely rather than leaving a zero-height item that
-   .screen's gap would still pad on both sides. When it holds text, :empty no
-   longer matches and it lays out exactly as a normal flex child. */
+/* Fix round 1: this region is now always mounted (see CheckIn.tsx), for
+   consistency with the save-status region's shape rather than for a
+   demonstrated announcement -- as the screen is wired today, the value this
+   region depends on is fixed before this branch's first render, so it can
+   only go true to false after mount, never false to true, and there is no
+   live transition here for a screen reader to catch. What this rule fixes is
+   layout, not accessibility: mounting unconditionally would otherwise add an
+   always-present, usually-empty flex child, and .screen's gap pads both
+   sides of every item regardless of its own height. :empty removes this
+   element's own box from the flex flow entirely while it holds no text, so
+   the common case (no earlier-visit draft) gains no extra gap. When it holds
+   text, :empty no longer matches and it lays out as an ordinary flex child. */
 .earlierVisit:empty {
   display: contents;
 }

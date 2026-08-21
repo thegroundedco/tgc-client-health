@@ -166,15 +166,19 @@ export type SaveStatusTone = 'confirm' | 'error' | 'quiet'
 export type SaveStatusLine = { text: string; tone: SaveStatusTone }
 
 // Fix round 1: the save-status region used to be an ad-hoc chain of JSX
-// conditions in CheckIn.tsx, and two combinations fell through it with no
-// branch at all -- a routine `clean` draft (nothing rendered) and a blocked
-// `dirty` press (the block reason never shown). Neither could be caught by a
-// test, because the chain lived in JSX. This function is the same decision
-// made checkable: every SaveState kind is handled in the switch below, the
-// default case is a compile-time exhaustiveness check exactly like the one in
+// conditions in CheckIn.tsx. `clean` + not blocked had no branch at all -- a
+// routine saved draft, reopened, said nothing. `dirty` + blocked did have a
+// branch, but an incomplete one: it always rendered "Unsaved changes." and
+// never the reason submitBlock had just disabled the button. Both were
+// wrong in the chain itself, not in whether a test could have caught them --
+// src/checkin/CheckIn.test.tsx renders CheckIn with useCheckin mocked and
+// asserts the save-status markup by id, and would have failed on either gap.
+// This function is the same decision made a value as well as a rendered
+// result: every SaveState kind is handled in the switch below, the default
+// case is a compile-time exhaustiveness check exactly like the one in
 // saveReducer above, and saveState.test.ts sweeps every kind against every
-// combination of `block` and `storedSubmitted` to prove the result is never
-// empty.
+// shape `block` can take to prove the result is never empty, without needing
+// a render to do it.
 //
 // Returns one or more lines, never zero, and no line's text is ever empty --
 // that is the contract the caller relies on to render *something* every time
@@ -184,27 +188,33 @@ export function saveStatus(args: {
   block: SubmitBlock
   scored: number
   storedUpdatedAt: string | null
-  // Not read below: `block` already folds this in (submitBlock blocks
-  // unconditionally on `clean` + `storedSubmitted`), so by the time this
-  // function sees `clean` and `blocked: false` it already knows
-  // `storedSubmitted` was false. Kept in the signature anyway, as the
-  // documented input this decision actually depends on -- through `block` --
-  // rather than making a future reader re-derive that dependency from
-  // submitBlock's source.
-  storedSubmitted: boolean
 }): SaveStatusLine[] {
   const { state, block, scored } = args
 
-  // A second line for the block reason, appended only when it says something
-  // the state line above it does not already say. For `saving` and `saved`
-  // the reason is a restatement of the state itself ("Saving…", "Saved.
-  // Change something to save again.") and repeating it would read as an echo;
-  // for `dirty` and a blocked `clean` it is new information -- the whole
-  // reason Critical 2 existed is that `dirty` never called this at all.
+  // Appended to `dirty`'s state line below, when submitBlock also blocked
+  // the press -- the fix for Critical 2, where a blocked `dirty` press used
+  // to render only "Unsaved changes." with no reason. This is the only case
+  // that calls it: `clean` when blocked returns `block.reason` as its sole
+  // line, by a separate branch below, since there is no state line there to
+  // append it to in the first place.
   function blockedReason(): SaveStatusLine | null {
     return block.blocked ? { text: block.reason, tone: 'quiet' } : null
   }
 
+  // `saving` and `saved`, below, never call blockedReason() at all -- each
+  // returns a single line built from the state itself, and block.reason is
+  // not consulted either way. For `saving` that reason is always "Saving…"
+  // (submitBlock's `saving` check runs before its `!hasContent` check, so
+  // nothing else can reach it first). For `saved` it is usually "Saved.
+  // Change something to save again." too, but not always: submitBlock checks
+  // `!hasContent` before it checks `saved`, so a `saved` state paired with
+  // `hasContent: false` gets "Score at least one pillar…" instead. That exact
+  // shape cannot arise through this screen's own flow -- any edit dispatches
+  // `edited` and leaves `saved` immediately, so a live `saved` state's
+  // content is always whatever was just submitted -- but the property test in
+  // saveState.test.ts deliberately constructs it anyway, and the switch's
+  // behaviour for it is still correct regardless of what the reason says: the
+  // `saved` case prints its own sentence and stops.
   switch (state.kind) {
     case 'saving':
       return [{ text: 'Saving…', tone: 'quiet' }]
