@@ -272,6 +272,19 @@ a {
   font-weight: var(--wght-header);
 }
 
+/* The eyebrow-and-heading pair at the top of a screen. Global because three
+   screens render it — sign-in, access-pending and the app shell's db-error
+   state — and because the gap belongs to the pair rather than to whichever
+   screen contains it. Without it the two lines fall back to the screen's own
+   layout gap, which is far looser than two lines that read as one unit want:
+   that was the defect fixed once on access-pending and then reproduced on the
+   db-error screen, which was written afterwards with no wrapper at all. */
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .prose {
   max-width: var(--measure-prose);
 }

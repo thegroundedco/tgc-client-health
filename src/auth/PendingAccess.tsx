@@ -8,7 +8,7 @@ type Props = {
 export function PendingAccess({ email, onSignOut }: Props) {
   return (
     <main className={styles.screen}>
-      <div className={styles.masthead}>
+      <div className="masthead">
         <p className="t-eyebrow">Client Health</p>
         <h1 className="t-header">Access pending</h1>
       </div>

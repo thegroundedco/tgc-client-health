@@ -37,7 +37,7 @@ export function SignIn() {
 
   return (
     <main className={styles.screen}>
-      <div className={styles.masthead}>
+      <div className="masthead">
         <p className="t-eyebrow">The Grounded Company</p>
         <h1 className="t-display">Client Health</h1>
       </div>

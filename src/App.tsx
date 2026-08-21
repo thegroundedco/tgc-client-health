@@ -34,8 +34,10 @@ export default function App() {
     case 'db-error':
       return (
         <main className={styles.centred}>
-          <p className="t-eyebrow">Client Health</p>
-          <h1 className="t-header">Cannot reach the database</h1>
+          <div className="masthead">
+            <p className="t-eyebrow">Client Health</p>
+            <h1 className="t-header">Cannot reach the database</h1>
+          </div>
           <p className="alert prose" role="alert">
             {state.error}
           </p>
