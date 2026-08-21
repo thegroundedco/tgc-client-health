@@ -134,7 +134,35 @@ sha256 `4c98b9d490d1698ec95f2ff17a6c7d0e72691864c0c5d7bc2a2c161b45afe5ad`, first
 both `font-weight: 100 900` and `font-stretch: 62% 125%` survive the build unchanged — which is
 what makes five type widths reachable from one file. Confirmed by building locally and inspecting
 `dist/`; the deployed-site figures (URL served, HTTP status, byte count on the wire, date) are
-appended below once the deploy in this step has run.
+appended below.
+
+**Measured on the deployed site, 2026-08-21.** Not inferred from a green build — fetched from
+GitHub Pages and inspected. Each response was written to a file and the file was grepped, per the
+rule now recorded in the README:
+
+| Checked | Result |
+|---|---|
+| `…/tgc-client-health/` | HTTP 200, links `/tgc-client-health/assets/index-B_9vQV-X.css` |
+| that stylesheet | HTTP 200, 6750 bytes |
+| the `url()` it asks for | `/tgc-client-health/assets/archivo-latin-wdth-wght-DXrUVZxZ.woff2` — the project base path is applied |
+| that font | HTTP 200, **90096 bytes**, first four bytes `wOF2` |
+| its sha256 | `4c98b9d490d1698ec95f2ff17a6c7d0e72691864c0c5d7bc2a2c161b45afe5ad` |
+| `font-weight: 100 900` on the wire | present |
+| `font-stretch: 62% 125%` on the wire | present |
+| the six type roles | each carries both a `font-family` and a `font-stretch` |
+| `.startup-error` | present and **unhashed**, in the stylesheet `index.html` links directly |
+
+The sha256 on the wire is identical to the blob committed to git, so the same bytes survive
+download, commit, build and CDN with no transformation anywhere in the path.
+
+**§4.3's open question is therefore answered: a self-hosted variable font does load from GitHub
+Pages under a project subpath.** That was the reason styling was folded to the front of this slice,
+and nothing later in Phase 1 needs to re-ask it.
+
+One thing this does NOT establish, and no automated check in this project can: whether the width
+axis renders as five distinguishable cuts on screen. The bytes are correct and the declarations
+reach the browser; only a person looking at the page can confirm the letterforms differ. That check
+belongs to the owner and is the first item on his visual pass.
 
 ### 4.4 Type roles
 
