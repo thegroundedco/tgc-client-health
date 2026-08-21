@@ -1578,7 +1578,7 @@ Confirm the restore before moving on:
 head -1 .env.local
 ```
 
-Expected: the `VITE_SUPABASE_URL` line pointing at `dexsdhtpfsswgiytxntl` — staging.
+Expected: the `VITE_SUPABASE_URL` line pointing at `<staging-ref>` — staging.
 
 **Would a person know this worked?** This is the one screen in the app whose whole job is telling a non-developer what to do. If it now reads as a numbered set of instructions rather than an unstyled stack of paragraphs, it worked.
 
