@@ -308,7 +308,48 @@ the user nothing. The fix is procedural, so it lives in the plan where it cannot
 2. **Logo SVG export** — horizontal lockup and the standalone kiwi for the favicon. The header
    carries a placeholder until it lands.
 3. **Field Gothic webfont licence** — one file swap whenever it is decided, per §4.1.
-4. **Phase 2's scope is worth revisiting before it starts.** Productive already holds the SOWs and
+4. **Custom SMTP is a hard prerequisite for a second user, and nothing in the build reveals it.**
+   Measured against Supabase's documentation 2026-08-21. Two separate limits apply to the
+   built-in email service this project currently uses, and only the first is the one people
+   expect:
+
+   - The rate limit is **2 messages per hour**, and the service is documented as "best-effort
+     only" for non-production use: "We urge all customers to set up custom SMTP server for all
+     other use cases."
+   - The one that actually blocks: **"Unless you configure a custom SMTP server for your project,
+     Supabase Auth will refuse to deliver messages to addresses that are not part of the
+     project's team."** Any other address gets `Email address not authorized`.
+
+   So magic-link sign-in works today *only because Josh's address owns the Supabase account*.
+   The first time a second account manager is invited, the link is not slow — it is refused, and
+   the visible symptom is an email that never arrives. That is this project's signature failure
+   mode again: correct for the one person testing it, invisibly broken for everyone else.
+
+   This is a **Slice 3 blocker**, not a nicety. Slice 3 builds the users admin panel, whose entire
+   premise is that a person can be invited by email.
+
+   The apparent workaround — adding each account manager to the Supabase organisation so they
+   count as team members — is not one. Organisation membership grants dashboard access, which
+   reads and writes every table directly and bypasses RLS completely. The whole permission model
+   is enforced in Postgres; handing out dashboard logins discards it.
+
+   Fix, when it is time: point Supabase at Google Workspace SMTP (dashboard configuration, no
+   code). That raises the cap to 30 messages per hour and removes the team-only restriction.
+   It is also the prerequisite for password auth rather than an alternative to it, because a
+   password reset is itself an email.
+
+5. **Password sign-in alongside magic links is cheap, and is not the fix for the above.**
+   Supabase supports email plus password natively; it is a dashboard toggle, one form and one
+   call, and it does not weaken the model because permissions are enforced by RLS rather than by
+   how someone signed in. Worth adding when the second person is onboarded, for the case where
+   email is slow. It does not remove the SMTP dependency: a new account still has to be
+   confirmed, and a forgotten password still has to be reset, both by email.
+
+   Not urgent for Josh alone. `src/lib/supabase.ts` sets `persistSession` and `autoRefreshToken`,
+   so one magic link per browser lasts until the browser's storage is cleared — the sign-in
+   screen is a few-times-a-year event, not a daily one.
+
+6. **Phase 2's scope is worth revisiting before it starts.** Productive already holds the SOWs and
    the billing. If the need is to *see* revenue beside health rather than to *maintain* it here,
    Phase 2 collapses from two tables and four capabilities into a pasted export and a read-only
    column — roughly one session instead of three. Not a decision for today; the single largest
