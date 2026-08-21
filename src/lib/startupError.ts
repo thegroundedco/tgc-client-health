@@ -79,12 +79,18 @@ export function renderStartupError(container: Element, thrown: unknown): void {
   const doc = container.ownerDocument
 
   const main = doc.createElement('main')
+  // Global classes from src/styles/base.css, not a CSS module. base.css is
+  // linked from index.html, so it is present even when the bundle is broken —
+  // which is the only situation in which this function ever runs.
+  main.className = 'startup-error'
 
   const heading = doc.createElement('h1')
+  heading.className = 't-header'
   heading.textContent = title
   main.append(heading)
 
   const detailParagraph = doc.createElement('p')
+  detailParagraph.className = 'alert prose'
   // role="alert" so a screen reader announces it; this is the whole content of
   // the page, so it must not be silent.
   detailParagraph.setAttribute('role', 'alert')
@@ -92,8 +98,10 @@ export function renderStartupError(container: Element, thrown: unknown): void {
   main.append(detailParagraph)
 
   const list = doc.createElement('ol')
+  list.className = 'startup-error__steps'
   for (const step of steps) {
     const item = doc.createElement('li')
+    item.className = 't-body prose'
     item.textContent = step
     list.append(item)
   }

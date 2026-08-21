@@ -238,3 +238,52 @@ a {
 .prose {
   max-width: var(--measure-prose);
 }
+
+/* ---------------------------------------------------------------------------
+   The startup-error screen, rendered by src/lib/startupError.ts with
+   createElement. Global rather than a CSS module because a module ships inside
+   the JavaScript bundle, and this screen exists for when the bundle is what
+   broke.
+   --------------------------------------------------------------------------- */
+
+.startup-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--measure-prose);
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5);
+}
+
+/* Numbered because the steps are genuinely a sequence: check the secret, then
+   re-run the workflow. The counter is restored by hand because base.css above
+   removes list markers globally. */
+.startup-error__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  counter-reset: step;
+}
+
+.startup-error__steps > li {
+  counter-increment: step;
+  padding-left: var(--space-6);
+  position: relative;
+}
+
+.startup-error__steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--step--1);
+  font-weight: var(--wght-header);
+}
