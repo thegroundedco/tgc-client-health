@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:privileges": "npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql"
+    "verify:privileges": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql",
+    "db:which": "node scripts/db-which.mjs",
+    "db:push": "npm run db:which && npx --yes supabase@latest db push --linked"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.112.3",
