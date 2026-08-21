@@ -481,7 +481,9 @@ import {
   submitBlock,
   submitLabel,
 } from './saveState'
-import type { SaveEvent, SaveState } from './saveState'
+// SaveState only. `noUnusedLocals` is on, so importing SaveEvent here fails
+// `tsc` -- the tests name their events inline rather than in a typed array.
+import type { SaveState } from './saveState'
 
 const CLEAN: SaveState = { kind: 'clean' }
 const DIRTY: SaveState = { kind: 'dirty' }
@@ -852,7 +854,7 @@ Expected: PASS.
 Each of these is a mutation to make, a red run to observe, and a restore. Report the failing test name for each.
 
 1. Change `succeeded`'s guard to return the saved state unconditionally. Expected red: "ignores a response for a save that is no longer in flight".
-2. Change `submitted`'s case to `return state`. Expected red: "leaves no click without a visible consequence".
+2. Change `submitted`'s case to `return state`. Expected red: "a submission starts a save" and "never leaves a press with nothing to show for it".
 3. Reorder `submitBlock` so the `readFailed` check comes after the `hasContent` check, then call it with `readFailed: true, hasContent: false`. This will NOT go red with the tests as written — the `hasContent` reason would be returned instead of the read-failure one, and no test pins the precedence. **Add a test that does**, then confirm it goes red under the reorder:
 
 ```ts
