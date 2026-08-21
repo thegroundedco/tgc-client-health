@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TGC Client Health</title>
+    <!-- Linked here rather than imported from src/main.tsx, deliberately. The
+         boot fallback below and the startup-error screen both exist for the
+         case where the JavaScript failed; styling that arrives through the
+         bundle would be missing at exactly the moment those screens are all the
+         user has. Vite processes these hrefs at build time, hashes the output
+         and rewrites them under the /tgc-client-health/ base. -->
+    <link rel="stylesheet" href="/src/styles/tokens.css" />
+    <link rel="stylesheet" href="/src/styles/base.css" />
   </head>
   <body>
     <div id="root">
@@ -13,7 +21,7 @@
            catches the throw and writes a specific message here instead; this
            fallback covers the case where main.tsx itself never ran, which is
            the one case no JavaScript in the bundle can report. -->
-      <p>Starting TGC Client Health…</p>
+      <p class="t-body prose">Starting TGC Client Health…</p>
       <!-- Hidden until the timer below reveals it. It used to be visible from
            the first paint, which meant an unstyled paragraph reading "the app
            did not start" was on screen for the whole serial window — index
@@ -22,7 +30,7 @@
            a non-developer that reads as an error, every time. It is a real
            diagnosis for a real failure, so it stays; it just must not be the
            first thing the owner sees on a working page. -->
-      <p id="boot-slow" hidden>
+      <p id="boot-slow" class="t-body prose alert" hidden>
         This is taking longer than it should. If nothing else appears, the app
         did not start — see the "Deploying" section of the project README.
       </p>

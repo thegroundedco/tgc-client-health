@@ -1,0 +1,240 @@
+/* Reset, element defaults, and the app-wide vocabulary: the five type roles,
+   the band chip, and the button and field primitives.
+   Anything used by more than one screen belongs here; anything used by exactly
+   one belongs in that component's .module.css.
+
+   Linked from index.html rather than imported from main.tsx, on purpose. If the
+   JavaScript bundle fails to load, index.html's boot fallback and — when
+   main.tsx runs but App.tsx throws — the startup-error screen are all the user
+   has. Those are the moments styling matters most, so the styling must not
+   arrive through the thing that broke. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Anchors and skip links land clear of any sticky header. */
+  scroll-padding-top: var(--space-6);
+}
+
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--face-ui);
+  font-size: var(--step-0);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layout does the spacing: sibling gaps come from a flex container, never from
+   per-element margins that collapse or double unpredictably. */
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+/* One focus treatment for everything, defined once. :focus-visible rather than
+   :focus so a mouse click does not draw a ring, but a Tab always does. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Type roles. Global classes rather than per-module rules: these are app-wide
+   vocabulary, and five copies of the same three declarations in five modules is
+   how a scale drifts.
+   --------------------------------------------------------------------------- */
+
+.t-display {
+  font-stretch: var(--wdth-display);
+  font-weight: var(--wght-display);
+  font-size: var(--step-4);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.t-header {
+  font-stretch: var(--wdth-header);
+  font-weight: var(--wght-header);
+  font-size: var(--step-2);
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+
+.t-eyebrow {
+  font-stretch: var(--wdth-eyebrow);
+  font-weight: var(--wght-eyebrow);
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-secondary);
+}
+
+.t-body {
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-body);
+  font-size: var(--step-0);
+}
+
+.t-caption {
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+}
+
+/* Every score, everywhere. Spec §4.4. Without this, a column of totals wobbles
+   because the digits have different widths. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   The health band chip. A FILL with an ink label, because no band colour is
+   legible as text on the page ground. The label is not decoration: it is the
+   only channel that survives colour blindness or a greyscale print.
+   --------------------------------------------------------------------------- */
+
+.band {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--band-none);
+  color: var(--text-on-band);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.band--healthy {
+  background: var(--band-healthy);
+}
+
+.band--watch {
+  background: var(--band-watch);
+}
+
+.band--risk {
+  background: var(--band-risk);
+}
+
+.band--none {
+  background: var(--band-none);
+}
+
+/* ---------------------------------------------------------------------------
+   Primitives
+   --------------------------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--action-face);
+  border-radius: var(--radius-md);
+  background: var(--action-face);
+  color: var(--action-text);
+  font-family: var(--face-ui);
+  font-stretch: var(--wdth-header);
+  font-weight: var(--wght-header);
+  font-size: var(--step--1);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--surface-page);
+  color: var(--text-primary);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.button--quiet {
+  background: transparent;
+  border-color: var(--action-quiet);
+  color: var(--text-primary);
+}
+
+.button--quiet:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.field {
+  display: block;
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--face-ui);
+  font-stretch: var(--wdth-body);
+  font-size: var(--step-0);
+}
+
+.field:hover {
+  border-color: var(--text-secondary);
+}
+
+/* An error message, on the page ground. --alert-text is a darkened brand red
+   because the brand red itself is 3.34:1 here and would fail as type. */
+.alert {
+  color: var(--alert-text);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-header);
+}
+
+.prose {
+  max-width: var(--measure-prose);
+}

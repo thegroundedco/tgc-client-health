@@ -1,0 +1,159 @@
+/* ============================================================================
+   The only file in this repository allowed to contain a colour literal or a
+   typeface name. Enforced by tests/tokens.test.ts, not by good intentions.
+
+   Three layers, and the order matters:
+
+     BRAND       identity. A change of visual identity rewrites this block.
+     FUNCTIONAL  meaning with no identity. Survives a rebrand untouched.
+     SEMANTIC    what components reference. Contains NO literals — only var().
+
+   The reason there are layers at all is a question the owner asked directly:
+   how hard is a rebrand later? With one layer, --band-healthy IS teal, and a
+   rebrand that drops teal silently breaks the health encoding. With these
+   three, a rebrand rewrites the top block and the status system survives.
+
+   Contrast measured 2026-08-21 with the WCAG 2.x relative-luminance formula.
+   Every ratio below is a measurement. See the plan for the full table.
+   ============================================================================ */
+
+/* Archivo stands in for Field Gothic until the licence is settled. One variable
+   file spanning width 62–125 and weight 100–900, so all five type roles come
+   from a single 88 KB download. Field Gothic is a separate cut per width, so
+   that swap is 5–7 files and a bigger payload — see spec §4.1.
+
+   The url() is a build-time reference, not a runtime path: Vite resolves it,
+   hashes the file, and prefixes the /tgc-client-health/ base itself. A typo
+   here fails the build instead of 404ing in a browser and falling back to the
+   system face without a word. */
+@font-face {
+  font-family: 'Archivo Variable';
+  src: url('../assets/fonts/archivo-latin-wdth-wght.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  /* swap, not block: the first paint shows fallback type rather than nothing.
+     A tool whose premise is boring reliability must never show a blank page
+     while a font downloads. */
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* ==========================================================================
+     BRAND — identity, from Grounded_Styleguide_Final.ai
+     ========================================================================== */
+  --brand-ink: #1F1F1F;
+  --brand-paper: #FBF7EB;
+  --brand-teal: #83C1C0;
+  --brand-blush: #FFB3AB;
+  --brand-red: #F9423A;
+
+  /* Derived from the five above: same identity, adjusted for legibility. A
+     rebrand replaces these too.
+     --brand-red-dark exists because the brand red measures 3.34:1 on the brand
+     paper, below the 4.5:1 needed for text. An error message set in #F9423A
+     would be brand-correct and unreadable. #B82B25 measures 5.75:1. */
+  --brand-paper-raised: #FFFDF6;
+  --brand-paper-sunken: #F2ECDA;
+  --brand-rule: #CFC8B6;
+  --brand-ink-muted: #6B6459;
+  --brand-red-dark: #B82B25;
+
+  /* ==========================================================================
+     FUNCTIONAL — meaning without identity. Not brand, and must not move with
+     one. The health scale needs three separable steps; the brand palette has
+     no middle one, so amber is borrowed from outside it and stays outside it.
+     ========================================================================== */
+  --functional-amber: #E8A33D;
+
+  /* ==========================================================================
+     SEMANTIC — the only layer components may reference. No literals here.
+     ========================================================================== */
+
+  /* surfaces. --surface-raised measures 1.05:1 against the page, so it cannot
+     define a card edge on its own: the hairline is the actual boundary. Do not
+     "tidy up" a card border and expect the fill to hold the shape. */
+  --surface-page: var(--brand-paper);
+  --surface-raised: var(--brand-paper-raised);
+  --surface-sunken: var(--brand-paper-sunken);
+  --rule-hairline: var(--brand-rule);
+
+  /* text. 15.39:1 and 5.46:1 on the page. */
+  --text-primary: var(--brand-ink);
+  --text-secondary: var(--brand-ink-muted);
+
+  /* health bands. Fills, never text: teal on paper is 1.89:1, amber 2.01:1,
+     brand red 3.34:1 — all three fail as type on this ground. Ink on each of
+     them passes: 8.13:1, 7.64:1, 4.61:1. So a band is a filled chip with an
+     ink label.
+     Any two bands are also indistinguishable from one another — teal vs red
+     1.76:1, teal vs amber 1.06:1, amber vs red 1.66:1 — which is why parent
+     spec §9.3's rule that every band carries a TEXT label is load-bearing and
+     not a nicety. */
+  --band-healthy: var(--brand-teal);
+  --band-watch: var(--functional-amber);
+  --band-risk: var(--brand-red);
+  --band-none: var(--brand-rule);
+  --text-on-band: var(--brand-ink);
+
+  /* interaction */
+  --action-face: var(--brand-ink);
+  --action-text: var(--brand-paper-raised);
+  --action-quiet: var(--brand-rule);
+  --focus-ring: var(--brand-ink);
+
+  /* An error message on the page ground: 5.75:1. There is deliberately no
+     filled-alert token — nothing in the app fills a surface with red, and an
+     unused token is a colour waiting to be used without its contrast measured. */
+  --alert-text: var(--brand-red-dark);
+
+  /* The one purely decorative brand colour. Never carries meaning, so nothing
+     is lost if a rebrand drops it. Unused today, and present anyway: tokens.css
+     IS the palette, and the alternative to an unused token here is somebody
+     typing #FFB3AB into a component the first time they want blush. */
+  --accent-quiet: var(--brand-blush);
+
+  /* ==========================================================================
+     TYPE — one family, five roles, distinguished by width and weight.
+     Mirrors parent spec §9.4's mapping of Field Gothic, per spec §4.4.
+     ========================================================================== */
+  --face-ui: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --wdth-display: 125%;
+  --wdth-header: 70%;
+  --wdth-eyebrow: 118%;
+  --wdth-body: 100%;
+  --wdth-caption: 62%;
+
+  --wght-display: 800;
+  --wght-header: 700;
+  --wght-eyebrow: 300;
+  --wght-body: 400;
+  --wght-caption: 700;
+
+  /* 1.25 ratio from a 16px base. */
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.5625rem;
+  --step-3: 1.9531rem;
+  --step-4: 2.4414rem;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-pill: 999px;
+
+  /* Running text stays near 65 characters. */
+  --measure-prose: 62ch;
+}
