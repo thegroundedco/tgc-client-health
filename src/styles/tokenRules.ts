@@ -35,6 +35,15 @@ export const EXEMPT_PATHS: readonly string[] = [
   'src/styles/tokenRules.test.ts',
 ]
 
+// None of the three constants below may be illustrated with a real example of
+// the syntax they ban: this module is walked by tests/tokens.test.ts along with
+// every other file in the repository, and it is not in EXEMPT_PATHS (nor should
+// it be — it has no legitimate reason to contain a colour literal or a named
+// typeface, and exempting it would silently permit one forever). A comment that
+// writes out the banned syntax to explain it is therefore a violation of the
+// rule it is documenting, and the walk will fail the build on it. Describe the
+// bypass in prose instead of demonstrating it.
+
 // The trailing negative lookahead `(?![0-9a-zA-Z_-])` enforces the correct length
 // by forcing the engine to land on a class boundary. The longest-first alternation
 // is a harmless micro-optimisation that saves backtracking; the tests would not
@@ -42,9 +51,10 @@ export const EXEMPT_PATHS: readonly string[] = [
 const HEX_COLOUR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9a-zA-Z_-])/g
 
 // Deliberately wider than spec §4.2's letter, which names only hex. A rule that
-// stops at hex is bypassed by rgb(131 193 192), which is the identical defect.
-// `transform: translate(…)` and friends are untouched because only colour
-// notations are listed.
+// stops at hex is trivially evaded by writing the identical colour in functional
+// notation instead of hex — the same defect wearing different syntax. (No example
+// is written out here; see the note above this block.) `transform: translate(…)`
+// and friends are untouched because only colour notations are listed.
 const COLOUR_FUNCTION = /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color-mix)\(/gi
 
 // The value of a font-family declaration, up to the end of the declaration.
