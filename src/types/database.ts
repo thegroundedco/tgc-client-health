@@ -14,6 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
+      checkins: {
+        Row: {
+          client_id: number
+          created_at: string
+          delivery: number | null
+          financial: number | null
+          growth: number | null
+          id: number
+          notes: string | null
+          period: string
+          relationship: number | null
+          sentiment: number | null
+          submitted_at: string | null
+          submitted_by: string | null
+          total_score: number | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: number
+          created_at?: string
+          delivery?: number | null
+          financial?: number | null
+          growth?: number | null
+          id?: never
+          notes?: string | null
+          period: string
+          relationship?: number | null
+          sentiment?: number | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          total_score?: number | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: number
+          created_at?: string
+          delivery?: number | null
+          financial?: number | null
+          growth?: number | null
+          id?: never
+          notes?: string | null
+          period?: string
+          relationship?: number | null
+          sentiment?: number | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          total_score?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkins_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checkins_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          created_at: string
+          id: number
+          name: string
+          owner_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          name: string
+          owner_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          name?: string
+          owner_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string

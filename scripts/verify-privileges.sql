@@ -116,7 +116,29 @@ begin
       values
         -- public.profiles: authenticated may read its own row (RLS-scoped) and
         -- rename itself via a column-level grant that needs no table-level entry.
-        ('profiles', 'authenticated', 'SELECT')
+        ('profiles', 'authenticated', 'SELECT'),
+
+        -- public.clients: the board reads every active client, creates one, and
+        -- edits one. No DELETE: a client is retired by setting `status`, never
+        -- destroyed from the browser. Which rows are reachable is RLS's job
+        -- (clients_*_active_users, gated on private.is_active_user()); these
+        -- three entries only say the verbs exist at all.
+        ('clients', 'authenticated', 'SELECT'),
+        ('clients', 'authenticated', 'INSERT'),
+        ('clients', 'authenticated', 'UPDATE'),
+
+        -- public.checkins: INSERT is a conscious entry, not a convenience.
+        -- Submitting a check-in IS the app's core write, and the board upserts
+        -- (PostgREST resolution=merge-duplicates), which needs INSERT and UPDATE
+        -- together on the same statement -- withholding either would break the
+        -- one round trip Slice 0 exists to prove. No DELETE: a wrong check-in is
+        -- corrected by editing it, so the month's history cannot be erased.
+        -- total_score is a generated column, so it is unwritable regardless of
+        -- this UPDATE grant -- Postgres rejects any attempt with 428C9.
+        ('checkins', 'authenticated', 'SELECT'),
+        ('checkins', 'authenticated', 'INSERT'),
+        ('checkins', 'authenticated', 'UPDATE')
+
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
     held as (
@@ -191,6 +213,104 @@ begin
   ----------------------------------------------------------------------------
   if (select relforcerowsecurity from pg_class where oid = 'public.profiles'::regclass) then
     problems := problems || 'public.profiles has FORCE row level security -- this breaks the security definer signup trigger'::text;
+  end if;
+
+  ----------------------------------------------------------------------------
+  -- 8. No sequence in `public` may be reachable by a browser role.
+  --
+  --    Sections 4-6 sweep tables and functions and would not have noticed a
+  --    sequence. That gap was worth closing rather than reasoning about, because
+  --    the legacy default privileges this project carries include sequences, and
+  --    the supabase_admin row still grants rwU to both browser roles:
+  --      pg_default_acl public/supabase_admin/S
+  --        = {postgres=rwU/...,anon=rwU/...,authenticated=rwU/...,service_role=rwU/...}
+  --    which this project cannot revoke (42501). Sequences created by postgres
+  --    are born closed -- 20260820230559 revoked that row for postgres, and both
+  --    identity sequences added with clients/checkins were measured as
+  --    {postgres=rwU/postgres,service_role=rwU/postgres}, nothing for anon or
+  --    authenticated. One created any other way would not be, and USAGE on a
+  --    sequence lets a caller burn ids and read setval state.
+  --
+  --    Identity columns need no grant of their own: they advance their sequence
+  --    internally under the table's INSERT privilege, unlike `serial`. So an
+  --    empty browser-role ACL here is the correct steady state, not a limitation.
+  ----------------------------------------------------------------------------
+  for r in
+    select
+      c.relname::text as seq_name,
+      coalesce(g.rolname, 'PUBLIC') as grantee,
+      acl.privilege_type::text as privilege_type
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('S', c.relowner))) acl
+    left join pg_roles g on g.oid = acl.grantee
+    where n.nspname = 'public'
+      and c.relkind = 'S'
+      and coalesce(g.rolname, 'PUBLIC') in ('anon', 'authenticated', 'PUBLIC')
+    order by c.relname, 2, 3
+  loop
+    problems := problems || format(
+      'unexpected grant: %s holds %s on sequence public.%s -- identity columns need no sequence grant',
+      r.grantee, r.privilege_type, r.seq_name);
+  end loop;
+
+  ----------------------------------------------------------------------------
+  -- 9. The `private` schema stays unreachable by name, and the one function a
+  --    policy depends on is executable by `authenticated` and nobody else.
+  --
+  --    This asserts a measured, non-obvious fact. Postgres checks EXECUTE on a
+  --    function referenced by an RLS policy at QUERY time against the role
+  --    running the query, so the blanket
+  --      revoke execute on function private.is_active_user()
+  --        from public, anon, authenticated
+  --    that Supabase's own RLS guidance recommends makes every policy on
+  --    clients/checkins fail with 42501 for every signed-in user. Probed on this
+  --    database before the migration was written; see
+  --    20260821021840_create_clients_and_checkins.sql for the transcript.
+  --
+  --    The narrow shape is therefore: EXECUTE to authenticated, and NO usage on
+  --    schema private. A policy references the function by OID and needs only
+  --    EXECUTE at run time; calling it by name needs schema USAGE, which is
+  --    withheld -- so authenticated is subject to the function without being able
+  --    to call it (probed: 42501 permission denied for schema private).
+  --
+  --    Both halves are asserted, because either one drifting is a real problem:
+  --    losing the EXECUTE grant breaks the whole app, and gaining schema USAGE
+  --    would expose every current and future definer helper in `private` that
+  --    forgot its own revoke.
+  ----------------------------------------------------------------------------
+  for r in
+    select g as grantee
+    from unnest(array['anon','authenticated']) g
+    where has_schema_privilege(g, 'private', 'USAGE')
+  loop
+    problems := problems || format(
+      '%s holds USAGE on schema private -- every definer helper in there becomes callable by name', r.grantee);
+  end loop;
+
+  if to_regprocedure('private.is_active_user()') is null then
+    problems := problems || 'private.is_active_user() does not exist -- every policy on clients and checkins references it'::text;
+  else
+    if not has_function_privilege('authenticated', 'private.is_active_user()', 'EXECUTE') then
+      problems := problems || 'authenticated CANNOT EXECUTE private.is_active_user() -- every read and write on clients and checkins will fail with 42501 for every signed-in user'::text;
+    end if;
+
+    if has_function_privilege('anon', 'private.is_active_user()', 'EXECUTE') then
+      problems := problems || 'anon can EXECUTE private.is_active_user() -- revoke it from public, anon'::text;
+    end if;
+
+    -- The `=X` PUBLIC entry Postgres adds to every new function. anon reaches a
+    -- function through PUBLIC even with no named grant, so this is asserted
+    -- separately from the anon check above rather than inferred from it.
+    if exists (
+      select 1
+      from pg_proc p
+      cross join lateral aclexplode(p.proacl) acl
+      where p.oid = 'private.is_active_user()'::regprocedure
+        and acl.grantee = 0
+    ) then
+      problems := problems || 'private.is_active_user() is granted to PUBLIC -- every role reaches it implicitly'::text;
+    end if;
   end if;
 
   ----------------------------------------------------------------------------
