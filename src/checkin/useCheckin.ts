@@ -117,9 +117,17 @@ export function useCheckin(
       setUnsavedFromEarlierVisit(differs)
 
       setStatus('ready')
-      // Resets the save state to clean, which is true: the form now matches
-      // either the database or a draft the person has not been shown yet.
+      // `clean` means what its two consumers read it to mean, not "freshly
+      // loaded from somewhere": submitBlock treats `clean` plus a submitted
+      // stored row as nothing left to write, and displayedTotal shows the
+      // *stored* total for `clean` and the local one only once the form is
+      // dirty/saving/failed. Both are only true when the form on screen
+      // actually matches the database row above. `loaded` sets that baseline;
+      // when the draft just won over that row, the form no longer matches it,
+      // so a second dispatch moves off `clean` immediately -- same tick, no
+      // render in between showing the wrong thing.
       dispatch({ type: 'loaded' })
+      if (differs) dispatch({ type: 'edited' })
     } catch (thrown) {
       // postgrest-js resolves most failures into `error` rather than rejecting,
       // so this is defensive -- and it is here because the failure it guards is
