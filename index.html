@@ -11,13 +11,33 @@
            container. So if this text is still on screen, the app never started
            — the bundle failed to load, or it threw on the way in. src/main.tsx
            catches the throw and writes a specific message here instead; this
-           fallback covers the case where main.tsx itself never ran. -->
+           fallback covers the case where main.tsx itself never ran, which is
+           the one case no JavaScript in the bundle can report. -->
       <p>Starting TGC Client Health…</p>
-      <p>
-        If this message is still here after a few seconds, the app did not
-        start. See the "Deploying" section of the project README.
+      <!-- Hidden until the timer below reveals it. It used to be visible from
+           the first paint, which meant an unstyled paragraph reading "the app
+           did not start" was on screen for the whole serial window — index
+           chunk downloaded, parsed and executed, only THEN the App chunk
+           requested — on every single load, including every successful one. To
+           a non-developer that reads as an error, every time. It is a real
+           diagnosis for a real failure, so it stays; it just must not be the
+           first thing the owner sees on a working page. -->
+      <p id="boot-slow" hidden>
+        This is taking longer than it should. If nothing else appears, the app
+        did not start — see the "Deploying" section of the project README.
       </p>
     </div>
+    <!-- Classic script, not a module, and deliberately inline: it must survive
+         the bundle failing to load at all, which is the failure it exists to
+         report. Both successful paths (React mounting, and main.tsx writing a
+         configuration error) replace every child of #root, so getElementById
+         returns null by the time this fires and it does nothing. -->
+    <script>
+      setTimeout(function () {
+        var slow = document.getElementById('boot-slow')
+        if (slow) slow.hidden = false
+      }, 5000)
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
