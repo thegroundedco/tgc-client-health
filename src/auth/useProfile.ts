@@ -10,8 +10,21 @@ export function useProfile(session: Session | null) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
 
+  // Depend on the user id, not the session object. supabase-js hands out a new
+  // session object on every onAuthStateChange event, including the periodic
+  // TOKEN_REFRESHED that fires roughly hourly while a tab sits open — depending
+  // on `session` itself would refetch and flash back to "loading" on every one
+  // of those, even though nothing the user can see has changed.
+  //
+  // This does not risk a stale access token: the query below goes through the
+  // shared `supabase` client, which looks up the current session's access
+  // token itself at request time (SupabaseClient#_getSessionToken calls
+  // `this.auth.getSession()` fresh for every request) rather than one closed
+  // over here. The id is only used to decide *whether* and *what* to fetch.
+  const userId = session?.user.id
+
   useEffect(() => {
-    if (!session) {
+    if (!userId) {
       setProfile(null)
       setStatus('ready')
       return
@@ -23,7 +36,7 @@ export function useProfile(session: Session | null) {
     supabase
       .from('profiles')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .maybeSingle()
       .then(({ data, error: queryError }) => {
         if (cancelled) return
@@ -41,7 +54,7 @@ export function useProfile(session: Session | null) {
     return () => {
       cancelled = true
     }
-  }, [session])
+  }, [userId])
 
   return { profile, status, error }
 }
