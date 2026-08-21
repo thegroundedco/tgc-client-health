@@ -1,0 +1,75 @@
+/* Cards on a responsive grid. auto-fill with a minimum, so eleven clients lay
+   out sensibly on a laptop and on a wide monitor without a breakpoint. */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.periodBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-4);
+}
+
+/* The hairline is the card's edge, not the fill: --surface-raised measures
+   1.05:1 against the page. Removing this border makes the card disappear. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.cardHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.score {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.scoreValue {
+  font-stretch: var(--wdth-display);
+  font-weight: var(--wght-display);
+  font-size: var(--step-3);
+  line-height: 1;
+}
+
+.scoreOf {
+  color: var(--text-secondary);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+}
+
+.cardFoot {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule-hairline);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: var(--measure-prose);
+}

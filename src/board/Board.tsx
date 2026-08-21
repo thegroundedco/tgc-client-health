@@ -2,14 +2,30 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { BAND_LABELS, PILLARS, bandFor } from '../lib/score'
-import type { Pillar } from '../lib/score'
+import type { Band, Pillar } from '../lib/score'
 import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
+import styles from './Board.module.css'
 
 type ClientRow = { id: number; name: string }
 type CheckinRow = { client_id: number; total_score: number | null }
 
 type Props = { profile: Profile }
+
+// Exported because the check-in screen needs the identical mapping in step 3,
+// and two copies of it is how a band ends up a different colour on two screens.
+// A Record rather than a template string, so adding a Band to score.ts stops
+// this from compiling instead of silently producing an undefined class.
+const BAND_CLASSES: Record<Band, string> = {
+  healthy: 'band--healthy',
+  watch: 'band--watch',
+  at_risk: 'band--risk',
+  incomplete: 'band--none',
+}
+
+export function bandClassName(band: Band): string {
+  return `band ${BAND_CLASSES[band]}`
+}
 
 export function Board({ profile }: Props) {
   const [clients, setClients] = useState<ClientRow[] | null>(null)
@@ -109,52 +125,76 @@ export function Board({ profile }: Props) {
 
   if (loadError) {
     return (
-      <section>
-        <h2>Cannot reach the database</h2>
-        <p role="alert">{loadError}</p>
-        <button type="button" onClick={() => void load()}>
+      <section className={styles.state}>
+        <h2 className="t-header">Cannot reach the database</h2>
+        <p className="alert prose" role="alert">
+          {loadError}
+        </p>
+        <button className="button" type="button" onClick={() => void load()}>
           Try again
         </button>
       </section>
     )
   }
 
-  if (clients === null) return <p>Loading…</p>
+  if (clients === null) return <p className="t-body">Loading…</p>
 
   if (clients.length === 0) {
     return (
-      <section>
-        <h2>No active clients yet</h2>
-        <p>Add one in the Supabase dashboard to see it here.</p>
+      <section className={styles.state}>
+        <h2 className="t-header">No active clients yet</h2>
+        <p className="t-body prose">
+          Add one in the Supabase dashboard to see it here.
+        </p>
       </section>
     )
   }
 
   return (
-    <section>
-      <h2>{formatPeriod(period)}</h2>
-      {saveError && <p role="alert">{saveError}</p>}
-      <ul>
+    <section className={styles.board}>
+      <div className={styles.periodBar}>
+        <h2 className="t-header">{formatPeriod(period)}</h2>
+      </div>
+      {saveError && (
+        <p className="alert prose" role="alert">
+          {saveError}
+        </p>
+      )}
+      <ul className={styles.grid}>
         {clients.map((client) => {
           const checkin = checkins.find((row) => row.client_id === client.id)
           const total = checkin?.total_score ?? null
           const band = bandFor(total)
           return (
-            <li key={client.id}>
-              <strong>{client.name}</strong>{' '}
-              <span>
-                {/* The band always carries its text label. Colour arrives with
-                    the real check-in screen in Phase 1, and must never be the
-                    only signal. */}
-                {total === null ? '—' : `${total}/25`} · {BAND_LABELS[band]}
-              </span>{' '}
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void scoreAllThrees(client.id)}
-              >
-                Score all 3s
-              </button>
+            <li className={styles.card} key={client.id}>
+              <div className={styles.cardHead}>
+                <h3 className="t-body">{client.name}</h3>
+                {/* The band always carries its text label. Colour is never the
+                    only signal: teal against warm red measures 1.76:1, so any
+                    two bands are indistinguishable to a colour-blind viewer.
+                    Parent spec §9.3. */}
+                <span className={bandClassName(band)}>{BAND_LABELS[band]}</span>
+              </div>
+              <p className={styles.score}>
+                {/* An incomplete check-in shows an em dash, never a number.
+                    Parent spec §6.2: incomplete must not read as "at risk". */}
+                <span className={`${styles.scoreValue} numeric`}>
+                  {total === null ? '—' : total}
+                </span>
+                <span className={styles.scoreOf}>
+                  {total === null ? 'not scored' : 'of 25'}
+                </span>
+              </p>
+              <div className={styles.cardFoot}>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void scoreAllThrees(client.id)}
+                >
+                  Score all 3s
+                </button>
+              </div>
             </li>
           )
         })}
