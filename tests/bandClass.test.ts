@@ -27,6 +27,22 @@ const ALL_BANDS: Record<Band, true> = {
   incomplete: true,
 }
 
+// A rule exists for a class name only if that exact name appears, not merely
+// as a prefix of a longer one: "band" is a substring of "band--healthy", so
+// `css.includes('.' + name)` would stay true even if the standalone `.band`
+// rule — the one carrying the chip's shape, padding and uppercase treatment —
+// were deleted entirely, as long as a modifier rule like `.band--healthy`
+// survived. That is a false pass, and it is the same failure this test exists
+// to catch, one level up: nothing else in the suite would notice either. The
+// class names here are a closed, known set (no CSS-selector metacharacters),
+// so a hyphen-safe regex with a negative lookahead for a following identifier
+// character or hyphen is enough to require a real word boundary after the
+// name, without needing a full CSS parser.
+function definesClass(css: string, className: string): boolean {
+  const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`\\.${escaped}(?![\\w-])`).test(css)
+}
+
 describe('bandClassName', () => {
   const css = readFileSync(join(ROOT, 'src/styles/base.css'), 'utf8')
 
@@ -36,7 +52,7 @@ describe('bandClassName', () => {
   // tests/tokens.test.ts's own "is walked, not silently skipped" pattern.
   it('actually read base.css, not an empty string', () => {
     expect(css.length).toBeGreaterThan(0)
-    expect(css).toContain('.band')
+    expect(definesClass(css, 'band')).toBe(true)
   })
 
   for (const band of Object.keys(ALL_BANDS) as Band[]) {
@@ -44,11 +60,7 @@ describe('bandClassName', () => {
       const classNames = bandClassName(band).split(' ')
       expect(classNames.length).toBeGreaterThan(0)
       for (const className of classNames) {
-        // A plain substring check on ".<name>" is enough here: base.css defines
-        // each band class as a top-level rule, and a false positive would
-        // require another selector merely containing this one's name, which
-        // none do.
-        expect(css).toContain(`.${className}`)
+        expect(definesClass(css, className)).toBe(true)
       }
     })
   }
