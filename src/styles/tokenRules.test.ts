@@ -54,6 +54,14 @@ describe('findViolations — hex colours', () => {
     expect(found).toEqual([])
   })
 
+  it('flags hex colours regardless of surrounding CSS property case', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.x { COLOR: #fff; }' },
+    ])
+    expect(found).toHaveLength(1)
+    expect(found[0].text).toBe('#fff')
+  })
+
   it('reports nothing for the exempt files', () => {
     const found = findViolations([
       { path: 'src/styles/tokens.css', source: '--brand-ink: #1F1F1F;' },
@@ -93,6 +101,13 @@ describe('findViolations — colour functions', () => {
     ])
     expect(found).toEqual([])
   })
+
+  it('flags colour functions regardless of case', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.x{color:RGB(131 193 192)} .y{color:RGBA(0,0,0,.5)}' },
+    ])
+    expect(found.map((v) => v.text)).toEqual(['RGB(', 'RGBA('])
+  })
 })
 
 describe('findViolations — named typefaces', () => {
@@ -125,6 +140,21 @@ describe('findViolations — named typefaces', () => {
     expect(found).toEqual([])
   })
 
+  it('flags a capitalised Font-Family naming a face', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.t { Font-Family: Georgia; }' },
+    ])
+    expect(found).toHaveLength(1)
+    expect(found[0].rule).toBe('named-face')
+  })
+
+  it('allows a capitalised VAR() reference as a lone value', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.t { font-family: VAR(--face-ui); }' },
+    ])
+    expect(found).toEqual([])
+  })
+
   it('flags a var() reference with a literal fallback appended', () => {
     const found = findViolations([
       { path: 'src/a.css', source: '.t { font-family: var(--face-ui), Helvetica; }' },
@@ -144,6 +174,23 @@ describe('findViolations — named typefaces', () => {
       },
     ])
     expect(found).toEqual([])
+  })
+})
+
+describe('findViolations — sorting', () => {
+  it('sorts violations by path, then line, then text for stable results', () => {
+    const found = findViolations([
+      {
+        path: 'src/a.css',
+        source: ".t { font-family: Helvetica; color: #fff; }",
+      },
+    ])
+    expect(found).toHaveLength(2)
+    // Both on same path and line, should sort by text
+    expect(found[0].rule).toBe('hex-colour')
+    expect(found[0].text).toBe('#fff')
+    expect(found[1].rule).toBe('named-face')
+    expect(found[1].text).toMatch(/font-family/)
   })
 })
 

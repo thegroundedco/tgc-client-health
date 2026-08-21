@@ -35,24 +35,26 @@ export const EXEMPT_PATHS: readonly string[] = [
   'src/styles/tokenRules.test.ts',
 ]
 
-// Longest alternative first: with `{3}` before `{6}`, #1F1F1F would match as
-// #1F1 and the trailing F1F would be reported as a separate near-miss.
+// The trailing negative lookahead `(?![0-9a-zA-Z_-])` enforces the correct length
+// by forcing the engine to land on a class boundary. The longest-first alternation
+// is a harmless micro-optimisation that saves backtracking; the tests would not
+// catch a reversal because it would not change the output.
 const HEX_COLOUR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9a-zA-Z_-])/g
 
 // Deliberately wider than spec §4.2's letter, which names only hex. A rule that
 // stops at hex is bypassed by rgb(131 193 192), which is the identical defect.
 // `transform: translate(…)` and friends are untouched because only colour
 // notations are listed.
-const COLOUR_FUNCTION = /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color-mix)\(/g
+const COLOUR_FUNCTION = /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color-mix)\(/gi
 
 // The value of a font-family declaration, up to the end of the declaration.
-const FONT_FAMILY = /font-family\s*:\s*([^;}\n]+)/g
+const FONT_FAMILY = /font-family\s*:\s*([^;}\n]+)/gi
 
 // The one shape a component may use: a single var() reference and nothing else.
 // A component must be able to APPLY a face; it must never NAME one. Spec §4.2
 // is explicit that banning the property outright would make the display face
 // unreachable and the rule would be deleted within a day.
-const LONE_VAR_REFERENCE = /^var\(\s*--[a-zA-Z0-9-]+\s*\)$/
+const LONE_VAR_REFERENCE = /^var\(\s*--[a-zA-Z0-9-]+\s*\)$/i
 
 function lineOf(source: string, index: number): number {
   let line = 1
