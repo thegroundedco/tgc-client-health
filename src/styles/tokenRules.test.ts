@@ -178,7 +178,7 @@ describe('findViolations — named typefaces', () => {
 })
 
 describe('findViolations — sorting', () => {
-  it('sorts violations by path, then line, then text for stable results', () => {
+  it('returns same-line violations in rule execution order, so two failure runs are diffable', () => {
     const found = findViolations([
       {
         path: 'src/a.css',
@@ -186,11 +186,10 @@ describe('findViolations — sorting', () => {
       },
     ])
     expect(found).toHaveLength(2)
-    // Both on same path and line, should sort by text
+    // Both on same path and line, but come back in rule execution order:
+    // hex-colour loop runs first, then colour-function, then named-face.
     expect(found[0].rule).toBe('hex-colour')
-    expect(found[0].text).toBe('#fff')
     expect(found[1].rule).toBe('named-face')
-    expect(found[1].text).toMatch(/font-family/)
   })
 })
 

@@ -100,10 +100,11 @@ export function findViolations(files: readonly SourceFile[]): Violation[] {
   }
 
   // Stable order, so a failure message does not reshuffle between runs and make
-  // a diff of two failures unreadable.
-  return violations.sort(
-    (a, b) => a.path.localeCompare(b.path) || a.line - b.line || a.text.localeCompare(b.text),
-  )
+  // a diff of two failures unreadable. The sort orders by path then line. Violations
+  // sharing both come back in the order the rules ran — hex colours, then colour
+  // functions, then named faces — because the three rule loops are ordered and
+  // Array.sort is stable. No tie-break comparator is needed.
+  return violations.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line)
 }
 
 const ADVICE: Record<RuleName, string> = {
