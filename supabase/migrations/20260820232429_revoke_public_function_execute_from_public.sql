@@ -36,9 +36,19 @@
 -- The statement is kept rather than reverted because it is correct in intent,
 -- provably harmless (it is forward-only, scoped to functions created in future in
 -- schema public by postgres, and cannot touch an existing object or any other
--- owning role -- the Supabase-managed layer is untouched), and it is the right
--- declaration of intent for any environment where it does bite. It is simply not
--- load-bearing, and nothing should rely on it.
+-- owning role -- the Supabase-managed layer is untouched), and because deleting
+-- it would delete the measurements above with it.
+--
+-- CORRECTION to what this paragraph used to claim. It said the statement was
+-- "the right declaration of intent for any environment where it does bite".
+-- There is no such environment. An object's effective ACL is the UNION of
+-- acldefault(objtype, owner) with the matching pg_default_acl row, and
+-- acldefault('f', owner) always contains `=X` -- the grant to PUBLIC. ALTER
+-- DEFAULT PRIVILEGES only edits the stored pg_default_acl row, so REVOKE
+-- ... FROM PUBLIC can never remove what acldefault contributes: there is nothing
+-- in the row for it to take away, on this project or any other. The statement
+-- cannot bite anywhere. Retained as documented intent and as the anchor for the
+-- measurements above; it is not load-bearing, and nothing should rely on it.
 --
 -- What actually enforces the boundary, therefore:
 --

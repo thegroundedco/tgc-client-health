@@ -52,8 +52,34 @@ alter default privileges for role postgres in schema public
 --   3. Then `alter table ... enable row level security` plus policies. Every
 --      grant must be paired with RLS; a grant with no policy is a table that
 --      denies everything for a reason nobody wrote down.
---   4. For a function in `public`, revoke `execute` explicitly. Step 1 above
---      covers postgres-created functions from now on, but not supabase_admin's.
+--   4. For a function in ANY schema -- `public`, `private`, anywhere -- revoke
+--      `execute` from `public` (the pseudo-role) explicitly, then grant it back
+--      to exactly the roles that need it.
+--
+--      CORRECTION. This step used to say "for a function in `public`", which
+--      wrongly implied that a function in `private` is born closed. It is not.
+--      Measured on this project (Postgres 17.6):
+--        create function private.__probe() returns int ...
+--        proacl                                                  -> NULL
+--        has_function_privilege('anon', ..., 'EXECUTE')           -> true
+--        has_function_privilege('authenticated', ..., 'EXECUTE')  -> true
+--      proacl NULL means "no explicit ACL", and Postgres then applies
+--      acldefault('f', owner) = {=X/owner, owner=X/owner}. The `=X` is the grant
+--      to PUBLIC, and it is hardcoded in Postgres rather than supplied by any
+--      pg_default_acl row, which is why no ALTER DEFAULT PRIVILEGES suppresses
+--      it (see 20260820232429). The schema makes NO difference to the ACL. What
+--      `private` changes is reachability BY NAME: calling private.f() also needs
+--      USAGE on schema private, which no browser role has. That is a second
+--      barrier, not the first one, and a policy-referenced function needs no
+--      USAGE at all -- so a `private` function with a default ACL really is
+--      EXECUTE-able by anon.
+--
+--      Every function this plan creates already carries the explicit revoke;
+--      the wording was the only thing wrong. `npm run verify:privileges`
+--      section 9 sweeps `private` as well as `public` for exactly this reason.
+--      Step 1 above covers postgres-created objects from now on for TABLES and
+--      SEQUENCES; it can never cover the hardcoded function grant to PUBLIC in
+--      any schema.
 --
 -- public.profiles already satisfies this: 20260820225903 opens with exactly
 -- `revoke all on public.profiles from anon, authenticated;` ahead of its grants,
