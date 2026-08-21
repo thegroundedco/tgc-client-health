@@ -53,6 +53,22 @@ function validPillarValue(value: unknown): value is number {
   )
 }
 
+// The one place invalid pillar entries get dropped. Used by both readDraft,
+// where the input is untrusted JSON from storage, and writeDraft, where the
+// input is a caller-supplied Draft that can still hold an invalid value (a
+// NaN slipped in upstream, for instance) -- sharing this keeps the two paths
+// from disagreeing about what counts as a valid pillar, which is what let
+// writeDraft report success for a draft that would come back empty.
+function normalisePillars(source: unknown): PillarScores {
+  const pillars: PillarScores = {}
+  if (typeof source === 'object' && source !== null) {
+    for (const [key, value] of Object.entries(source)) {
+      if (isPillar(key) && validPillarValue(value)) pillars[key] = value
+    }
+  }
+  return pillars
+}
+
 export function isDraftEmpty(draft: Draft): boolean {
   return Object.keys(draft.pillars).length === 0 && draft.notes.trim() === ''
 }
@@ -81,13 +97,7 @@ export function readDraft(
   if (typeof parsed !== 'object' || parsed === null) return null
 
   const source = parsed as { pillars?: unknown; notes?: unknown }
-  const pillars: PillarScores = {}
-  if (typeof source.pillars === 'object' && source.pillars !== null) {
-    for (const [key, value] of Object.entries(source.pillars)) {
-      if (isPillar(key) && validPillarValue(value)) pillars[key] = value
-    }
-  }
-
+  const pillars = normalisePillars(source.pillars)
   const notes = typeof source.notes === 'string' ? source.notes : ''
   const draft: Draft = { pillars, notes }
 
@@ -104,15 +114,37 @@ export function writeDraft(
 ): boolean {
   if (!store) return false
   const key = draftKey(clientId, period)
+
+  // Normalised before anything else, through the same rules readDraft applies
+  // on the way back out. Without this, a caller could hand writeDraft a draft
+  // that looks non-empty (a pillar key is present) but whose value is invalid
+  // (NaN, out of range) -- isDraftEmpty would see the key and call it
+  // non-empty, setItem would happily stringify the invalid value, and the very
+  // next readDraft would drop that value, find nothing left, and return null.
+  // writeDraft would have returned true for a write that round-trips to
+  // nothing: a promise made to the person on screen that turns out false the
+  // moment it is checked. Normalising first means isDraftEmpty and the stored
+  // JSON both reflect what readDraft will actually accept, so the boolean
+  // writeDraft returns is honest.
+  const normalised: Draft = {
+    pillars: normalisePillars(draft.pillars),
+    notes: typeof draft.notes === 'string' ? draft.notes : '',
+  }
+
   try {
-    if (isDraftEmpty(draft)) {
-      // Removed rather than stored. A stored empty draft is indistinguishable
-      // from a draft that says "everything is unscored", and readDraft would
-      // have to guess which one it was looking at.
+    if (isDraftEmpty(normalised)) {
+      // Removed rather than stored. A stored empty value would sit as dead
+      // bytes against this key -- consuming a share of a quota that, per the
+      // file header, can already run out -- for a draft that carries no
+      // information: readDraft treats it identically to no key ever having
+      // been written, via the same isDraftEmpty check above. Removing it also
+      // means anything that ever lists keys by DRAFT_KEY_PREFIX without going
+      // through readDraft sees no entry for a client and period with nothing
+      // saved, rather than one it would have to inspect to find empty.
       store.removeItem(key)
       return true
     }
-    store.setItem(key, JSON.stringify(draft))
+    store.setItem(key, JSON.stringify(normalised))
     return true
   } catch {
     return false

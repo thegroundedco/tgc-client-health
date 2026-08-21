@@ -147,6 +147,43 @@ describe('writeDraft', () => {
     writeDraft(1, '2026-08-01', EMPTY_DRAFT, fake.store)
     expect(fake.values.has(draftKey(1, '2026-08-01'))).toBe(false)
   })
+
+  it('a draft that writes must read back identically', () => {
+    // writeDraft's returned true is a promise that the draft is now safe. If
+    // the write path and the read path judged validity differently, that
+    // promise could be false the moment it was checked: a draft could report
+    // a successful write and then read back as something else entirely, or as
+    // nothing at all. This pins the round trip rather than the stored string,
+    // because the string is an implementation detail and a future change to
+    // it should not have to touch this test.
+    const fake = fakeStore()
+
+    // A valid draft round-trips to itself.
+    const valid = { pillars: { relationship: 3, delivery: 5 }, notes: 'steady' }
+    expect(writeDraft(1, '2026-08-01', valid, fake.store)).toBe(true)
+    expect(readDraft(1, '2026-08-01', fake.store)).toEqual(valid)
+
+    // A draft whose only pillar value is invalid has nothing left once
+    // normalised, so the key is removed rather than left holding a garbage
+    // value that would only consume quota for something readDraft can never
+    // return, and the write is still honestly reported. Checked both ways: the
+    // key itself must be gone, not merely read back as null, because a
+    // normalised-write bug that stores instead of removing would still read
+    // back as null through readDraft's own normalisation and hide behind it.
+    const onlyInvalid = { pillars: { growth: Number.NaN }, notes: '' }
+    expect(writeDraft(2, '2026-08-01', onlyInvalid, fake.store)).toBe(true)
+    expect(fake.values.has(draftKey(2, '2026-08-01'))).toBe(false)
+    expect(readDraft(2, '2026-08-01', fake.store)).toBeNull()
+
+    // A draft with one valid and one invalid pillar keeps only the valid one,
+    // and that is exactly what comes back.
+    const mixed = { pillars: { growth: 2, financial: Number.NaN }, notes: 'x' }
+    expect(writeDraft(3, '2026-08-01', mixed, fake.store)).toBe(true)
+    expect(readDraft(3, '2026-08-01', fake.store)).toEqual({
+      pillars: { growth: 2 },
+      notes: 'x',
+    })
+  })
 })
 
 describe('clearDraft', () => {
@@ -196,7 +233,13 @@ describe('draftsDiffer', () => {
   })
 
   it('treats an absent pillar and an unscored one as the same', () => {
-    expect(draftsDiffer({ pillars: {}, notes: '' }, { pillars: {}, notes: '' })).toBe(false)
+    // The `??` in draftsDiffer normalises both to null, so a key that is
+    // present with an undefined value must compare equal to the key being
+    // absent altogether -- otherwise a draft that once held a pillar and lost
+    // it could look "different" from one that never had it.
+    expect(
+      draftsDiffer({ pillars: { growth: undefined }, notes: '' }, { pillars: {}, notes: '' }),
+    ).toBe(false)
   })
 
   it('sees a changed pillar, an added pillar and changed notes', () => {
