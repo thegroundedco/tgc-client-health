@@ -88,9 +88,12 @@ load-bearing**, because teal against warm red is 1.76:1 and no colour choice fix
 
 ### 4.2 Enforced, not intended
 
-A Vitest test walks `src/` and fails on any hex colour or `font-family` declaration outside
-`tokens.css`. Intent decays; a failing test does not. This test is the whole reason the rebrand
-answer stays cheap.
+A Vitest test walks `src/` and fails on any hex colour outside `tokens.css`, and on any
+`font-family` whose value is not a `var(--…)` reference. The distinction matters: components must
+be able to *apply* a face (`font-family: var(--face-display)`), they must never *name* one. A rule
+banning the property outright would make the display face unreachable and would be deleted within
+a day. Intent decays; a failing test does not. This test is the whole reason the rebrand answer
+stays cheap.
 
 ### 4.3 Self-hosted Archivo
 
@@ -151,6 +154,13 @@ incomplete, never as "at risk".
 A partial check-in writes its pillars and leaves `submitted_at` null. Only a complete five sets
 `submitted_at` and `submitted_by`.
 
+**One control, whose label reflects the state it is in.** The button reads `Save draft` while
+fewer than five pillars are scored and `Submit check-in` once all five are. Both press the same
+upsert; only the complete one sets `submitted_at`. So the database is written on an explicit press
+and never on a timer or a navigation, `localStorage` covers everything between presses, and there
+is no third hidden write path to reason about. A control that changes its own label is also the
+opposite of `Score all 3s`, which wrote a constant regardless of state.
+
 Consequences, all of them wanted:
 
 - "8 of 11 scored" on the board has an exact definition: `submitted_at is not null`.
@@ -210,8 +220,9 @@ nothing prints it. `npm run verify:privileges` runs `--linked` and has a known s
 advances `clients_id_seq`, because it probes the write path for real. A silent mislink therefore
 means running write probes against production.
 
-Mitigation: `npm run db:which` prints the linked ref **and** its project name, and is called first
-inside both `db:push` and `verify:privileges` so it cannot be skipped. Production is linked
+Mitigation: a new `npm run db:which` prints the linked ref **and** its project name, and is
+called first inside `verify:privileges` and inside a new `npm run db:push` wrapper — neither
+script exists yet; both are built in step 1 — so the check cannot be skipped. Production is linked
 deliberately, one command at a time, never left linked.
 
 ### 7.2 The roster is a seed, not a migration
