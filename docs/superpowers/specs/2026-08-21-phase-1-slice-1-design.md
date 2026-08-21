@@ -5,6 +5,9 @@
 **Parent spec:** `docs/superpowers/specs/2026-08-20-tgc-client-health-design.md`
 **Amends the parent:** §6.1 (`pillar_definitions` deferred), §8 (board sort toggles deferred),
 §9.4 (Archivo self-hosted rather than CDN-linked)
+**Amended (this spec), 2026-08-21:** §4.3 (font location corrected to `src/assets/fonts/`;
+the previous text named `public/`, which is an empty directory — the plan already recorded this
+correctly)
 
 ## 1. Why this slice exists
 
@@ -110,8 +113,15 @@ stays cheap.
 
 ### 4.3 Self-hosted Archivo
 
-One variable WOFF2 in `public/fonts/`, `@font-face` in `tokens.css`, `font-display: swap`.
-Three reasons, in order of weight:
+The single variable WOFF2 lives in `src/assets/fonts/` and is referenced from `@font-face` in
+`tokens.css` by a relative `url()`, so Vite resolves it at build time; `font-display: swap`. Not
+`public/` — files there are copied verbatim and referenced by a hand-written absolute path, so a
+typo produces a **runtime 404 and a silent fallback to the system typeface**: the page still
+renders and looks plausible, which is the failure mode this project has been bitten by repeatedly.
+Going through CSS instead turns a wrong path into a **build error**, and Vite additionally
+applies the `/tgc-client-health/` base itself and content-hashes the file for cache-busting.
+Every reason below for self-hosting at all is unchanged; only the failure mode improves. Three
+reasons, in order of weight:
 
 1. It settles the base-path question definitively rather than partially.
 2. It removes a third-party request from a tool whose premise is boring reliability.
