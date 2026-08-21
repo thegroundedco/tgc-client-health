@@ -1,0 +1,85 @@
+/* The check-in screen: two totals, five pillar rows, notes, and one control
+   that says what it will do and then says what it did. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* --measure-prose (62ch), not --measure-column (30rem): the pillar rows
+     below carry three anchor sentences each, and --measure-column is sized
+     for the single-field sign-in/access-pending forms, not for a screen this
+     dense. --measure-prose is already the token App.module.css's .centred and
+     Board.module.css's .state reach for on a whole-screen container, so this
+     follows that precedent rather than adding a new one. */
+  max-width: var(--measure-prose);
+}
+
+.nav {
+  display: flex;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.totalLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+/* One step below the display size, and set flush: a single line of digits does
+   not need the role's leading. */
+.totalValue {
+  font-size: var(--step-3);
+  line-height: var(--leading-numeric);
+}
+
+.pillars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.notesBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.notes {
+  resize: vertical;
+  line-height: var(--leading-body);
+}
+
+/* The control and its status on one line where there is room, stacked where
+   there is not -- the status must never be pushed off screen, because it is the
+   confirmation. */
+.saveBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--rule-hairline);
+}
+
+/* A minimum so the line does not jump the button around as the message
+   changes length, and a measure so a long failure message stays readable. */
+.saveStatus {
+  flex: 1 1 var(--measure-column);
+  min-width: 0;
+  max-width: var(--measure-prose);
+}
