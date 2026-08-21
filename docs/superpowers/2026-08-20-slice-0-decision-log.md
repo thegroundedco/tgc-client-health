@@ -1079,3 +1079,53 @@ max(id) 4) because the write predicate is probed for real and rolled back. Docum
 Josh's decision recorded: KEEP THIS LOG. Committed to docs/superpowers/ so git history preserves
 it and the push backs it up. Scanned beforehand: no real credentials; the only credential-shaped
 strings are deliberate fakes; the publishable key is browser-public by design.
+
+## DEPLOYED, AND IT WORKS — 2026-08-21
+Josh pushed main from GitHub Desktop; the Pages deploy succeeded and the deployed app signs in
+and renders the board. So the last unproven part of Slice 0's stated goal — the DEPLOYED half —
+is now proven: Pages build, the /tgc-client-health/ base path, asset resolution, and the
+magic-link redirect against the real origin all work.
+
+He reported "the test client showed as 15/25 from the get go and I wasn't able to change it."
+Investigated rather than reassured: the write HAD landed — updated_at 0.8 minutes before I
+measured, submitted_by = his uid. Cause is my own setup oversight: the board's only control is
+"Score all 3s" and the check-in was ALREADY all 3s from the local round trip, so his click wrote
+successfully and changed nothing visible. I had hit this exact problem during the local
+verification and worked around it by setting the row to 5s first; I failed to do the same before
+handing him the deployed check.
+
+## PHASE 1 REQUIREMENT, discovered by the owner in real use (highest-value finding of the day)
+THE BOARD GIVES NO FEEDBACK THAT A SAVE SUCCEEDED. No flash, no "saved", no timestamp, no
+disabled-then-restored affordance that reads as confirmation. Therefore a save that WORKS is
+visually indistinguishable from a save that FAILED. This is the project's own founding premise —
+you must always be able to tell a working tool from a broken one — pointed inward at the person
+using it, and no review across two sessions caught it, because every reviewer verified the write
+by reading the database rather than by watching the screen. A non-developer clicked the button
+and correctly concluded it was broken.
+Two sub-findings, both Phase 1:
+  1. Save confirmation is mandatory, not polish.
+  2. A control whose write is a fixed value ("Score all 3s") produces a no-op whenever the
+     current value already matches, which is a guaranteed false-negative. The real board's
+     controls must reflect and change actual state, not write a constant.
+
+## SESSION CLOSED 2026-08-21. Slice 0 done. Resume at Phase 1.
+State at close: `main` = d34fd4f (merge commit), pushed, deployed and verified live. Working
+tree clean. `slice-0-plumbing` still exists locally and on the remote; it is fully merged into
+main's history, so it is safe to delete whenever, but nothing requires it.
+Seven migrations, 60 tests (32 in CI), 38 rulings recorded above.
+PUSHING IS JOSH'S ACTION — plain git here has no GitHub credential (GitHub Desktop keeps its own,
+which command-line git cannot read; `git fetch` succeeding proves nothing since the repo is
+public). Any commit I make needs him to press Push in GitHub Desktop.
+Open items for Phase 1, in the order I would take them:
+  1. Save confirmation in the board, plus controls that reflect real state rather than writing a
+     constant. This is the owner's own finding and the highest-value one of the build.
+  2. Views/matviews are not covered by the privilege sweep — the one object type that can bypass
+     RLS entirely. Close it BEFORE Phase 3 reporting work introduces a view.
+  3. A staging database, before real client data lands. Two rounds of live-DB experiments were
+     harmless only because the tables held test rows.
+  4. Column-grant sweep beyond profiles; schema-agnostic function sweep; submitted_by/owner_id
+     attribution; pair score.ts with the SQL generated column; split verify-privileges.sql.
+  5. Styling — deferred wholesale by Josh. Nothing exists: no stylesheet, no brand tokens, no
+     Archivo. Loading a web font from Pages under the base path is still unproven.
+Close-out artifact published for Josh (private until he shares it):
+https://claude.ai/code/artifact/170fb573-0292-4213-a954-f6604a43afe4
