@@ -146,7 +146,11 @@ export function Board({ profile }: Props) {
           {saveError}
         </p>
       )}
-      <ul className={styles.grid}>
+      {/* role="list" because base.css removes the markers globally, and WebKit
+          drops a list's semantics when its markers are removed — so in Safari
+          with VoiceOver this would otherwise announce as a group of paragraphs
+          with no count and no position. The role puts the semantics back. */}
+      <ul className={styles.grid} role="list">
         {clients.map((client) => {
           const checkin = checkins.find((row) => row.client_id === client.id)
           const total = checkin?.total_score ?? null

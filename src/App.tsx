@@ -62,7 +62,10 @@ export default function App() {
               <h1 className="t-header">Client Health</h1>
             </div>
             <div className={styles.identity}>
-              <p className="t-caption">{state.profile.email}</p>
+              {/* Labelled, not a bare address. Without the label a screen
+                  reader announces an email address next to a Sign out button
+                  and leaves the listener to guess the relationship. */}
+              <p className="t-caption">Signed in as {state.profile.email}</p>
               <button
                 className="button button--quiet"
                 type="button"

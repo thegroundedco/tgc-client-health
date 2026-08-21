@@ -98,6 +98,12 @@ export function renderStartupError(container: Element, thrown: unknown): void {
   main.append(detailParagraph)
 
   const list = doc.createElement('ol')
+  // Same reason as the board's grid: base.css removes list markers globally and
+  // WebKit drops a list's semantics along with its markers. It matters more here
+  // than anywhere else in the app, because these steps are a sequence — check
+  // the secret, then re-run the workflow — and a listener who loses the count
+  // loses the order with it.
+  list.setAttribute('role', 'list')
   list.className = 'startup-error__steps'
   for (const step of steps) {
     const item = doc.createElement('li')
