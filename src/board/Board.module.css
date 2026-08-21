@@ -12,7 +12,6 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-3);
-  justify-content: space-between;
 }
 
 .grid {
@@ -45,23 +44,19 @@
   gap: var(--space-2);
 }
 
+/* The display role is applied from the JSX; only what is genuinely local to a
+   card stays here — one size step below the display size, and set flush because
+   it is a single line of digits.
+   There is no .scoreOf beside this any more: it declared .t-caption's width,
+   weight, size and colour and only ever differed by leaving the role's
+   letter-spacing off, so the JSX names the role directly instead. */
 .scoreValue {
-  font-stretch: var(--wdth-display);
-  font-weight: var(--wght-display);
   font-size: var(--step-3);
-  line-height: 1;
-}
-
-.scoreOf {
-  color: var(--text-secondary);
-  font-stretch: var(--wdth-caption);
-  font-weight: var(--wght-caption);
-  font-size: var(--step--1);
+  line-height: var(--leading-numeric);
 }
 
 .cardFoot {
   display: flex;
-  justify-content: flex-start;
   padding-top: var(--space-3);
   border-top: 1px solid var(--rule-hairline);
 }

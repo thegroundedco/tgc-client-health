@@ -124,10 +124,32 @@
   --accent-quiet: var(--brand-blush);
 
   /* ==========================================================================
-     TYPE — one family, five roles, distinguished by width and weight.
+     TYPE — one family today, five roles, distinguished by width and weight.
      Mirrors parent spec §9.4's mapping of Field Gothic, per spec §4.4.
      ========================================================================== */
+
+  /* The typeface, named once. Nothing outside this block references it: every
+     rule in the app reaches a face through one of the five role tokens below. */
   --face-ui: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* One face per role, all five pointing at that single family today. The
+     apparent redundancy is the point, and it must not be tidied away.
+
+     Archivo is one variable file with a width axis, so today a role is fully
+     described by a font-stretch value and a weight. Field Gothic — the licensed
+     face this stands in for — is a separate cut per width (spec §4.1), and
+     under a face like that a font-stretch value has no axis to move along: each
+     role has to name its own family instead. With these tokens in place that
+     swap is confined to this file — repoint the five below and add an
+     @font-face per cut — and not one rule in base.css or in any component
+     module changes. Without them, every rule that selects a role by width would
+     instead have to be rewritten into a font-family declaration of its own.
+     That is the leak these five close. */
+  --face-display: var(--face-ui);
+  --face-header: var(--face-ui);
+  --face-eyebrow: var(--face-ui);
+  --face-body: var(--face-ui);
+  --face-caption: var(--face-ui);
 
   --wdth-display: 125%;
   --wdth-header: 70%;
@@ -140,6 +162,26 @@
   --wght-eyebrow: 300;
   --wght-body: 400;
   --wght-caption: 700;
+
+  /* Type metrics. Tracking and leading follow a typeface's proportions rather
+     than a component's layout, so they belong here beside the widths and
+     weights: a face with different proportions needs every one of them
+     re-tuned, and values scattered across three stylesheets are how one of
+     them gets missed. */
+  --tracking-display: -0.015em;
+  --tracking-header: 0.02em;
+  --tracking-eyebrow: 0.18em;
+  --tracking-caption: 0.01em;
+  --tracking-label: 0.08em;
+  --tracking-band: 0.04em;
+  --tracking-button: 0.06em;
+
+  --leading-display: 1.05;
+  --leading-header: 1.15;
+  --leading-body: 1.55;
+  /* The board's score value: one line of digits with nothing above or below it,
+     so it is set flush. */
+  --leading-numeric: 1;
 
   /* 1.25 ratio from a 16px base. */
   --step--1: 0.8125rem;
@@ -163,4 +205,13 @@
 
   /* Running text stays near 65 characters. */
   --measure-prose: 62ch;
+
+  /* The single-column screens — sign-in and access-pending — share one width.
+     They had diverged, 27rem against 30rem, with no reason recorded anywhere;
+     they are the same layout, so they now take the same token, and the wider of
+     the two values was kept so neither screen's text got tighter.
+     In rem rather than the ch of --measure-prose above, deliberately: this
+     column is sized by the controls standing in it, which are themselves sized
+     in rem, not by a count of characters. */
+  --measure-column: 30rem;
 }

@@ -42,7 +42,7 @@ export function SignIn() {
         <h1 className="t-display">Client Health</h1>
       </div>
       <form className={styles.form} onSubmit={submit}>
-        <label className={styles.label} htmlFor="email">
+        <label className="t-label" htmlFor="email">
           Work email
         </label>
         <input

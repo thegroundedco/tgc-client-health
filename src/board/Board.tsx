@@ -164,10 +164,10 @@ export function Board({ profile }: Props) {
               <p className={styles.score}>
                 {/* An incomplete check-in shows an em dash, never a number.
                     Parent spec §6.2: incomplete must not read as "at risk". */}
-                <span className={`${styles.scoreValue} numeric`}>
+                <span className={`t-display ${styles.scoreValue} numeric`}>
                   {total === null ? '—' : total}
                 </span>
-                <span className={styles.scoreOf}>
+                <span className="t-caption">
                   {total === null ? 'not scored' : 'of 25'}
                 </span>
               </p>

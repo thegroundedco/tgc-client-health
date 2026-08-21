@@ -24,11 +24,11 @@ body {
   margin: 0;
   background: var(--surface-page);
   color: var(--text-primary);
-  font-family: var(--face-ui);
+  font-family: var(--face-body);
   font-size: var(--step-0);
   font-stretch: var(--wdth-body);
   font-weight: var(--wght-body);
-  line-height: 1.55;
+  line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -78,47 +78,82 @@ a {
    Type roles. Global classes rather than per-module rules: these are app-wide
    vocabulary, and five copies of the same three declarations in five modules is
    how a scale drifts.
+
+   Every role names its face as well as its width, and today every one of those
+   --face-* tokens resolves to the same family. That is deliberate, and it is
+   the one thing in this file that must not be "simplified" away: Archivo has a
+   width axis, so a role can be picked out by width alone, while the licensed
+   face this stands in for is a separate cut per width and each role then has to
+   name its own family. Keeping the reference here means that swap edits
+   src/styles/tokens.css and nothing else. The rule to keep is the pairing — a
+   declaration of font-stretch from --wdth-X sits beside one of font-family from
+   --face-X, in every rule below and in every rule added later.
+
+   The metrics come from tokens too, for the same reason: tracking and leading
+   are properties of a face's proportions, so a change of face re-tunes them in
+   one place rather than at every rule that once held a loose number.
    --------------------------------------------------------------------------- */
 
 .t-display {
+  font-family: var(--face-display);
   font-stretch: var(--wdth-display);
   font-weight: var(--wght-display);
   font-size: var(--step-4);
-  line-height: 1.05;
-  letter-spacing: -0.015em;
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-display);
   text-wrap: balance;
 }
 
 .t-header {
+  font-family: var(--face-header);
   font-stretch: var(--wdth-header);
   font-weight: var(--wght-header);
   font-size: var(--step-2);
-  line-height: 1.15;
+  line-height: var(--leading-header);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-header);
   text-wrap: balance;
 }
 
 .t-eyebrow {
+  font-family: var(--face-eyebrow);
   font-stretch: var(--wdth-eyebrow);
   font-weight: var(--wght-eyebrow);
   font-size: var(--step--1);
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: var(--tracking-eyebrow);
   color: var(--text-secondary);
 }
 
 .t-body {
+  font-family: var(--face-body);
   font-stretch: var(--wdth-body);
   font-weight: var(--wght-body);
   font-size: var(--step-0);
 }
 
 .t-caption {
+  font-family: var(--face-caption);
   font-stretch: var(--wdth-caption);
   font-weight: var(--wght-caption);
   font-size: var(--step--1);
-  letter-spacing: 0.01em;
+  letter-spacing: var(--tracking-caption);
+  color: var(--text-secondary);
+}
+
+/* The label over a form field. The caption cut at wider tracking and in caps,
+   which is why it shares --face-caption rather than adding a sixth face: it is
+   the same cut of the same family, differently spaced. It lives here rather
+   than in SignIn.module.css because the sign-in form used to re-derive the
+   caption role locally, and a role re-derived in a module is exactly the drift
+   the note above warns about. */
+.t-label {
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
   color: var(--text-secondary);
 }
 
@@ -142,10 +177,11 @@ a {
   border-radius: var(--radius-pill);
   background: var(--band-none);
   color: var(--text-on-band);
+  font-family: var(--face-caption);
   font-stretch: var(--wdth-caption);
   font-weight: var(--wght-caption);
   font-size: var(--step--1);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-band);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -180,11 +216,11 @@ a {
   border-radius: var(--radius-md);
   background: var(--action-face);
   color: var(--action-text);
-  font-family: var(--face-ui);
+  font-family: var(--face-header);
   font-stretch: var(--wdth-header);
   font-weight: var(--wght-header);
   font-size: var(--step--1);
-  letter-spacing: 0.06em;
+  letter-spacing: var(--tracking-button);
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -218,7 +254,7 @@ a {
   border-radius: var(--radius-md);
   background: var(--surface-raised);
   color: var(--text-primary);
-  font-family: var(--face-ui);
+  font-family: var(--face-body);
   font-stretch: var(--wdth-body);
   font-size: var(--step-0);
 }
@@ -231,6 +267,7 @@ a {
    because the brand red itself is 3.34:1 here and would fail as type. */
 .alert {
   color: var(--alert-text);
+  font-family: var(--face-body);
   font-stretch: var(--wdth-body);
   font-weight: var(--wght-header);
 }
