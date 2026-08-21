@@ -70,7 +70,16 @@ describe('bandClassName', () => {
   for (const band of Object.keys(ALL_BANDS) as Band[]) {
     it(`produces only classes that exist in base.css for "${band}"`, () => {
       const classNames = bandClassName(band).split(' ')
-      expect(classNames.length).toBeGreaterThan(0)
+      // Exactly two: the base class and one modifier. That is the whole
+      // contract of bandClassName, and asserting the count rather than
+      // `length > 0` is the difference between a check and a formality —
+      // String.split never returns an empty array, so the old assertion could
+      // not fail. The emptiness check is not redundant with it: a blank
+      // modifier would still split into two entries, and definesClass('')
+      // returns true against this stylesheet, satisfied by the full stop
+      // ending its opening comment.
+      expect(classNames).toHaveLength(2)
+      expect(classNames.filter((name) => name.length === 0)).toEqual([])
       for (const className of classNames) {
         expect(definesClass(css, className)).toBe(true)
       }

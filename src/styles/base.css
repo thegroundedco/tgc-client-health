@@ -330,8 +330,8 @@ a {
   position: absolute;
   left: 0;
   top: 0;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: var(--space-5);
+  height: var(--space-5);
   display: grid;
   place-items: center;
   border-radius: var(--radius-pill);
