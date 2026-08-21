@@ -20,6 +20,11 @@ const key = env.VITE_SUPABASE_PUBLISHABLE_KEY
 // database.
 const ABSENT_ID = '00000000-0000-0000-0000-000000000000'
 
+// clients.id and checkins.id are identity columns starting at 1, so a negative
+// id cannot exist. The update and delete probes below target it so that, in the
+// event the grant layer ever fails open, they still cannot touch a real row.
+const ABSENT_CLIENT_ID = -1
+
 // Unconditional, and deliberately outside the runIf block below. The security
 // suite skips itself when .env.local is absent, which would otherwise make a run
 // that verified nothing look identical to a run that verified everything. This
@@ -130,6 +135,95 @@ describe.runIf(url && key)('RLS with no session', () => {
       .from('profiles')
       .delete()
       .eq('id', ABSENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  // --------------------------------------------------------------------------
+  // public.clients and public.checkins. Same strict shape as the profiles cases
+  // above, and deliberately NOT the weaker `expect(error ? [] : data)
+  // .toEqual([])` form the plan proposed: that assertion passes when anon holds
+  // full table privileges and only RLS is filtering, which is precisely the
+  // state this project shipped in once already.
+  //
+  // ONE IMPORTANT DIFFERENCE from the profiles cases, which is why the insert
+  // probes below matter more. profiles.id is a foreign key to auth.users, so a
+  // total grant-and-policy failure there still could not leave a row behind.
+  // clients has no such backstop: a real row would persist in the live project
+  // if the grant layer ever opened up. The 'Should not exist' name is chosen so
+  // that a leak is greppable, and the task report records the
+  // `select count(*) from public.clients where name = 'Should not exist'` that
+  // confirms zero after this suite runs.
+  //
+  // Observed at the time of writing, for every verb on both tables:
+  //   HTTP 401, error.code '42501', message 'permission denied for table <t>'
+  // anon holds nothing on either table, so denial happens at the privilege
+  // layer and the RLS policies are never consulted.
+
+  it('refuses an unauthenticated select on clients at the grant layer', async () => {
+    const { data, error, status } = await client().from('clients').select('id')
+    expectGrantLayerDenial(error)
+    expect(status).toBe(401)
+    expect(data).toBeNull()
+  })
+
+  it('refuses an unauthenticated select on checkins at the grant layer', async () => {
+    const { data, error, status } = await client().from('checkins').select('id')
+    expectGrantLayerDenial(error)
+    expect(status).toBe(401)
+    expect(data).toBeNull()
+  })
+
+  // Asserts the write is REFUSED, not merely that a later read comes back
+  // empty. A read returning no rows is not evidence about a write, because anon
+  // cannot read either way.
+  it('refuses an unauthenticated insert on clients', async () => {
+    const { data, error } = await client()
+      .from('clients')
+      .insert({ name: 'Should not exist' })
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  it('refuses an unauthenticated insert on checkins', async () => {
+    const { data, error } = await client()
+      .from('checkins')
+      .insert({ client_id: 1, period: '2026-08-01', relationship: 5 })
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  it('refuses an unauthenticated update on clients', async () => {
+    const { data, error } = await client()
+      .from('clients')
+      .update({ name: 'Should not exist' })
+      .eq('id', ABSENT_CLIENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  // No role reachable from the browser has DELETE on either table at all, so
+  // this is denied even for a signed-in active user. Asserted here because a
+  // future migration adding `grant delete` would otherwise pass every test.
+  it('refuses an unauthenticated delete on clients', async () => {
+    const { data, error } = await client()
+      .from('clients')
+      .delete()
+      .eq('id', ABSENT_CLIENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  it('refuses an unauthenticated delete on checkins', async () => {
+    const { data, error } = await client()
+      .from('checkins')
+      .delete()
+      .eq('id', ABSENT_CLIENT_ID)
       .select()
     expectGrantLayerDenial(error)
     expect(data).toBeNull()

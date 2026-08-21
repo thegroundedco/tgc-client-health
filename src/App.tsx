@@ -4,6 +4,7 @@ import { useProfile } from './auth/useProfile'
 import { SignIn } from './auth/SignIn'
 import { PendingAccess } from './auth/PendingAccess'
 import { deriveAppState } from './appState'
+import { Board } from './board/Board'
 
 export default function App() {
   const { session, status: sessionStatus } = useSession()
@@ -43,6 +44,10 @@ export default function App() {
           <button type="button" onClick={() => void supabase.auth.signOut()}>
             Sign out
           </button>
+          {/* Rendered inside the existing `active` case rather than behind any
+              new session/profile branching: deriveAppState stays the single
+              place that decides what the app is showing. */}
+          <Board profile={state.profile} />
         </main>
       )
 
