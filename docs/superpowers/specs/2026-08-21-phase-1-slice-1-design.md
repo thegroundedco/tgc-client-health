@@ -49,9 +49,12 @@ Five steps, each independently deployable, in this order:
    Recreated rather than transferred: seven migrations in git, one test row of data, no storage
    and no edge functions make a fresh `db push` cheaper and less exotic than a cross-organisation
    transfer. A project created now is also born after Supabase's 2026-04-28 default-privileges
-   change, so it will not carry the trap that cost Slice 0 the most time — the migration that
-   fixes that history becomes a harmless no-op, and `verify-privileges.sql` asserts end states
-   rather than history, so it still passes.
+   change, so it should not carry the trap that cost Slice 0 the most time. **Stated as expectation,
+   not measurement:** by the time either project could be inspected the fixing migration had
+   already run, so whether there was anything to fix is no longer observable. What *is* measured
+   (2026-08-21) is the end state on both projects — `verify:privileges` reports no violation, with
+   every grant and policy check that could run passing, and three preconditions unmet purely
+   because the tables are empty.
 2. **Token foundation applied to existing screens** — sign-in, access-pending, the four error
    states, the current board. Nothing new is built. This step proves the font.
 3. **Check-in screen.** Five pillars with anchors, notes, last month alongside, submit with

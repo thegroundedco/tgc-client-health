@@ -20,7 +20,7 @@ This section is deliberately literal. A README that says "proven end to end" whe
 half of it is untested is the single most expensive kind of wrong here, because
 it is the artifact that gets trusted at face value later.
 
-**Deploy target (not yet live):** https://thegroundedco.github.io/tgc-client-health/
+**Live:** https://thegroundedco.github.io/tgc-client-health/
 
 See `docs/superpowers/specs/2026-08-20-tgc-client-health-design.md` for the design
 and the phase roadmap. If you are standing this project up from nothing, read
@@ -36,6 +36,10 @@ npm install
 cp .env.example .env.local   # fill in from Supabase → Project Settings → API
 npm run dev
 ```
+
+`.env.local` points at **staging**, never production — see "Two Supabase
+projects" below. The deployed site reaches production through GitHub Actions
+secrets, which is the only path to it.
 
 ## Tests
 
@@ -252,20 +256,59 @@ If the Supabase project is a *different* one from the one the committed types we
 generated against, also re-run
 `npx supabase@latest gen types typescript --linked > src/types/database.ts`.
 
-## Database
+## Two Supabase projects
 
-Migrations live in `supabase/migrations/` and are applied with the Supabase CLI:
+There are two, both under the same account, both `us-west-2`:
+
+| Environment | Reached by | Holds |
+|---|---|---|
+| `tgc-client-health` | the deployed site only, via GitHub Actions secrets | real client data |
+| `tgc-client-health-staging` | `.env.local`, local `npm run dev`, the live-credential tests, every experiment | throwaway rows |
+
+**Which one a CLI command hits is invisible.** It is one gitignored file,
+`supabase/.temp/project-ref`, and no CLI command prints it before acting. A silent
+mislink means running migrations — or `verify:privileges`, which probes the write
+path for real and advances `clients_id_seq` — against production while believing
+it is staging.
+
+So every database command goes through a wrapper that prints the target first:
 
 ```bash
-npx supabase@latest login                     # interactive; needs a real terminal
-npx supabase@latest link --project-ref <ref>  # <ref> = Supabase → Project Settings
-                                              #   → General → Reference ID
-npx supabase@latest db push --linked
+npm run db:which        # prints the linked project's name, ref and region,
+                        #   and shouts if it is not named 'staging'
+npm run db:push         # db:which, then db push --linked
+npm run verify:privileges   # db:which, then the assertions
+```
+
+Switch target deliberately, one command at a time, and never leave production
+linked:
+
+```bash
+npx supabase@latest link --project-ref <ref>   # Supabase → Project Settings
+                                               #   → General → Reference ID
+npm run db:which                               # confirm before doing anything
+```
+
+**There are no backups.** The free plan includes no automated backups and no
+point-in-time recovery. `supabase db dump` is not available here either — it
+requires Docker, which is absent, and it writes a **zero-byte file** on failure
+rather than erroring usefully. Until a working export exists, the fallback is the
+dashboard SQL editor's CSV download. Do not automate a dump into GitHub Actions:
+this repository is public and workflow artifacts on public repositories are
+downloadable by anyone.
+
+## Database
+
+Migrations live in `supabase/migrations/`:
+
+```bash
+npx supabase@latest login    # interactive; needs a real terminal, not an agent
+npm run db:push
 npx supabase@latest gen types typescript --linked > src/types/database.ts
 ```
 
-Never run `db reset`, and never pass `--force`. This project has one Supabase
-project and it holds real data.
+Never run `db reset`, and never pass `--force`. One of these two projects holds
+real data and the guard against hitting it is a printed name, not a safety net.
 
 ### `src/types/database.ts` is generated — do not hand-edit it
 
@@ -334,8 +377,10 @@ prevent. Spec §7.2 has the transcripts.
 npm run verify:privileges
 ```
 
-Runs `scripts/verify-privileges.sql` against the linked project and asserts, in
-Postgres, both halves of the boundary:
+Runs `db:which` first, then `scripts/verify-privileges.sql` against the linked
+project. Point it at **staging**: it probes the write path for real, so each run
+advances `clients_id_seq` on whatever it is aimed at. It asserts, in Postgres,
+both halves of the boundary:
 
 - **Grants** (sections 1–9): that `anon` and `authenticated` hold nothing beyond
   an explicit allowlist on every table and sequence in `public`, that the
