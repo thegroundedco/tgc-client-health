@@ -163,10 +163,26 @@ describe('findViolations — named typefaces', () => {
     expect(found[0].rule).toBe('named-face')
   })
 
-  it('ignores the font shorthand and font-feature properties', () => {
-    // `font-family` is the property under rule. Matching a bare `font:` would
-    // catch font-size, font-weight and font-variant-numeric, all of which
-    // components set freely.
+  it('flags the font shorthand, which cannot be written without naming a family', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.t { font: 700 1rem Helvetica; }' },
+    ])
+    expect(found).toEqual([
+      {
+        path: 'src/a.css',
+        line: 1,
+        rule: 'font-shorthand',
+        text: 'font: 700 1rem Helvetica',
+      },
+    ])
+  })
+
+  it('leaves font-size, font-weight and font-variant-numeric alone', () => {
+    // The shorthand rule is anchored on a colon immediately after `font`, and a
+    // hyphen is not a colon, so none of the longhand properties can match it.
+    // The comment this replaces claimed the opposite, which is why this test
+    // now carries a fixture for the shorthand as well as for the longhands: the
+    // old one asserted the shorthand was ignored without containing one.
     const found = findViolations([
       {
         path: 'src/a.css',
@@ -174,6 +190,121 @@ describe('findViolations — named typefaces', () => {
       },
     ])
     expect(found).toEqual([])
+  })
+})
+
+describe('findViolations — named colours', () => {
+  it('flags a colour written as its keyword', () => {
+    const found = findViolations([
+      { path: 'src/a.css', source: '.x { color: white; }' },
+    ])
+    expect(found).toEqual([
+      {
+        path: 'src/a.css',
+        line: 1,
+        rule: 'named-colour',
+        text: 'color: white',
+      },
+    ])
+  })
+
+  it('flags a keyword on the shorthand properties and in either case', () => {
+    const found = findViolations([
+      {
+        path: 'src/a.css',
+        source: [
+          '.a{background:Teal}',
+          '.b{border:1px solid red}',
+          '.c{BACKGROUND-COLOR:GREY}',
+          '.d{outline:2px dotted rebeccapurple}',
+        ].join('\n'),
+      },
+    ])
+    expect(found.map((v) => v.rule)).toEqual(Array(4).fill('named-colour'))
+    expect(found.map((v) => v.line)).toEqual([1, 2, 3, 4])
+  })
+
+  it('does not flag the keywords that name no colour', () => {
+    const found = findViolations([
+      {
+        path: 'src/a.css',
+        source: [
+          '.a{background:transparent}',
+          '.b{color:inherit}',
+          '.c{fill:currentColor}',
+          '.d{background:var(--surface-page)}',
+          '.e{border:1px solid var(--rule-hairline)}',
+        ].join('\n'),
+      },
+    ])
+    expect(found).toEqual([])
+  })
+
+  // The rule is anchored to a colour property on purpose. Comments all over
+  // this repository discuss the palette in words — the band contrast notes name
+  // teal and red in a sentence — and a rule matching those words anywhere would
+  // fail on the documentation instead of on a defect.
+  it('does not flag colour words in prose', () => {
+    const found = findViolations([
+      {
+        path: 'src/board/Board.tsx',
+        source: '// teal against warm red measures 1.76:1, so the label is not\n// decoration: it is the only signal that survives greyscale.\n',
+      },
+    ])
+    expect(found).toEqual([])
+  })
+})
+
+describe('findViolations — JSX inline styles', () => {
+  it('flags a face named in a camelCase inline style', () => {
+    const found = findViolations([
+      { path: 'src/a.tsx', source: "<p style={{ fontFamily: 'Helvetica' }} />" },
+    ])
+    expect(found).toEqual([
+      {
+        path: 'src/a.tsx',
+        line: 1,
+        rule: 'named-face',
+        text: "fontFamily: 'Helvetica'",
+      },
+    ])
+  })
+
+  it('allows a quoted lone var() reference in an inline style', () => {
+    const found = findViolations([
+      { path: 'src/a.tsx', source: "<p style={{ fontFamily: 'var(--face-body)' }} />" },
+    ])
+    expect(found).toEqual([])
+  })
+
+  // The reported text runs to the end of the object rather than to the end of
+  // the offending entry, and that is a deliberate trade. A comma cannot end the
+  // value the colour rule searches, because a comma is legal INSIDE a CSS colour
+  // value — a gradient's stops are comma-separated — and stopping there would
+  // let a keyword hide behind the first comma of a shorthand. The finding is
+  // still locatable: it carries the file, the line and the property.
+  it('flags a colour named in an inline style', () => {
+    const found = findViolations([
+      {
+        path: 'src/a.tsx',
+        source: "<p style={{ color: 'red', fontFamily: 'var(--face-body)' }} />",
+      },
+    ])
+    expect(found).toHaveLength(1)
+    expect(found[0].rule).toBe('named-colour')
+    expect(found[0].text).toContain("color: 'red'")
+  })
+
+  it('flags a colour named after another entry in the same object', () => {
+    const found = findViolations([
+      {
+        path: 'src/a.tsx',
+        source: "<p style={{ fontFamily: 'var(--face-body)', backgroundColor: 'teal' }} />",
+      },
+    ])
+    expect(found).toHaveLength(1)
+    expect(found[0].rule).toBe('named-colour')
+    expect(found[0].text).toContain("backgroundColor: 'teal'")
   })
 })
 
@@ -187,7 +318,7 @@ describe('findViolations — sorting', () => {
     ])
     expect(found).toHaveLength(2)
     // Both on same path and line, but come back in rule execution order:
-    // hex-colour loop runs first, then colour-function, then named-face.
+    // hex-colour, colour-function, named-colour, font-shorthand, named-face.
     expect(found[0].rule).toBe('hex-colour')
     expect(found[1].rule).toBe('named-face')
   })

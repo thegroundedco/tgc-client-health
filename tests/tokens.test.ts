@@ -15,9 +15,16 @@ import {
 const ROOT = join(import.meta.dirname, '..')
 
 // The extensions that can carry a colour or a typeface. Everything else in the
-// tree — .json, .sql, .md, .svg, .woff2 — either cannot style the app or is not
-// ours to police.
-const EXTENSIONS = ['.css', '.ts', '.tsx', '.html']
+// tree — .json, .sql, .md, .woff2 — either cannot style the app or is not ours
+// to police.
+//
+// .svg is in the list although there is no SVG in the tree yet. Spec §10 carries
+// two open items that are SVGs — the logo lockup and the kiwi favicon — and an
+// exported asset arrives with its brand colours written into it as literals. The
+// day those land is the day the rule needs to already be watching; adding the
+// extension afterwards means noticing first, which is the failure mode this
+// whole check exists to remove.
+const EXTENSIONS = ['.css', '.ts', '.tsx', '.html', '.svg']
 
 const SKIP_DIRECTORIES = new Set(['node_modules', 'dist', '.git', 'supabase', 'docs'])
 

@@ -13,7 +13,12 @@
 // fixtures, and a rule can be proved to fire without creating a real file that
 // breaks the build.
 
-export type RuleName = 'hex-colour' | 'colour-function' | 'named-face'
+export type RuleName =
+  | 'hex-colour'
+  | 'colour-function'
+  | 'named-colour'
+  | 'font-shorthand'
+  | 'named-face'
 
 export type SourceFile = { path: string; source: string }
 
@@ -35,8 +40,8 @@ export const EXEMPT_PATHS: readonly string[] = [
   'src/styles/tokenRules.test.ts',
 ]
 
-// None of the three constants below may be illustrated with a real example of
-// the syntax they ban: this module is walked by tests/tokens.test.ts along with
+// None of the constants below may be illustrated with a real example of the
+// syntax they ban: this module is walked by tests/tokens.test.ts along with
 // every other file in the repository, and it is not in EXEMPT_PATHS (nor should
 // it be — it has no legitimate reason to contain a colour literal or a named
 // typeface, and exempting it would silently permit one forever). A comment that
@@ -57,8 +62,92 @@ const HEX_COLOUR = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]
 // and friends are untouched because only colour notations are listed.
 const COLOUR_FUNCTION = /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|color-mix)\(/gi
 
-// The value of a font-family declaration, up to the end of the declaration.
+// CSS named colours. The same defect as a hex literal, spelled as a word: a
+// rule that stops at the notations above is evaded by writing the identical
+// colour as its keyword instead.
+//
+// Deliberately partial. There are 148 named colours and almost all of them are
+// names nobody reaches for by accident; policing every one buys nothing and
+// makes the list a wall of noise that the next person skims past. This is the
+// set somebody actually types at 6pm when they want a slightly different
+// something — the plain words, the greys, and the few that turn up in design
+// tools. Adding a missing one is a one-line change, and the hex rule already
+// catches the same colour written the way most people write it.
+//
+// The keywords that are NOT colours — transparent, currentColor, inherit and
+// the CSS-wide values — are absent on purpose: they name no identity, so they
+// are legitimate outside tokens.css.
+const NAMED_COLOUR_WORDS = [
+  'aliceblue', 'aqua', 'aquamarine', 'beige', 'black', 'blue', 'brown',
+  'chocolate', 'coral', 'crimson', 'cyan', 'darkblue', 'darkgray', 'darkgreen',
+  'darkgrey', 'darkred', 'dimgray', 'dimgrey', 'fuchsia', 'gold', 'gray',
+  'green', 'grey', 'hotpink', 'indigo', 'ivory', 'khaki', 'lavender',
+  'lightblue', 'lightgray', 'lightgreen', 'lightgrey', 'lime', 'magenta',
+  'maroon', 'navy', 'olive', 'orange', 'orchid', 'pink', 'plum', 'purple',
+  'rebeccapurple', 'red', 'salmon', 'silver', 'skyblue', 'slategray',
+  'slategrey', 'tan', 'teal', 'tomato', 'turquoise', 'violet', 'wheat',
+  'white', 'whitesmoke', 'yellow',
+] as const
+
+const NAMED_COLOUR = new RegExp(`\\b(?:${NAMED_COLOUR_WORDS.join('|')})\\b`, 'i')
+
+// The properties whose value can be a colour, in both spellings: the hyphenated
+// one CSS uses and the camelCase one a JSX inline style uses. Anchoring the
+// named-colour rule to a property is what keeps it out of prose — every comment
+// in this repository discussing the brand palette says teal and red in a
+// sentence, and a rule matching those words anywhere would fail on the
+// documentation rather than on a defect.
+//
+// Sorted longest-first at construction: JavaScript alternation is first-match at
+// a position, and the regex advances past the whole declaration, so the long
+// forms must be tried before the short ones they end with.
+const COLOUR_PROPERTIES = [
+  'accent-color', 'accentColor',
+  'background-color', 'backgroundColor', 'background',
+  'border-bottom-color', 'borderBottomColor',
+  'border-left-color', 'borderLeftColor',
+  'border-right-color', 'borderRightColor',
+  'border-top-color', 'borderTopColor',
+  'border-color', 'borderColor',
+  'border-bottom', 'borderBottom',
+  'border-left', 'borderLeft',
+  'border-right', 'borderRight',
+  'border-top', 'borderTop',
+  'border',
+  'box-shadow', 'boxShadow',
+  'caret-color', 'caretColor',
+  'column-rule-color', 'columnRuleColor', 'column-rule', 'columnRule',
+  'outline-color', 'outlineColor', 'outline',
+  'text-decoration-color', 'textDecorationColor',
+  'text-shadow', 'textShadow',
+  'color', 'fill', 'stroke',
+] as const
+
+const COLOUR_DECLARATION = new RegExp(
+  `(?:^|[^\\w])(?:${[...COLOUR_PROPERTIES]
+    .sort((a, b) => b.length - a.length)
+    .join('|')})\\s*:\\s*([^;}\\n]*)`,
+  'gi',
+)
+
+// The one-declaration shorthand that sets every font property at once. It is
+// flagged unconditionally, because a family is not optional in it: every legal
+// use of it names a face. The comment this replaces claimed a rule anchored
+// here would also catch font-size, font-weight and font-variant-numeric — it
+// does not, and cannot, because those spell a hyphen where this needs a colon.
+const FONT_SHORTHAND = /\bfont\s*:\s*([^;}\n]*)/gi
+
+// The value of a font-family declaration, up to the end of the declaration, in
+// both spellings. The camelCase form is how a JSX inline style names a face,
+// which the hyphenated form never sees; it stops at a comma as well, because in
+// an object literal a comma ends the entry, whereas in CSS a comma separates
+// the fallbacks inside one value.
 const FONT_FAMILY = /font-family\s*:\s*([^;}\n]+)/gi
+const FONT_FAMILY_CAMEL = /\bfontFamily\s*:\s*([^,;}\n]+)/gi
+
+// A JSX inline style quotes its value, so the lone-var check has to see through
+// one layer of quoting before it can recognise the shape it permits.
+const SURROUNDING_QUOTES = /^['"`]|['"`]$/g
 
 // The one shape a component may use: a single var() reference and nothing else.
 // A component must be able to APPLY a face; it must never NAME one. Spec §4.2
@@ -98,22 +187,45 @@ export function findViolations(files: readonly SourceFile[]): Violation[] {
       })
     }
 
-    for (const match of file.source.matchAll(FONT_FAMILY)) {
-      if (LONE_VAR_REFERENCE.test(match[1].trim())) continue
+    for (const match of file.source.matchAll(COLOUR_DECLARATION)) {
+      if (!NAMED_COLOUR.test(match[1])) continue
       violations.push({
         path: file.path,
         line: lineOf(file.source, match.index ?? 0),
-        rule: 'named-face',
+        rule: 'named-colour',
         text: match[0].trim(),
       })
+    }
+
+    for (const match of file.source.matchAll(FONT_SHORTHAND)) {
+      violations.push({
+        path: file.path,
+        line: lineOf(file.source, match.index ?? 0),
+        rule: 'font-shorthand',
+        text: match[0].trim(),
+      })
+    }
+
+    for (const regex of [FONT_FAMILY, FONT_FAMILY_CAMEL]) {
+      for (const match of file.source.matchAll(regex)) {
+        const value = match[1].trim().replace(SURROUNDING_QUOTES, '').trim()
+        if (LONE_VAR_REFERENCE.test(value)) continue
+        violations.push({
+          path: file.path,
+          line: lineOf(file.source, match.index ?? 0),
+          rule: 'named-face',
+          text: match[0].trim(),
+        })
+      }
     }
   }
 
   // Stable order, so a failure message does not reshuffle between runs and make
-  // a diff of two failures unreadable. The sort orders by path then line. Violations
-  // sharing both come back in the order the rules ran — hex colours, then colour
-  // functions, then named faces — because the three rule loops are ordered and
-  // Array.sort is stable. No tie-break comparator is needed.
+  // a diff of two failures unreadable. The sort orders by path then line.
+  // Violations sharing both come back in the order the rules ran — hex colours,
+  // colour functions, named colours, the font shorthand, then named faces —
+  // because the rule loops above are ordered and Array.sort is stable. No
+  // tie-break comparator is needed.
   return violations.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line)
 }
 
@@ -122,6 +234,10 @@ const ADVICE: Record<RuleName, string> = {
     'move the colour into src/styles/tokens.css and reference it as var(--…)',
   'colour-function':
     'move the colour into src/styles/tokens.css and reference it as var(--…)',
+  'named-colour':
+    'move the colour into src/styles/tokens.css and reference it as var(--…)',
+  'font-shorthand':
+    'use the longhand properties instead; the shorthand always names a family, and the family belongs in src/styles/tokens.css',
   'named-face':
     'set font-family to a single var(--face-…) reference; the family name and its fallbacks belong in src/styles/tokens.css',
 }
