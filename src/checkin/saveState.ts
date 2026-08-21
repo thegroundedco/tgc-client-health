@@ -39,20 +39,41 @@ export function saveReducer(state: SaveState, event: SaveEvent): SaveState {
       return state.kind === 'saving' ? state : { kind: 'dirty' }
 
     case 'submitted':
+      // Unguarded, unlike `edited` above, and that is deliberate rather than an
+      // oversight: re-entering `saving` from `saving` is the same state, so
+      // there is nothing here to protect. What stops a second press starting a
+      // second write is not this line -- it is submitBlock returning blocked
+      // while the state is `saving`, and the caller's own in-flight guard.
+      // Adding a check here would read as the protection and would not be it.
       return { kind: 'saving' }
 
     case 'succeeded':
-      // Only a save that is actually in flight may report success. A response
-      // arriving after the screen has moved on -- remounted, re-read, edited
-      // again -- must not paint a confirmation over what is there now. A
+    case 'failed': {
+      // Only a save that is actually in flight may report its outcome. A
       // confirmation for a write the person can no longer see is the same class
-      // of lie as no confirmation at all.
-      return state.kind === 'saving'
+      // of lie as no confirmation at all -- it is the defect this slice exists
+      // to fix, wearing the opposite mask.
+      //
+      // Honest about reachability, in the same terms as the `edited` guard
+      // above: as the screen is wired today, nothing takes the state out of
+      // `saving` before the response lands, so neither of these refusals can
+      // currently fire. An earlier version of this comment narrated a concrete
+      // race -- going back to the board and returning while a save was still in
+      // flight -- and that story does not hold: returning mounts a new screen
+      // with its own reducer, so the abandoned request's dispatch belongs to the
+      // old one and cannot reach the new one's state.
+      //
+      // The guard stays anyway. It costs one comparison, and it is the only
+      // thing that would keep a late response from painting over a form it no
+      // longer describes if a future change gave the screen a way to leave
+      // `saving` early -- a reload during a save, an edit that is no longer
+      // disabled, a cancel control. Its tests pin the behaviour so that change
+      // cannot quietly reopen the defect.
+      if (state.kind !== 'saving') return state
+      return event.type === 'succeeded'
         ? { kind: 'saved', at: event.at, by: event.by, complete: event.complete }
-        : state
-
-    case 'failed':
-      return state.kind === 'saving' ? { kind: 'failed', error: event.error } : state
+        : { kind: 'failed', error: event.error }
+    }
 
     default: {
       // Exhaustiveness check: a new event stops this compiling instead of

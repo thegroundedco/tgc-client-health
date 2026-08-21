@@ -70,11 +70,17 @@ describe('saveReducer', () => {
   })
 
   it('ignores a response for a save that is no longer in flight', () => {
-    // The scenario: a save is sent, the person goes back to the board and
-    // returns (which remounts and re-reads, so the state is `clean`), and only
-    // then does the original response land. Painting "Saved" over a freshly
-    // loaded form would be a confirmation for a write the person can no longer
-    // see, which is the same class of lie as no confirmation at all.
+    // What this pins, stated without inventing a scenario for it: a response
+    // is honoured only from `saving`. As the screen is wired today no path
+    // leaves `saving` before the response lands, so this is a guard against a
+    // future change rather than against a race that exists -- see the comment
+    // on the merged `succeeded`/`failed` case in saveState.ts, which says why
+    // it is kept and why the race it used to describe does not hold.
+    //
+    // The behaviour is worth pinning regardless: painting "Saved" over a form
+    // that no longer describes the write would be a confirmation for something
+    // the person can no longer see, which is the same class of lie as no
+    // confirmation at all.
     for (const state of [CLEAN, DIRTY, SAVED, FAILED]) {
       expect(
         saveReducer(state, { type: 'succeeded', at: 'x', by: 'you', complete: true }),
