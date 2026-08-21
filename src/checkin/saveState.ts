@@ -1,4 +1,5 @@
 import { PILLARS } from '../lib/score'
+import { formatSavedAt } from '../lib/month'
 
 // The save path as a pure reducer. Slice 1 spec §5.6.
 //
@@ -158,4 +159,120 @@ export function displayedTotal(args: {
     args.state.kind === 'saving' ||
     args.state.kind === 'failed'
   return formDiffers ? args.localTotal : args.storedTotal
+}
+
+export type SaveStatusTone = 'confirm' | 'error' | 'quiet'
+
+export type SaveStatusLine = { text: string; tone: SaveStatusTone }
+
+// Fix round 1: the save-status region used to be an ad-hoc chain of JSX
+// conditions in CheckIn.tsx, and two combinations fell through it with no
+// branch at all -- a routine `clean` draft (nothing rendered) and a blocked
+// `dirty` press (the block reason never shown). Neither could be caught by a
+// test, because the chain lived in JSX. This function is the same decision
+// made checkable: every SaveState kind is handled in the switch below, the
+// default case is a compile-time exhaustiveness check exactly like the one in
+// saveReducer above, and saveState.test.ts sweeps every kind against every
+// combination of `block` and `storedSubmitted` to prove the result is never
+// empty.
+//
+// Returns one or more lines, never zero, and no line's text is ever empty --
+// that is the contract the caller relies on to render *something* every time
+// this region is visible.
+export function saveStatus(args: {
+  state: SaveState
+  block: SubmitBlock
+  scored: number
+  storedUpdatedAt: string | null
+  // Not read below: `block` already folds this in (submitBlock blocks
+  // unconditionally on `clean` + `storedSubmitted`), so by the time this
+  // function sees `clean` and `blocked: false` it already knows
+  // `storedSubmitted` was false. Kept in the signature anyway, as the
+  // documented input this decision actually depends on -- through `block` --
+  // rather than making a future reader re-derive that dependency from
+  // submitBlock's source.
+  storedSubmitted: boolean
+}): SaveStatusLine[] {
+  const { state, block, scored } = args
+
+  // A second line for the block reason, appended only when it says something
+  // the state line above it does not already say. For `saving` and `saved`
+  // the reason is a restatement of the state itself ("Saving…", "Saved.
+  // Change something to save again.") and repeating it would read as an echo;
+  // for `dirty` and a blocked `clean` it is new information -- the whole
+  // reason Critical 2 existed is that `dirty` never called this at all.
+  function blockedReason(): SaveStatusLine | null {
+    return block.blocked ? { text: block.reason, tone: 'quiet' } : null
+  }
+
+  switch (state.kind) {
+    case 'saving':
+      return [{ text: 'Saving…', tone: 'quiet' }]
+
+    case 'saved': {
+      const verb = state.complete ? 'Check-in submitted' : 'Draft saved'
+      const tail = state.complete
+        ? ''
+        : ` ${scored} of ${PILLARS.length} pillars scored.`
+      return [
+        {
+          text: `${verb} ${formatSavedAt(state.at)} by ${state.by}.${tail}`,
+          tone: 'confirm',
+        },
+      ]
+    }
+
+    case 'failed':
+      return [
+        {
+          text:
+            `Could not save: ${state.error}. Nothing was lost — everything you ` +
+            `entered is still on screen, and pressing ${submitLabel(scored)} ` +
+            'again costs nothing.',
+          tone: 'error',
+        },
+      ]
+
+    case 'dirty': {
+      const lines: SaveStatusLine[] = [{ text: 'Unsaved changes.', tone: 'quiet' }]
+      const reason = blockedReason()
+      if (reason) lines.push(reason)
+      return lines
+    }
+
+    case 'clean': {
+      if (block.blocked) return [{ text: block.reason, tone: 'quiet' }]
+
+      // Not blocked while `clean` is the missing case Critical 1 found: a
+      // routine saved draft, reopened, said nothing. submitBlock blocks
+      // unconditionally whenever `!hasContent` (checked ahead of the
+      // clean+storedSubmitted rule) and whenever `storedSubmitted` is true
+      // while `clean` (the rule right above this one in submitBlock), so
+      // reaching here with `blocked: false` means `hasContent` is true AND
+      // `storedSubmitted` is false. `clean` itself means the draft on screen
+      // matches the stored row (see the `loaded`/`edited` dispatch in
+      // useCheckin.ts): the database's empty case, `draftFromRow(null)`, is
+      // EMPTY_DRAFT, which has no content. So a `clean` form with content can
+      // only be a form that matches a real, non-empty stored row -- meaning
+      // `storedUpdatedAt` cannot be null in this branch. The null-guard below
+      // is defensive rather than reachable today, in the same spirit as the
+      // guard on the merged succeeded/failed case above: it costs one check,
+      // and it stops a future change from printing an empty date if this
+      // invariant ever stops holding.
+      const at = args.storedUpdatedAt ? formatSavedAt(args.storedUpdatedAt) : null
+      return [
+        {
+          text: at
+            ? `Draft saved ${at}. ${scored} of ${PILLARS.length} pillars scored.`
+            : `Draft saved. ${scored} of ${PILLARS.length} pillars scored.`,
+          tone: 'confirm',
+        },
+      ]
+    }
+
+    default: {
+      const _exhaustive: never = state
+      throw new Error(`Unhandled save state: ${JSON.stringify(_exhaustive)}`)
+    }
+  }
 }

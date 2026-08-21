@@ -3,10 +3,12 @@ import {
   INITIAL_SAVE_STATE,
   displayedTotal,
   saveReducer,
+  saveStatus,
   submitBlock,
   submitLabel,
 } from './saveState'
-import type { SaveState } from './saveState'
+import type { SaveState, SubmitBlock } from './saveState'
+import { PILLARS } from '../lib/score'
 
 const CLEAN: SaveState = { kind: 'clean' }
 const DIRTY: SaveState = { kind: 'dirty' }
@@ -233,5 +235,166 @@ describe('displayedTotal', () => {
   it('carries null through, because incomplete has no number', () => {
     expect(displayedTotal({ state: DIRTY, localTotal: null, storedTotal: 12 })).toBeNull()
     expect(displayedTotal({ state: CLEAN, localTotal: 19, storedTotal: null })).toBeNull()
+  })
+})
+
+describe('saveStatus', () => {
+  // Fix round 1, Critical 1 and 2: the save-status region used to be a chain
+  // of JSX conditions, and two ordinary combinations fell through it with no
+  // branch at all -- a routine `clean` draft rendered nothing, and a blocked
+  // `dirty` press never showed why. saveStatus() is that decision made a
+  // value instead of a chain, so completeness is something this file can
+  // assert rather than something a reviewer has to notice missing in a
+  // browser.
+
+  const BLOCKED = (reason = 'test reason'): { blocked: true; reason: string } => ({
+    blocked: true,
+    reason,
+  })
+  const UNBLOCKED: SubmitBlock = { blocked: false }
+
+  function nonEmptyText(lines: readonly { text: string }[]) {
+    return lines.length > 0 && lines.every((line) => line.text.trim() !== '')
+  }
+
+  it('never returns nothing, for any combination of state, block and stored facts', () => {
+    // The property, not a case list: every SaveState kind, crossed with
+    // whether submitBlock happened to block, whether there is anything to
+    // report as saved, and whether the stored row is already submitted.
+    // `block` is constructed directly here rather than run through
+    // submitBlock -- some of the 40 combinations below (e.g. `saved` with
+    // `blocked: false`) cannot actually occur through submitBlock, and the
+    // point of this sweep is that saveStatus's own switch must not go silent
+    // on ANY input shape, reachable today or not.
+    for (const state of ALL_STATES) {
+      for (const block of [BLOCKED(), UNBLOCKED]) {
+        for (const hasContent of [true, false]) {
+          for (const storedSubmitted of [true, false]) {
+            const lines = saveStatus({
+              state,
+              block,
+              scored: hasContent ? 3 : 0,
+              storedUpdatedAt: hasContent ? '2026-08-21T15:42:00.000Z' : null,
+              storedSubmitted,
+            })
+            expect(
+              nonEmptyText(lines),
+              `${state.kind} + blocked:${block.blocked} + hasContent:${hasContent} ` +
+                `+ storedSubmitted:${storedSubmitted} produced ${JSON.stringify(lines)}`,
+            ).toBe(true)
+          }
+        }
+      }
+    }
+  })
+
+  it('Critical 1: a clean, unblocked draft says it was saved', () => {
+    // Reachable in the most ordinary way possible: score some pillars, press
+    // Save draft, come back later. load() finds no local-draft disagreement,
+    // dispatches `loaded`, and the screen is `clean` with a stored, unsubmitted
+    // row -- exactly the combination the old JSX chain had no branch for.
+    const lines = saveStatus({
+      state: CLEAN,
+      block: UNBLOCKED,
+      scored: 3,
+      storedUpdatedAt: '2026-08-21T15:42:00.000Z',
+      storedSubmitted: false,
+    })
+    expect(nonEmptyText(lines)).toBe(true)
+    expect(lines[0].text).toMatch(/draft saved/i)
+    expect(lines[0].text).toContain(`3 of ${PILLARS.length} pillars scored`)
+  })
+
+  it('Critical 1, the nullability question: storedUpdatedAt cannot be null when clean is unblocked, but the guard does not print an empty date if it ever is', () => {
+    const lines = saveStatus({
+      state: CLEAN,
+      block: UNBLOCKED,
+      scored: 3,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(lines[0].text).not.toMatch(/invalid date/i)
+    // No trailing space before the period where a date would otherwise sit --
+    // "Draft saved ." is the exact defect the brief's dead branch would have
+    // printed, from formatSavedAt('') returning its input unchanged.
+    expect(lines[0].text).not.toContain(' .')
+    expect(lines[0].text).toBe(`Draft saved. 3 of ${PILLARS.length} pillars scored.`)
+  })
+
+  it('Critical 2: a blocked dirty press still says why', () => {
+    // Reachable: score one pillar, then Clear it with notes empty. The form
+    // is dirty (something changed since it loaded) and empty (nothing left to
+    // save), so submitBlock blocks it -- and the old code only ever rendered
+    // "Unsaved changes." for `dirty`, never the reason the button disabled.
+    const block = BLOCKED('Score at least one pillar, or write a note, before saving.')
+    const lines = saveStatus({
+      state: DIRTY,
+      block,
+      scored: 0,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(lines).toHaveLength(2)
+    expect(lines[0].text).toBe('Unsaved changes.')
+    expect(lines[1].text).toBe(block.reason)
+  })
+
+  it('does not echo the block reason when the state line already says it', () => {
+    // `saving` and `saved` both have a submitBlock reason that restates the
+    // state itself ("Saving…", "Saved. Change something to save again.").
+    // Appending it would read as the same sentence twice.
+    const saving = saveStatus({
+      state: SAVING,
+      block: BLOCKED('Saving…'),
+      scored: 3,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(saving).toHaveLength(1)
+
+    const saved = saveStatus({
+      state: SAVED,
+      block: BLOCKED('Saved. Change something to save again.'),
+      scored: 5,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(saved).toHaveLength(1)
+  })
+
+  it('names the time, the person, and how far along a draft is', () => {
+    const submitted = saveStatus({
+      state: SAVED,
+      block: BLOCKED('Saved. Change something to save again.'),
+      scored: 5,
+      storedUpdatedAt: null,
+      storedSubmitted: true,
+    })
+    expect(submitted[0].text).toMatch(/^Check-in submitted /)
+    expect(submitted[0].text).toContain('by you.')
+    expect(submitted[0].text).not.toMatch(/pillars scored/)
+
+    const draft = saveStatus({
+      state: { kind: 'saved', at: '2026-08-21T15:42:00.000Z', by: 'you', complete: false },
+      block: BLOCKED('Saved. Change something to save again.'),
+      scored: 4,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(draft[0].text).toMatch(/^Draft saved /)
+    expect(draft[0].text).toContain(`4 of ${PILLARS.length} pillars scored`)
+  })
+
+  it('keeps the failed message and the no-cost-to-retry reassurance', () => {
+    const lines = saveStatus({
+      state: FAILED,
+      block: UNBLOCKED,
+      scored: 3,
+      storedUpdatedAt: null,
+      storedSubmitted: false,
+    })
+    expect(lines).toHaveLength(1)
+    expect(lines[0].text).toContain('network refused')
+    expect(lines[0].text).toMatch(/nothing was lost/i)
   })
 })

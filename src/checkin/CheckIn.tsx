@@ -4,7 +4,8 @@ import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
 import { useCheckin } from './useCheckin'
 import { PillarRow } from './PillarRow'
-import { displayedTotal, submitBlock, submitLabel } from './saveState'
+import { displayedTotal, saveStatus, submitBlock, submitLabel } from './saveState'
+import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
 
 type Props = {
@@ -12,6 +13,16 @@ type Props = {
   period: string
   profile: Profile
   onBack: () => void
+}
+
+// The class each saveStatus tone renders as. Kept beside the component that
+// consumes it, not in saveState.ts: saveState.ts is domain logic (what the
+// screen should say), and which CSS role that becomes is presentation, the
+// same division bandClass.ts documents for Band vs BAND_CLASSES.
+const TONE_CLASS: Record<SaveStatusTone, string> = {
+  confirm: 't-body',
+  error: 'alert',
+  quiet: 't-caption',
 }
 
 export function CheckIn({ client, period, profile, onBack }: Props) {
@@ -45,6 +56,13 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
     state: saveState,
     localTotal,
     storedTotal: stored?.total_score ?? null,
+  })
+  const statusLines = saveStatus({
+    state: saveState,
+    block,
+    scored,
+    storedUpdatedAt: stored?.updated_at ?? null,
+    storedSubmitted,
   })
   const saving = saveState.kind === 'saving'
 
@@ -137,12 +155,22 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </div>
       </div>
 
-      {unsavedFromEarlierVisit && (
-        <p className="alert prose" role="status">
-          These scores are from an earlier visit on this device and have not been saved.
-          Press {label} to keep them.
-        </p>
-      )}
+      {/* Fix round 1: always mounted, once the screen is ready, with the
+          condition on the contents rather than on the element -- a live
+          region has to already exist before its content changes to be
+          reliably announced, the same rule the save-status region below
+          already followed. Empty most of the time (no earlier-visit draft),
+          so :empty collapses it out of the flex flow in CheckIn.module.css
+          rather than through .screen's gap, which would otherwise add a
+          blank var(--space-5) gap in the common case. */}
+      <p className={`alert prose ${styles.earlierVisit}`} role="status">
+        {unsavedFromEarlierVisit && (
+          <>
+            These scores are from an earlier visit on this device and have not
+            been saved. Press {label} to keep them.
+          </>
+        )}
+      </p>
 
       {!draftPersisted && (
         <p className="t-caption prose">
@@ -193,40 +221,24 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         {/* role="status" so the confirmation is announced rather than only
             drawn. This line is the whole point of the slice: the board gave no
             feedback that a save succeeded, so a save that worked looked exactly
-            like one that failed. */}
+            like one that failed.
+
+            Fix round 1: the per-kind JSX chain this used to be left two
+            combinations with no branch at all -- a routine `clean` draft
+            rendered nothing, and a blocked `dirty` press never showed why.
+            saveStatus() in saveState.ts is the same decision made exhaustive
+            (a `never` check catches an unhandled kind at compile time) and
+            tested (saveState.test.ts sweeps every kind against every block/
+            storedSubmitted combination and asserts the result is never
+            empty), so this is now a map over its result rather than a chain
+            of conditions nothing could prove complete. */}
         <p className={styles.saveStatus} id="checkin-save-status" role="status">
-          {saveState.kind === 'saved' && (
-            <span className="t-body">
-              {saveState.complete ? 'Check-in submitted' : 'Draft saved'}{' '}
-              {formatSavedAt(saveState.at)} by {saveState.by}.
-              {!saveState.complete && ` ${scored} of ${PILLARS.length} pillars scored.`}
+          {statusLines.map((line, index) => (
+            <span key={line.tone + index} className={TONE_CLASS[line.tone]}>
+              {index > 0 ? ' ' : ''}
+              {line.text}
             </span>
-          )}
-
-          {saveState.kind === 'failed' && (
-            <span className="alert">
-              Could not save: {saveState.error}. Nothing was lost — everything you entered
-              is still on screen, and pressing {label} again costs nothing.
-            </span>
-          )}
-
-          {saveState.kind === 'saving' && <span className="t-caption">Saving…</span>}
-
-          {saveState.kind === 'dirty' && (
-            <span className="t-caption">Unsaved changes.</span>
-          )}
-
-          {/* A disabled control that does not say why is the same failure as a
-              silent save, in a smaller box. When the state is `clean` and
-              `storedSubmitted` is true, submitBlock always blocks (see
-              submitBlock in saveState.ts): there is no `clean` + `storedSubmitted`
-              case where the button is left enabled, so this is the only branch
-              that combination can reach. The "already submitted" fact itself is
-              also carried by the standalone line below the save bar, which names
-              the date and who submitted it. */}
-          {saveState.kind === 'clean' && block.blocked && (
-            <span className="t-caption">{block.reason}</span>
-          )}
+          ))}
         </p>
       </div>
 
