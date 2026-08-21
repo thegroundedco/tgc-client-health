@@ -1,0 +1,92 @@
+-- Completes 20260820230559_revoke_public_default_privileges.sql, which revoked
+-- table and sequence defaults but left function defaults in place on a reason
+-- that does not hold up.
+--
+-- That migration claimed a broad revoke "risks breaking Supabase-managed helpers
+-- that expect to be callable". It cannot. ALTER DEFAULT PRIVILEGES FOR ROLE
+-- postgres changes what happens when *postgres* creates a *future* object; it
+-- never touches an object that already exists, and it says nothing about objects
+-- created by any other role. Supabase's own helpers are covered by a separate
+-- pg_default_acl row entirely -- public/supabase_admin/f, distinct from
+-- public/postgres/f -- which this statement does not address and cannot reach.
+--
+-- The gap it left was real. public/postgres/f still granted EXECUTE to anon and
+-- authenticated:
+--   {postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+-- so any later `create function public.x()` would have been callable by an
+-- anonymous browser client the moment it existed, silently. Exposure today is
+-- nil only because this plan keeps its definer helpers in `private` -- an
+-- accident of the current design, not a boundary.
+--
+-- This is also the posture Supabase itself adopts on 2026-10-30. A future public
+-- RPC then needing an explicit `grant execute` is the intended outcome, not a
+-- cost: the failure mode becomes a loud "function does not exist" rather than a
+-- silently anon-callable endpoint.
+alter default privileges for role postgres in schema public
+  revoke all on functions from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Standing convention for every future migration that creates an object in
+-- `public`. Adopted because default privileges only constrain the role whose
+-- defaults were changed.
+--
+-- `postgres` is now safe: it is the role our migrations connect as, so tables it
+-- creates are born closed. But public/supabase_admin/r survives and still grants
+-- arwdDxtm to anon and authenticated, and this project cannot revoke it -- as
+-- postgres we are not a member of supabase_admin, and the attempt fails with
+--   42501: permission denied to change default privileges
+-- So any table created in `public` by supabase_admin -- via the dashboard, or by
+-- any Supabase-managed path -- is still born fully readable and writable by both
+-- browser roles. "Future tables are born closed" is true only of tables created
+-- by postgres.
+--
+-- The convention therefore does not depend on knowing which role created what:
+--
+--   1. Open with `revoke all on <object> from anon, authenticated;` BEFORE any
+--      grant. Correct whichever role created the object, and a no-op when the
+--      default already handled it. The revoke must come first, because revoking
+--      a table-level privilege also revokes it on every column -- a revoke after
+--      a column grant would silently undo it.
+--   2. Then grant only the intended surface, column-scoped where a column-scoped
+--      write is what is meant.
+--   3. Then `alter table ... enable row level security` plus policies. Every
+--      grant must be paired with RLS; a grant with no policy is a table that
+--      denies everything for a reason nobody wrote down.
+--   4. For a function in ANY schema -- `public`, `private`, anywhere -- revoke
+--      `execute` from `public` (the pseudo-role) explicitly, then grant it back
+--      to exactly the roles that need it.
+--
+--      CORRECTION. This step used to say "for a function in `public`", which
+--      wrongly implied that a function in `private` is born closed. It is not.
+--      Measured on this project (Postgres 17.6):
+--        create function private.__probe() returns int ...
+--        proacl                                                  -> NULL
+--        has_function_privilege('anon', ..., 'EXECUTE')           -> true
+--        has_function_privilege('authenticated', ..., 'EXECUTE')  -> true
+--      proacl NULL means "no explicit ACL", and Postgres then applies
+--      acldefault('f', owner) = {=X/owner, owner=X/owner}. The `=X` is the grant
+--      to PUBLIC, and it is hardcoded in Postgres rather than supplied by any
+--      pg_default_acl row, which is why no ALTER DEFAULT PRIVILEGES suppresses
+--      it (see 20260820232429). The schema makes NO difference to the ACL. What
+--      `private` changes is reachability BY NAME: calling private.f() also needs
+--      USAGE on schema private, which no browser role has. That is a second
+--      barrier, not the first one, and a policy-referenced function needs no
+--      USAGE at all -- so a `private` function with a default ACL really is
+--      EXECUTE-able by anon.
+--
+--      Every function this plan creates already carries the explicit revoke;
+--      the wording was the only thing wrong. `npm run verify:privileges`
+--      section 9 sweeps `private` as well as `public` for exactly this reason.
+--      Step 1 above covers postgres-created objects from now on for TABLES and
+--      SEQUENCES; it can never cover the hardcoded function grant to PUBLIC in
+--      any schema.
+--
+-- public.profiles already satisfies this: 20260820225903 opens with exactly
+-- `revoke all on public.profiles from anon, authenticated;` ahead of its grants,
+-- so no retroactive change is needed. Verified -- its ACL is
+--   {postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,authenticated=r/postgres}
+-- with the full_name UPDATE in the column ACL and nothing at all for anon.
+--
+-- `npm run verify:privileges` asserts this convention held, over every table in
+-- `public`, and exits non-zero when it did not.
+-- ---------------------------------------------------------------------------

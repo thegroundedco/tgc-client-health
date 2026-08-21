@@ -169,16 +169,114 @@ revoked**. Making one AM an exception is a checkbox, not a new role.
 
 ### 7.2 Enforcement
 
-Every table has RLS enabled and forced. Policies call a
-`private.has_capability(text)` helper — `security definer`, `set search_path = ''`,
-execute revoked from `public`, `anon`, and `authenticated` — which resolves the
-caller's role and overrides and requires `is_active`. Policies wrap it in a
-subselect so Postgres evaluates it once per statement rather than once per row.
+Every table has RLS enabled, but not forced — forcing it would also subject the
+table owner (`postgres`) and `service_role` to the policies, breaking the
+`security definer` signup trigger and any server-side administrative access, so
+`scripts/verify-privileges.sql` §7 asserts `relforcerowsecurity = false` on
+purpose — over **every** table in `public`, not just `profiles`, since the
+property is general and §10's role impersonation depends on it. Policies call a
+`private.has_capability(text)` helper — `security definer`, `set search_path = ''`
+— which resolves the caller's role and overrides and requires `is_active`.
+Policies wrap it in a subselect so Postgres evaluates it once per statement
+rather than once per row.
+
+**The grants on such a helper are not the obvious ones.** This paragraph
+originally said `execute` is revoked from `public`, `anon`, and `authenticated`.
+For a helper that is *not* referenced by a policy — `handle_new_user` (`security
+definer`) and `touch_updated_at` (`security invoker`; an earlier version of this
+paragraph called it `definer`, which was wrong — measured `prosecdef = false`),
+invoked only as triggers — that is correct and is what shipped: they hold
+`postgres=X` and nothing else. For a helper a *policy*
+references it is wrong, and wrong in the worst way: **Postgres checks `EXECUTE` on
+a policy-referenced function at query time against the role running the query**,
+not against the table owner. Revoking it from `authenticated` makes every policy
+naming that role fail `42501 permission denied for function …` for every
+signed-in user — a total outage, not a degraded read. Measured on this project
+(Postgres 17.6, 2026-08-21) before Slice 0's tables were created, and reproduced
+independently in review; transcript in
+`supabase/migrations/20260821021840_create_clients_and_checkins.sql`. Supabase's
+own RLS guidance recommends the broken pairing, so expect to have to argue this.
+
+**And the counterpart rule, which is the opposite, and which is why there is no
+latent outage on the UPDATE path today.** A **trigger** function's `EXECUTE` is
+checked at `CREATE TRIGGER` time, against the role creating the trigger — *not*
+at query time against the role running the statement. Measured on this project in
+a rolled-back transaction, 2026-08-21:
+
+```
+has_function_privilege('authenticated', 'private.touch_updated_at()', 'EXECUTE')
+  -> false
+set local role authenticated;  update public.clients set name = name where id = 1;
+  -> succeeded, and updated_at advanced: the trigger fired
+```
+
+So `authenticated` holds no `EXECUTE` on `private.touch_updated_at()` and every
+signed-in `UPDATE` on `clients`, `checkins` and `profiles` still fires it
+correctly. Both halves have to be stated together, because they point in opposite
+directions and only one of them is intuitive:
+
+| The function is reached via… | `EXECUTE` checked when? | Against whom? | So the grant `authenticated` needs |
+|---|---|---|---|
+| a row-security **policy** | every query | the querying role | `EXECUTE` **must** be granted, or total outage |
+| a **trigger** | `CREATE TRIGGER` | the trigger's creator (`postgres`) | none — do **not** grant it |
+
+Phase 1 adds triggers (`has_capability` overrides, the last-admin guard,
+`updated_at` on every new table). An author who has just internalised the policy
+rule will reasonably conclude that trigger functions need the same grant and will
+hand `authenticated` `EXECUTE` on a `security definer` trigger function — which
+is not a broken deploy, it is a callable definer function, i.e. exactly the
+privilege-escalation surface `private` exists to prevent (reachable directly the
+moment schema `USAGE` leaks, and enumerable through `has_function_privilege`).
+Granting nothing is both correct and safer. `scripts/verify-privileges.sql`
+section 9's allowlist is what forces the question to be answered per function:
+`touch_updated_at` and `handle_new_user` are deliberately *not* on it.
+
+The rule for a **policy-referenced** definer helper is therefore:
+
+- `execute` revoked from `public` and `anon`. `public` is load-bearing, not
+  belt-and-braces: Postgres grants `EXECUTE` on every new function to `PUBLIC`
+  and no `ALTER DEFAULT PRIVILEGES` on this project suppresses it, so `anon`
+  reaches the function implicitly unless `public` is named.
+- `execute` granted to **exactly the roles its policies name** — for Phase 1's
+  `to authenticated` policies, that is `authenticated` and nothing else.
+- schema `private` **never** granted `USAGE` to a browser role. This is what keeps
+  the grant narrow: a policy references a function by OID and so needs only
+  `EXECUTE` at run time, while calling it by name needs `USAGE` on its schema. A
+  role can therefore be *subject to* a helper without being able to *call* it
+  (measured: `42501 permission denied for schema private`).
+- the helper is **argument-free, or validates its arguments against
+  `(select auth.uid())`**. `is_active_user()` is safe partly because it takes no
+  arguments and reports only on the caller's own row. A helper like
+  `is_team_member(bigint)` becomes an enumeration oracle the moment `private`
+  USAGE leaks — one leaked grant should not also hand over a probe. Phase 1's
+  `has_capability(text)` takes an argument, so it must read the caller's own
+  capabilities from `auth.uid()` internally and never accept a subject as a
+  parameter.
+- both halves pinned by `scripts/verify-privileges.sql` §9, which sweeps every
+  function in `private` against an explicit allowlist: an unlisted `EXECUTE` for a
+  browser role fails, and so does a listed one whose grant has gone missing. The
+  second direction is the one that catches the outage.
 
 The practical test of this design: a browser querying data it lacks the capability
 for, bypassing the app entirely, gets **zero rows** — in Phase 1 an inactive
 account reading `clients`, and from Phase 2 a Viewer reading revenue. UI hiding is
 convenience; the database refusing is the security.
+
+That test is automated in `scripts/verify-privileges.sql` **§10**, which becomes
+the `authenticated` role (`set local role` plus a synthetic
+`request.jwt.claims`) and asserts the behaviour rather than the grants: an active
+account sees every row it should; a subject with no `profiles` row sees zero rows
+on `clients`, `checkins` and `profiles` and is refused an `insert`; and
+`authenticated` with no JWT claims sees zero rows. It reads `pg_policies` (§10e)
+so that *dropping* a policy fails too — no policy also means no rows, which
+otherwise looks identical to a correct denial. §10 was added because nothing
+before it exercised a policy predicate at all: every test in `src/lib/rls.test.ts`
+uses the anonymous client, `anon` holds nothing, and so every one is refused at
+the grant layer before a policy is consulted — all six policies on
+`clients`/`checkins` could have been `using (true)` with the suite green. The
+assertions were verified to fail by widening those six policies to `using (true)`
+inside a rolled-back transaction. Each new capability in Phases 1–3 adds its
+negative case there, alongside the SQL tests §10 of this spec calls for.
 
 ### 7.3 Three holes closed by design
 

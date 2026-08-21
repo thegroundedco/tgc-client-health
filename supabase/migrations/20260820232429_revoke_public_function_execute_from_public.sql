@@ -1,0 +1,69 @@
+-- Follows 20260820232223_revoke_public_function_defaults.sql, which revoked the
+-- named anon/authenticated function defaults. That was necessary but not
+-- sufficient, and this migration is the attempt to finish it. Read the whole
+-- comment before trusting it: the statement below is retained deliberately, but
+-- measurement shows it does NOT close the gap on this project.
+--
+-- What was measured. Immediately after the previous migration, a function
+-- created in `public` by postgres was still executable by both browser roles:
+--
+--   create function public.default_privilege_fn_probe() returns int ...
+--   has_function_privilege('anon', ..., 'EXECUTE')          -> true
+--   has_function_privilege('authenticated', ..., 'EXECUTE') -> true
+--   proacl -> {=X/postgres,postgres=X/postgres,service_role=X/postgres}
+--
+-- The `=X` entry is the tell: an empty grantee means PUBLIC, the pseudo-role
+-- every role carries implicitly. Postgres itself -- not Supabase -- grants
+-- EXECUTE on every new function to PUBLIC, so anon and authenticated reach the
+-- function through PUBLIC and removing their *named* default grants changed
+-- nothing that mattered.
+--
+-- Why the statement below does not fix it. pg_default_acl turns out to be
+-- ADDITIVE with Postgres's hardcoded default here, not a replacement for it:
+--
+--   acldefault('f', 'postgres')          = {=X/postgres,postgres=X/postgres}
+--   pg_default_acl public/postgres/f     = {postgres=X/postgres,service_role=X/postgres}
+--   observed on a newly created function = {=X/postgres,postgres=X/postgres,service_role=X/postgres}
+--
+-- which is exactly the union of the two. The stored row already contained no
+-- PUBLIC entry, so revoking PUBLIC from it had nothing to remove, and the
+-- hardcoded default keeps supplying `=X` regardless. Re-probed after running the
+-- statement below: still `=X`, still anon-executable. The PostgreSQL manual
+-- offers `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` as a
+-- working recipe; on this project, with a Supabase-created pg_default_acl row
+-- already present, it does not take effect. Measured, not assumed, twice.
+--
+-- The statement is kept rather than reverted because it is correct in intent,
+-- provably harmless (it is forward-only, scoped to functions created in future in
+-- schema public by postgres, and cannot touch an existing object or any other
+-- owning role -- the Supabase-managed layer is untouched), and because deleting
+-- it would delete the measurements above with it.
+--
+-- CORRECTION to what this paragraph used to claim. It said the statement was
+-- "the right declaration of intent for any environment where it does bite".
+-- There is no such environment. An object's effective ACL is the UNION of
+-- acldefault(objtype, owner) with the matching pg_default_acl row, and
+-- acldefault('f', owner) always contains `=X` -- the grant to PUBLIC. ALTER
+-- DEFAULT PRIVILEGES only edits the stored pg_default_acl row, so REVOKE
+-- ... FROM PUBLIC can never remove what acldefault contributes: there is nothing
+-- in the row for it to take away, on this project or any other. The statement
+-- cannot bite anywhere. Retained as documented intent and as the anchor for the
+-- measurements above; it is not load-bearing, and nothing should rely on it.
+--
+-- What actually enforces the boundary, therefore:
+--
+--   1. Every function this plan creates lives in `private`, not `public`, and
+--      carries an explicit `revoke execute ... from public, anon, authenticated`
+--      -- see 20260820225355_create_profiles.sql. That explicit revoke is the
+--      real mechanism, and step 4 of the standing convention in
+--      20260820232223 requires it of every future function.
+--   2. `npm run verify:privileges` asserts that no function in `public` is
+--      executable by anon or authenticated, and exits non-zero if one ever is.
+--      There are currently zero functions in `public`, so the assertion is cheap
+--      today and becomes the guard the moment someone adds an RPC.
+--
+-- Tables and sequences need no equivalent of any of this: Postgres grants PUBLIC
+-- nothing on them, confirmed on the same probe, whose table ACL carried no `=`
+-- entry at all -- {postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}.
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public;
