@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { ANCHOR_VALUES, PILLAR_DEFINITIONS } from '../lib/pillars'
 import { SCORE_VALUES } from '../lib/score'
 import type { Pillar } from '../lib/score'
@@ -18,6 +19,20 @@ export function PillarRow({ pillar, value, lastValue, disabled, onChange, onClea
   // renders five of these, and stable across renders.
   const labelId = `pillar-${pillar}-label`
   const hintId = `pillar-${pillar}-hint`
+
+  // Clear's button unmounts the instant it fires (it only renders while
+  // value !== undefined), taking focus with it. An element detached while
+  // focused hands focus to <body>, so without somewhere to send it the very
+  // next Tab would restart at the top of the document instead of continuing
+  // in this row. The first radio is never unmounted, so it is always a valid
+  // target, and it is where the person is likely headed next: they just
+  // cleared a score and the next move is to pick a different one.
+  const firstRadio = useRef<HTMLInputElement>(null)
+
+  function handleClear() {
+    onClear()
+    firstRadio.current?.focus()
+  }
 
   return (
     // A plain section with role="radiogroup", not a fieldset. A fieldset would
@@ -51,6 +66,7 @@ export function PillarRow({ pillar, value, lastValue, disabled, onChange, onClea
           {SCORE_VALUES.map((score) => (
             <label className={styles.option} key={score}>
               <input
+                ref={score === SCORE_VALUES[0] ? firstRadio : undefined}
                 className={styles.input}
                 type="radio"
                 name={`pillar-${pillar}`}
@@ -74,7 +90,7 @@ export function PillarRow({ pillar, value, lastValue, disabled, onChange, onClea
             className={`button button--quiet ${styles.clear}`}
             type="button"
             disabled={disabled}
-            onClick={onClear}
+            onClick={handleClear}
           >
             Clear
           </button>

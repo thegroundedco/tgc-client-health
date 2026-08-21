@@ -89,7 +89,11 @@
   line-height: var(--leading-numeric);
 }
 
-.option:hover .face {
+/* :not(:disabled) so a disabled radio's hover state stops here rather than
+   fighting .input:disabled + .face's opacity below -- without it, hovering a
+   disabled option would visibly change its border under the faded look, which
+   reads as "this is still clickable" when it is not. */
+.option:hover .input:not(:disabled) + .face {
   border-color: var(--text-secondary);
 }
 
