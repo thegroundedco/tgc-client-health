@@ -2,30 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { BAND_LABELS, PILLARS, bandFor } from '../lib/score'
-import type { Band, Pillar } from '../lib/score'
+import type { Pillar } from '../lib/score'
 import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import styles from './Board.module.css'
+import { bandClassName } from '../styles/bandClass'
 
 type ClientRow = { id: number; name: string }
 type CheckinRow = { client_id: number; total_score: number | null }
 
 type Props = { profile: Profile }
-
-// Exported because the check-in screen needs the identical mapping in step 3,
-// and two copies of it is how a band ends up a different colour on two screens.
-// A Record rather than a template string, so adding a Band to score.ts stops
-// this from compiling instead of silently producing an undefined class.
-const BAND_CLASSES: Record<Band, string> = {
-  healthy: 'band--healthy',
-  watch: 'band--watch',
-  at_risk: 'band--risk',
-  incomplete: 'band--none',
-}
-
-export function bandClassName(band: Band): string {
-  return `band ${BAND_CLASSES[band]}`
-}
 
 export function Board({ profile }: Props) {
   const [clients, setClients] = useState<ClientRow[] | null>(null)
