@@ -23,31 +23,40 @@ export function Board({ profile }: Props) {
   const period = currentPeriod()
 
   const load = useCallback(async () => {
-    const clientResult = await supabase
-      .from('clients')
-      .select('id, name')
-      .eq('status', 'active')
-      .order('name')
+    // postgrest-js resolves fetch failures into `error` rather than rejecting,
+    // so the catch below is defensive. It is here because the failure it guards
+    // is invisible: an unhandled rejection leaves `clients` null forever and the
+    // user staring at "Loading…" with nothing to act on. Surfacing it turns a
+    // dead screen into an error with a Try again button.
+    try {
+      const clientResult = await supabase
+        .from('clients')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
 
-    if (clientResult.error) {
-      setLoadError(clientResult.error.message)
-      return
+      if (clientResult.error) {
+        setLoadError(clientResult.error.message)
+        return
+      }
+
+      const checkinResult = await supabase
+        .from('checkins')
+        .select('client_id, total_score')
+        .eq('period', period)
+
+      if (checkinResult.error) {
+        setLoadError(checkinResult.error.message)
+        return
+      }
+
+      // Never write after a failed read. Both succeeded, so this is safe.
+      setLoadError(null)
+      setClients(clientResult.data)
+      setCheckins(checkinResult.data)
+    } catch (thrown) {
+      setLoadError(thrown instanceof Error ? thrown.message : String(thrown))
     }
-
-    const checkinResult = await supabase
-      .from('checkins')
-      .select('client_id, total_score')
-      .eq('period', period)
-
-    if (checkinResult.error) {
-      setLoadError(checkinResult.error.message)
-      return
-    }
-
-    // Never write after a failed read. Both succeeded, so this is safe.
-    setLoadError(null)
-    setClients(clientResult.data)
-    setCheckins(checkinResult.data)
     // useCallback, not a plain function: the effect below depends on it, and an
     // identity that changed every render would refetch on every render. `period`
     // is a plain string, so the dependency is stable across renders.
@@ -67,23 +76,33 @@ export function Board({ profile }: Props) {
       PILLARS.map((pillar) => [pillar, 3]),
     ) as Record<Pillar, number>
 
-    const { error } = await supabase.from('checkins').upsert(
-      {
-        client_id: clientId,
-        period,
-        ...pillars,
-        submitted_by: profile.id,
-        submitted_at: new Date().toISOString(),
-      },
-      { onConflict: 'client_id,period' },
-    )
-    setSaving(false)
+    // finally, not a plain call after the await: if the upsert ever rejects,
+    // `saving` would latch true, every button would stay disabled for good, and
+    // nothing on screen would say why. Defensive for the same reason as load().
+    try {
+      const { error } = await supabase.from('checkins').upsert(
+        {
+          client_id: clientId,
+          period,
+          ...pillars,
+          submitted_by: profile.id,
+          submitted_at: new Date().toISOString(),
+        },
+        { onConflict: 'client_id,period' },
+      )
 
-    if (error) {
-      setSaveError(`Could not save: ${error.message}`)
-      return
+      if (error) {
+        setSaveError(`Could not save: ${error.message}`)
+        return
+      }
+      await load()
+    } catch (thrown) {
+      setSaveError(
+        `Could not save: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
+      )
+    } finally {
+      setSaving(false)
     }
-    await load()
   }
 
   if (loadError) {

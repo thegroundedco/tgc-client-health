@@ -170,10 +170,51 @@ revoked**. Making one AM an exception is a checkbox, not a new role.
 ### 7.2 Enforcement
 
 Every table has RLS enabled and forced. Policies call a
-`private.has_capability(text)` helper — `security definer`, `set search_path = ''`,
-execute revoked from `public`, `anon`, and `authenticated` — which resolves the
-caller's role and overrides and requires `is_active`. Policies wrap it in a
-subselect so Postgres evaluates it once per statement rather than once per row.
+`private.has_capability(text)` helper — `security definer`, `set search_path = ''`
+— which resolves the caller's role and overrides and requires `is_active`.
+Policies wrap it in a subselect so Postgres evaluates it once per statement
+rather than once per row.
+
+**The grants on such a helper are not the obvious ones.** This paragraph
+originally said `execute` is revoked from `public`, `anon`, and `authenticated`.
+For a definer helper that is *not* referenced by a policy — `handle_new_user`,
+`touch_updated_at`, invoked only as triggers — that is correct and is what
+shipped: they hold `postgres=X` and nothing else. For a helper a *policy*
+references it is wrong, and wrong in the worst way: **Postgres checks `EXECUTE` on
+a policy-referenced function at query time against the role running the query**,
+not against the table owner. Revoking it from `authenticated` makes every policy
+naming that role fail `42501 permission denied for function …` for every
+signed-in user — a total outage, not a degraded read. Measured on this project
+(Postgres 17.6, 2026-08-21) before Slice 0's tables were created, and reproduced
+independently in review; transcript in
+`supabase/migrations/20260821021840_create_clients_and_checkins.sql`. Supabase's
+own RLS guidance recommends the broken pairing, so expect to have to argue this.
+
+The rule for a **policy-referenced** definer helper is therefore:
+
+- `execute` revoked from `public` and `anon`. `public` is load-bearing, not
+  belt-and-braces: Postgres grants `EXECUTE` on every new function to `PUBLIC`
+  and no `ALTER DEFAULT PRIVILEGES` on this project suppresses it, so `anon`
+  reaches the function implicitly unless `public` is named.
+- `execute` granted to **exactly the roles its policies name** — for Phase 1's
+  `to authenticated` policies, that is `authenticated` and nothing else.
+- schema `private` **never** granted `USAGE` to a browser role. This is what keeps
+  the grant narrow: a policy references a function by OID and so needs only
+  `EXECUTE` at run time, while calling it by name needs `USAGE` on its schema. A
+  role can therefore be *subject to* a helper without being able to *call* it
+  (measured: `42501 permission denied for schema private`).
+- the helper is **argument-free, or validates its arguments against
+  `(select auth.uid())`**. `is_active_user()` is safe partly because it takes no
+  arguments and reports only on the caller's own row. A helper like
+  `is_team_member(bigint)` becomes an enumeration oracle the moment `private`
+  USAGE leaks — one leaked grant should not also hand over a probe. Phase 1's
+  `has_capability(text)` takes an argument, so it must read the caller's own
+  capabilities from `auth.uid()` internally and never accept a subject as a
+  parameter.
+- both halves pinned by `scripts/verify-privileges.sql` §9, which sweeps every
+  function in `private` against an explicit allowlist: an unlisted `EXECUTE` for a
+  browser role fails, and so does a listed one whose grant has gone missing. The
+  second direction is the one that catches the outage.
 
 The practical test of this design: a browser querying data it lacks the capability
 for, bypassing the app entirely, gets **zero rows** — in Phase 1 an inactive

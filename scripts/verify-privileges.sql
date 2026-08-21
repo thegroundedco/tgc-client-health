@@ -20,6 +20,20 @@ declare
   problems  text[] := '{}';
   r         record;
   n_tables  int;
+
+  -- Allowlist for section 9, in the same spirit as the table allowlist in
+  -- section 4: a definer helper in `private` may be EXECUTE-able by a
+  -- browser-reachable role only by deliberate, reviewable entry. Format is
+  -- '<signature>|<role>'. Declared once and read by BOTH directions of the
+  -- section 9 sweep, so an entry cannot pin one half and drift on the other.
+  private_fn_allowed text[] := array[
+    -- private.is_active_user(): referenced by all six policies on
+    -- public.clients and public.checkins, every one of them `to authenticated`.
+    -- Postgres checks EXECUTE on a policy-referenced function at query time
+    -- against the querying role, so without this grant every read and write
+    -- fails 42501 for every signed-in user. See section 9's header comment.
+    'private.is_active_user()|authenticated'
+  ];
 begin
   ----------------------------------------------------------------------------
   -- 1. public.profiles must exist at all.
@@ -255,30 +269,47 @@ begin
   end loop;
 
   ----------------------------------------------------------------------------
-  -- 9. The `private` schema stays unreachable by name, and the one function a
-  --    policy depends on is executable by `authenticated` and nobody else.
+  -- 9. The `private` schema stays unreachable by name, and every definer helper
+  --    in it is EXECUTE-able by a browser role only by deliberate allowlist
+  --    entry -- with each entry pinned in BOTH directions.
   --
-  --    This asserts a measured, non-obvious fact. Postgres checks EXECUTE on a
-  --    function referenced by an RLS policy at QUERY time against the role
-  --    running the query, so the blanket
+  --    This encodes a measured, non-obvious fact about Postgres (verified on
+  --    17.6, this project, 2026-08-21). EXECUTE on a function referenced by a
+  --    row-security policy is checked at QUERY time against the role running the
+  --    query, not against the table owner. So the blanket
   --      revoke execute on function private.is_active_user()
   --        from public, anon, authenticated
-  --    that Supabase's own RLS guidance recommends makes every policy on
-  --    clients/checkins fail with 42501 for every signed-in user. Probed on this
-  --    database before the migration was written; see
-  --    20260821021840_create_clients_and_checkins.sql for the transcript.
+  --    that both the plan and Supabase's own RLS guidance specify makes every
+  --    policy on clients/checkins fail 42501 for every signed-in user. Probed
+  --    before the migration was written; transcript in
+  --    20260821021840_create_clients_and_checkins.sql.
   --
-  --    The narrow shape is therefore: EXECUTE to authenticated, and NO usage on
-  --    schema private. A policy references the function by OID and needs only
-  --    EXECUTE at run time; calling it by name needs schema USAGE, which is
-  --    withheld -- so authenticated is subject to the function without being able
-  --    to call it (probed: 42501 permission denied for schema private).
+  --    The correct shape is therefore a PATTERN, not a one-off: a policy-
+  --    referenced definer helper gets EXECUTE revoked from PUBLIC and anon, and
+  --    granted to exactly the roles its policies name. Schema `private` gets NO
+  --    usage grant, which is what keeps that narrow -- a policy references the
+  --    function by OID and needs only EXECUTE at run time, while calling it by
+  --    name needs USAGE on its schema (probed: 42501 permission denied for
+  --    schema private). A role can therefore be SUBJECT TO a helper without
+  --    being able to CALL it.
   --
-  --    Both halves are asserted, because either one drifting is a real problem:
-  --    losing the EXECUTE grant breaks the whole app, and gaining schema USAGE
-  --    would expose every current and future definer helper in `private` that
-  --    forgot its own revoke.
+  --    Asserted as an allowlist sweep rather than by naming one function,
+  --    because Phase 1 Task 7 adds capability helpers to `private` that will
+  --    need the same grant. A per-name check would let every one of them through
+  --    unexamined; this makes each an entry a reviewer has to approve.
+  --
+  --    Both directions matter and both are checked:
+  --      9b  a grant NOT on the allowlist is a violation -- the widening case.
+  --      9c  an allowlist entry whose grant is MISSING is a violation -- the
+  --          outage case, which is the one that takes the whole app down.
+  --      9d  no helper in `private` may be granted to PUBLIC, which is how anon
+  --          reaches a function with no named grant at all.
   ----------------------------------------------------------------------------
+
+  -- 9a. Schema USAGE must stay withheld. If it ever leaks, every helper in
+  --     `private` becomes callable by name -- including any future one that
+  --     forgot its own revoke, and including argument-taking helpers, which turn
+  --     into oracles the moment they can be called directly.
   for r in
     select g as grantee
     from unnest(array['anon','authenticated']) g
@@ -288,30 +319,61 @@ begin
       '%s holds USAGE on schema private -- every definer helper in there becomes callable by name', r.grantee);
   end loop;
 
-  if to_regprocedure('private.is_active_user()') is null then
-    problems := problems || 'private.is_active_user() does not exist -- every policy on clients and checkins references it'::text;
-  else
-    if not has_function_privilege('authenticated', 'private.is_active_user()', 'EXECUTE') then
-      problems := problems || 'authenticated CANNOT EXECUTE private.is_active_user() -- every read and write on clients and checkins will fail with 42501 for every signed-in user'::text;
-    end if;
+  -- 9b. Sweep: no unlisted EXECUTE. has_function_privilege is used rather than
+  --     reading proacl, so a privilege reached through PUBLIC is caught too.
+  for r in
+    select (p.oid::regprocedure)::text as fn, g as grantee
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    cross join unnest(array['anon','authenticated']) g
+    where n.nspname = 'private'
+      and has_function_privilege(g, p.oid, 'EXECUTE')
+      and not ((p.oid::regprocedure)::text || '|' || g = any (private_fn_allowed))
+    order by 1, 2
+  loop
+    problems := problems || format(
+      'unexpected grant: %s can EXECUTE %s (not in the private_fn_allowed list in scripts/verify-privileges.sql -- if a policy needs it, add it there deliberately)',
+      r.grantee, r.fn);
+  end loop;
 
-    if has_function_privilege('anon', 'private.is_active_user()', 'EXECUTE') then
-      problems := problems || 'anon can EXECUTE private.is_active_user() -- revoke it from public, anon'::text;
+  -- 9c. Reverse sweep: every allowlist entry must still describe reality. A
+  --     stale entry naming a dropped function, or an entry whose grant has been
+  --     revoked, both fail here. This is the direction that catches the outage.
+  for r in
+    select
+      split_part(entry, '|', 1) as fn,
+      split_part(entry, '|', 2) as grantee
+    from unnest(private_fn_allowed) entry
+    order by 1, 2
+  loop
+    if to_regprocedure(r.fn) is null then
+      problems := problems || format(
+        '%s is on the private_fn_allowed list but does not exist -- either a policy references a missing function, or the list is stale', r.fn);
+    elsif not has_function_privilege(r.grantee, r.fn::regprocedure, 'EXECUTE') then
+      problems := problems || format(
+        '%s CANNOT EXECUTE %s -- every policy referencing it fails 42501 at query time for that role, which takes the app down', r.grantee, r.fn);
     end if;
+  end loop;
 
-    -- The `=X` PUBLIC entry Postgres adds to every new function. anon reaches a
-    -- function through PUBLIC even with no named grant, so this is asserted
-    -- separately from the anon check above rather than inferred from it.
-    if exists (
-      select 1
-      from pg_proc p
-      cross join lateral aclexplode(p.proacl) acl
-      where p.oid = 'private.is_active_user()'::regprocedure
-        and acl.grantee = 0
-    ) then
-      problems := problems || 'private.is_active_user() is granted to PUBLIC -- every role reaches it implicitly'::text;
-    end if;
-  end if;
+  -- 9d. No helper in `private` may be granted to PUBLIC. Postgres adds a `=X`
+  --     PUBLIC entry to every new function, and 20260820232429 measured that no
+  --     ALTER DEFAULT PRIVILEGES on this project suppresses it, so this is a
+  --     live default rather than a hypothetical. Checked via aclexplode for
+  --     grantee 0 so the diagnosis names PUBLIC directly, instead of surfacing
+  --     only as an anon violation in 9b.
+  for r in
+    select (p.oid::regprocedure)::text as fn
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    cross join lateral aclexplode(p.proacl) acl
+    where n.nspname = 'private'
+      and acl.grantee = 0
+      and acl.privilege_type = 'EXECUTE'
+    order by 1
+  loop
+    problems := problems || format(
+      '%s is granted EXECUTE to PUBLIC -- every role reaches it implicitly; revoke execute from public', r.fn);
+  end loop;
 
   ----------------------------------------------------------------------------
   -- Report.

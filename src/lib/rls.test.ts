@@ -206,6 +206,21 @@ describe.runIf(url && key)('RLS with no session', () => {
     expect(data).toBeNull()
   })
 
+  // The verb most worth probing on checkins: `authenticated` legitimately holds
+  // UPDATE there (the board upserts, which needs INSERT and UPDATE on the same
+  // statement), so checkins is where an over-broad grant is likeliest to be
+  // written by hand. This asserts anon is denied at the privilege layer, not
+  // merely that it changed no rows.
+  it('refuses an unauthenticated update on checkins', async () => {
+    const { data, error } = await client()
+      .from('checkins')
+      .update({ relationship: 5 })
+      .eq('id', ABSENT_CLIENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
   // No role reachable from the browser has DELETE on either table at all, so
   // this is denied even for a signed-in active user. Asserted here because a
   // future migration adding `grant delete` would otherwise pass every test.
