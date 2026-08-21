@@ -1,11 +1,20 @@
-// Prints which Supabase project the CLI is currently linked to, and says
-// loudly when it is production.
+// Prints which Supabase project the CLI is currently linked to, and REFUSES —
+// with a non-zero exit — when that project is not staging.
 //
 // This exists because the linked project lives in ONE gitignored file,
 // supabase/.temp/project-ref, and no CLI command prints it before acting. A
 // silent mislink means running migrations — and `verify:privileges`, which
 // probes the write path for real and advances clients_id_seq — against
 // production while believing it is staging.
+//
+// It is used as a gate, not a report: `npm run db:push` and friends are
+// `npm run db:which && <the database command>`, so this script's exit code is
+// what decides whether the command runs. An earlier version printed the
+// production warning and then exited 0, which made every one of those `&&`
+// guards decorative — the warning appeared and the command proceeded. The
+// decision now lives in db-which-decide.mjs with a test on its exit codes,
+// because a guard whose contract is untested is a guard that can quietly go
+// back to being advisory.
 //
 // Deliberately resolves the NAME over the API rather than keeping a map of
 // refs in the repo. A ref is not a secret (production's is inlined into the
@@ -14,6 +23,7 @@
 
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { OVERRIDE_ENV, decide } from './db-which-decide.mjs'
 
 const REF_FILE = 'supabase/.temp/project-ref'
 
@@ -28,7 +38,8 @@ try {
   process.exit(1)
 }
 
-let projects = []
+let projects = null
+let lookupFailed = false
 try {
   const raw = execFileSync(
     'npx',
@@ -38,33 +49,25 @@ try {
   const parsed = JSON.parse(raw)
   projects = Array.isArray(parsed) ? parsed : (parsed.projects ?? [])
 } catch {
-  // A lookup failure must not block the caller — but it must not silently
-  // read as "this is fine" either, so the ref is still reported and the
-  // unknown name is stated as unknown.
-  console.log(`linked project: ${ref} (name could not be resolved)`)
-  process.exit(0)
+  // Reported to decide() rather than handled here: "the lookup failed" and
+  // "the ref is not in the list" are different facts, and which of them may
+  // proceed is the decision module's call, not this one's.
+  lookupFailed = true
 }
 
-const project = projects.find((p) => p.ref === ref || p.id === ref)
+const project = lookupFailed
+  ? null
+  : (projects.find((p) => p.ref === ref || p.id === ref) ?? null)
 
-if (!project) {
-  console.log(
-    `linked project: ${ref}\n` +
-      `WARNING: this ref is not visible to the logged-in account. Either the\n` +
-      `CLI is authenticated as the wrong account, or the project was deleted.`,
-  )
-  process.exit(0)
-}
+const result = decide({
+  ref,
+  project,
+  lookupFailed,
+  // Any non-empty value counts. The variable's presence is the signal; making
+  // people match an exact string would only add a way to think they had set it.
+  allowProduction: Boolean(process.env[OVERRIDE_ENV]),
+})
 
-// "staging" in the name is the only signal available without committing refs.
-// A project that is not named staging is treated as production, because the
-// safe default when the answer is unclear is to warn.
-const isStaging = /staging/i.test(project.name)
-
-console.log(`linked project: ${project.name}  (${ref}, ${project.region})`)
-if (!isStaging) {
-  console.log(
-    `\n*** THIS IS PRODUCTION ***\n` +
-      `Real client data. Writes here are not rehearsals.\n`,
-  )
-}
+const out = result.exitCode === 0 ? console.log : console.error
+out(result.lines.join('\n'))
+process.exit(result.exitCode)
