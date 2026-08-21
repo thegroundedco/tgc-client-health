@@ -23,7 +23,9 @@ it is the artifact that gets trusted at face value later.
 **Deploy target (not yet live):** https://thegroundedco.github.io/tgc-client-health/
 
 See `docs/superpowers/specs/2026-08-20-tgc-client-health-design.md` for the design
-and the phase roadmap.
+and the phase roadmap. If you are standing this project up from nothing, read
+**"Rebuilding this project from scratch"** below — it is the ordered version of
+everything else in this file.
 
 ## Development
 
@@ -176,13 +178,88 @@ which is the intended behaviour, not a fault.
 This path depends on `service_role` (and the table owner) keeping full access to
 the three tables — see Security notes.
 
+### Seeding the first client
+
+There is **no client-creation UI in Slice 0.** The only write the application
+code performs is the check-in upsert in `src/board/Board.tsx`; the other
+`.insert(` calls under `src/` are all denial probes in `src/lib/rls.test.ts`,
+which assert that a write is *refused*. The clients admin screen arrives in
+Phase 1. Until then a first client is created with SQL, in the Supabase
+dashboard → SQL Editor:
+
+```sql
+insert into public.clients (name, owner_id)
+values (
+  'First Client Ltd',
+  (select id from public.profiles where email = 'you@thegroundedcompany.com')
+);
+```
+
+`owner_id` is optional — it is nullable, and set to null rather than cascading if
+the profile is ever deleted, because losing a person must never delete the client
+history. Drop it from the statement if you do not want an owner yet.
+
+The board reads clients with `status = 'active'`, which is the default, so the row
+appears on reload. Then click **Score all 3s** on it: that writes the first
+check-in, which is what makes section 10's check-in assertions meaningful rather
+than trivially true against an empty table.
+
+## Rebuilding this project from scratch
+
+Every piece below is documented in its own section. What is easy to get wrong is
+the **order** — several steps only work once an earlier one has happened, and two
+of them fail silently if skipped. This is the order.
+
+1. **Create a Supabase project.** Note the **Reference ID** (Project Settings →
+   General) and the **Project URL** and **publishable key** (Project Settings →
+   API).
+2. **`npm install`**, then `cp .env.example .env.local` and fill in the URL and
+   the publishable key. Never the secret key — see Security notes.
+3. **`npx supabase@latest login`** (interactive: it opens a browser and waits, so
+   it needs a real terminal), then
+   `npx supabase@latest link --project-ref <ref>`.
+4. **`npx supabase@latest db push --linked`** — creates the schema, grants,
+   policies and helpers. Never `db reset`, never `--force`.
+5. **Register the two Auth redirect URLs and the Site URL** ("Auth redirect URLs"
+   above). Skip this and sign-in fails *silently*: the email arrives and the link
+   goes nowhere.
+6. **Check the exposed schemas** are `public, graphql_public` and do not include
+   `private` ("PostgREST's exposed schemas" above).
+7. **`npm run dev`**, open <http://localhost:5173/tgc-client-health/>, and sign in
+   once with your own email. This creates your `profiles` row via the signup
+   trigger. You will land on "access pending" — that is correct, not a fault.
+8. **Activate yourself** with the SQL in "Activating the first admin". Reload; you
+   are in.
+9. **Seed one client** with the SQL in "Seeding the first client". Reload; the
+   board shows it.
+10. **Click "Score all 3s"** on that client. That is the first check-in.
+11. **`npm run verify:privileges`.** It should pass now. Run before steps 8–10 it
+    reports *unmet preconditions* instead — which is correct, and is not a
+    security finding.
+12. **Configure GitHub:** Pages source = "GitHub Actions", plus the two Actions
+    secrets, both under Settings ("Deploying" above).
+13. **Push to `main`.** The deploy workflow runs the tests, then builds, then
+    publishes.
+14. **Load the published page and sign in there too.** The second redirect URL
+    from step 5 is what makes that work; this is the step that proves the deployed
+    half, which as of this writing is still unproven.
+
+Steps 1, 5, 6, 8, 9 and 12 are the ones no code in this repository can do for you,
+and the ones no test can check. They are why the "Configuration that is not in
+this repository" section exists.
+
+If the Supabase project is a *different* one from the one the committed types were
+generated against, also re-run
+`npx supabase@latest gen types typescript --linked > src/types/database.ts`.
+
 ## Database
 
 Migrations live in `supabase/migrations/` and are applied with the Supabase CLI:
 
 ```bash
 npx supabase@latest login                     # interactive; needs a real terminal
-npx supabase@latest link --project-ref <ref>
+npx supabase@latest link --project-ref <ref>  # <ref> = Supabase → Project Settings
+                                              #   → General → Reference ID
 npx supabase@latest db push --linked
 npx supabase@latest gen types typescript --linked > src/types/database.ts
 ```
@@ -277,15 +354,39 @@ Postgres, both halves of the boundary:
 - **The admin path** (section 11): that `service_role` can still reach all three
   tables, because if it cannot, no account can ever be activated again.
 
-It writes nothing. The one write it attempts is an `insert` the policy is meant
-to refuse, inside a block that rolls the statement back even if the refusal stops
-happening.
+**It commits nothing, but it is not quite true that it writes nothing.** The one
+write it attempts is an `insert` the policy is meant to refuse, inside a block
+that rolls the statement back even if the refusal ever stops happening — so no
+row can survive either outcome. What does survive is the identity sequence:
+Postgres allocates the next `id` before the policy rejects the row, and a
+sequence does not roll back (that is what makes it safe under concurrency). So
+`clients_id_seq` advances by one on every run, and its `last_value` runs ahead of
+`max(id)` — measured 15 against 4 at the time of writing. That is cosmetic; ids
+are opaque and nothing depends on them being contiguous. It is written down here
+so that nobody later reads a gap in the ids as evidence that rows were deleted.
+
+**Two different failures, and it matters which one you got.** The script
+distinguishes them, and so should you:
+
+- **`verify:privileges FAILED with N violation(s)`** — a security finding. Treat
+  it as an incident: something is reachable that should not be, or a grant the
+  app depends on has gone missing.
+- **`verify:privileges COULD NOT VERIFY the read path — N precondition(s)
+  unmet`** — *not* a security finding, and the message says so explicitly. It
+  means the database does not yet hold enough data to exercise a check: no
+  activated account, no clients, or no check-ins. This is the **expected** result
+  on a freshly created or freshly rebuilt project. Work through the list (each
+  item names what to do) and re-run.
+
+Both exit non-zero, deliberately: a check that could not run must never read as a
+check that passed.
 
 **What it needs in order to run:**
 
-- a **linked** project — `npx supabase@latest link --project-ref <ref>` once; the
-  link is stored in `supabase/.temp/`, which is gitignored, so a fresh clone must
-  link again;
+- a **linked** project — `npx supabase@latest link --project-ref <ref>` once,
+  where `<ref>` is the Reference ID under Supabase → Project Settings → General;
+  the link is stored in `supabase/.temp/`, which is gitignored, so a fresh clone
+  must link again;
 - an **authenticated Supabase CLI session**. The script goes through the
   Management API, not a direct database connection, so it needs an access token,
   not a database password. `npx supabase@latest login` is **interactive** — it
@@ -304,8 +405,11 @@ before every deploy that touches a migration.
 - The browser receives only the **publishable** key. The secret key must never appear
   in a `VITE_` variable — Vite inlines those into the public bundle.
 - Row-level security in Postgres is the access boundary, not the UI. Section 10
-  of `scripts/verify-privileges.sql` is what verifies that claim; treat a failure
-  there as a security incident rather than a broken test.
+  of `scripts/verify-privileges.sql` is what verifies that claim. Treat a
+  **violation** there as a security incident rather than a broken test — but read
+  the heading first: a run that reports unmet **preconditions** has found no
+  violation at all and simply had too little data to check something. The two are
+  reported separately for exactly this reason.
 - New accounts are created inactive. An admin activates them, with SQL (above).
 - RLS is enabled on every table but deliberately not *forced*: forcing it would
   also subject the table owner (`postgres`) and `service_role` to the
