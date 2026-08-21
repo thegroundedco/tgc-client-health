@@ -1,0 +1,144 @@
+/* One pillar: its name and hint, the 1-5 scale, the three written anchors, and
+   last month's value. Five of these stack on the check-in screen. */
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Two gap sizes are needed here: a tight one between the five radios, and a
+   looser one between the whole scale and Clear, so Clear reads as a separate
+   action rather than a sixth score. One flex container only has one gap size,
+   so the five radios get their own nested container (.options, below) with the
+   tighter value, and this outer one carries the looser one. That keeps every
+   gap in this file coming from a container, with no per-element margin
+   anywhere -- the alternative the brief allowed, a margin on .clear alone, was
+   passed over so the "layout does the spacing" rule holds without an
+   exception. */
+.scale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Positioned, so the absolutely-positioned input below resolves against this
+   label rather than against whatever ancestor happens to be positioned. The
+   input is invisible either way, but a focused element parked at the top of the
+   page can make the browser scroll somewhere nobody asked to go. */
+.option {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+/* The native radio is what carries the semantics, the keyboard behaviour and
+   the checked state; it is moved out of sight rather than removed, because
+   display:none would take it out of the tab order and out of the accessibility
+   tree with it. The visible control is .face, which is the adjacent sibling the
+   :checked selector below reaches -- so the input must stay immediately before
+   it in the JSX. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --space-7 is 3rem, so the tappable box is 48px. Sized for a thumb on
+   purpose: this is the control the owner presses fifty-five times a month
+   (eleven clients, five pillars), sometimes on a phone, and 48px clears the
+   44px minimum that --space-6 at 32px would not. Five of them plus their gaps
+   overflow the narrowest phones, which is what the flex-wrap on .options is
+   for -- wrapping to two rows is the intended behaviour there, not a defect. */
+.face {
+  display: grid;
+  place-items: center;
+  min-width: var(--space-7);
+  height: var(--space-7);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--face-body);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-header);
+  font-size: var(--step-0);
+  line-height: var(--leading-numeric);
+}
+
+.option:hover .face {
+  border-color: var(--text-secondary);
+}
+
+/* The selected value is a fill, not a border weight: a 1px difference is not a
+   state change anybody can see across five controls. */
+.input:checked + .face {
+  border-color: var(--action-face);
+  background: var(--action-face);
+  color: var(--action-text);
+}
+
+/* The ring has to be drawn here, because the input it belongs to is out of
+   sight. base.css's global :focus-visible would draw it around a 1px box
+   nobody can see, which is the same as having no focus indicator at all. */
+.input:focus-visible + .face {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.input:disabled + .face {
+  opacity: 0.45;
+}
+
+.option:has(.input:disabled) {
+  cursor: not-allowed;
+}
+
+/* Smaller than a primary action, so it reads as an escape hatch rather than a
+   sixth score. The gap that sets it apart from the scale comes from .scale
+   above, not from a margin here. */
+.clear {
+  padding: var(--space-1) var(--space-3);
+}
+
+.anchors {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule-hairline);
+}
+
+.anchor {
+  display: grid;
+  grid-template-columns: var(--space-5) 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.anchorTerm {
+  text-align: end;
+}
