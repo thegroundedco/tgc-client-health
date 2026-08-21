@@ -130,8 +130,8 @@
      Mirrors parent spec §9.4's mapping of Field Gothic, per spec §4.4.
      ========================================================================== */
 
-  /* The typeface, named once. Nothing outside this block references it: every
-     rule in the app reaches a face through one of the five role tokens below. */
+  /* The typeface, named once. No rule anywhere in the app references it: every
+     rule reaches a face through one of the five role tokens below. */
   --face-ui: 'Archivo Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* One face per role, all five pointing at that single family today. The
