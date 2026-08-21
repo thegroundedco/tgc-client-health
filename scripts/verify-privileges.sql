@@ -833,7 +833,21 @@ begin
       array_to_string(problems, E'\n  - '),
       case
         when array_length(preconditions, 1) > 0 then
-          format(E'\nAND % check(s) could not be run at all:\n  - %',
+          -- %s, not %. This is format(), not RAISE, and the two disagree:
+          -- RAISE takes a bare `%` while format() requires `%s` and rejects a
+          -- bare one outright with `22023 unrecognized format() type specifier`.
+          -- Written with RAISE's syntax at first, which meant the ONE branch
+          -- that reports "violations AND unverified checks together" -- a
+          -- partly-seeded project that also has a real privilege problem --
+          -- replaced the security report with an opaque Postgres error. It still
+          -- exited non-zero, so nothing passed silently, but the operator lost
+          -- exactly the distinction this section exists to draw.
+          --
+          -- It survived four proof runs because every one of them had only one
+          -- of the two arrays populated, so this branch never executed.
+          -- Exercising an assertion is not the same as exercising its reporting
+          -- path, and the reporting path is the part a human reads.
+          format(E'\nAND %s check(s) could not be run at all:\n  - %s',
             array_length(preconditions, 1),
             array_to_string(preconditions, E'\n  - '))
         else ''
