@@ -52,8 +52,8 @@ describe('the repository', () => {
   ]
 
   // A walk that silently finds nothing would pass forever. This project has
-  // already shipped one check that reported success by finding no data — see the
-  // grep-on-a-binary-bundle note in the README. Assert the walk actually walked.
+  // already shipped one check that reported success by finding no data — see
+  // "What a silent grep looks like" in the README. Assert the walk actually walked.
   it('is walked, not silently skipped', () => {
     expect(files.length).toBeGreaterThan(15)
     expect(files.map((f) => f.path)).toContain('index.html')
