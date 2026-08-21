@@ -175,6 +175,20 @@ a {
 
 .band {
   display: inline-flex;
+  /* align-self, and it belongs on the chip rather than on any container that
+     holds one. `display: inline-flex` governs how the chip lays out INSIDE
+     itself; it does nothing about how the chip is sized as a flex ITEM. Dropped
+     into a column flex container -- which is what a client card's head is -- the
+     default `align-items: stretch` pulls the chip across the container's whole
+     width, and a status pill spanning a card reads as a banner. Fixing it here
+     means every future placement hugs its content; fixing it on the container
+     would have fixed exactly one call site, and the check-in screen is about to
+     add more. Harmlessly ignored when the chip is not a flex item.
+
+     Found by the owner looking at the deployed page. Nothing automated could
+     see it: the class resolves, every token resolves, the contrast passes and
+     the text label is present. It was simply the wrong shape. */
+  align-self: flex-start;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
