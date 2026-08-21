@@ -89,3 +89,30 @@ describe('deriveAppState', () => {
     ).toEqual({ kind: 'active', profile })
   })
 })
+
+// Added with the useSession rejection handler. Before it, a rejected
+// getSession() left sessionStatus at 'loading' forever and the app was a
+// permanent spinner on its own front door.
+describe('deriveAppState when the session lookup itself failed', () => {
+  it('is db-error, carrying the session error message', () => {
+    expect(
+      deriveAppState('error', null, 'loading', null, null, 'network unreachable'),
+    ).toEqual({ kind: 'db-error', error: 'network unreachable' })
+  })
+
+  // The ordering that matters: a failed session lookup and a genuinely absent
+  // session both leave `session` null. Rendering the sign-in form after a
+  // failure would be v1's "a broken tool looks like an empty one" again.
+  it('does not conflate a failed session lookup with being signed out', () => {
+    const failed = deriveAppState('error', null, 'ready', null, null, 'boom')
+    const signedOut = deriveAppState('ready', null, 'ready', null, null, null)
+    expect(failed.kind).toBe('db-error')
+    expect(signedOut.kind).toBe('signed-out')
+  })
+
+  it('still reports loading before the session status is known', () => {
+    expect(deriveAppState('loading', null, 'loading', null, null, 'boom')).toEqual({
+      kind: 'loading',
+    })
+  })
+})

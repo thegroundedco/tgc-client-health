@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { describeError } from '../lib/errorText'
 import { BAND_LABELS, PILLARS, bandFor } from '../lib/score'
 import type { Pillar } from '../lib/score'
 import { currentPeriod, formatPeriod } from '../lib/month'
@@ -36,7 +37,10 @@ export function Board({ profile }: Props) {
         .order('name')
 
       if (clientResult.error) {
-        setLoadError(clientResult.error.message)
+        // describeError, not `.error.message`: an empty message is falsy, and
+        // `if (loadError)` below would miss it and fall through to the eternal
+        // "Loading…". See src/lib/errorText.ts.
+        setLoadError(describeError(clientResult.error))
         return
       }
 
@@ -46,7 +50,7 @@ export function Board({ profile }: Props) {
         .eq('period', period)
 
       if (checkinResult.error) {
-        setLoadError(checkinResult.error.message)
+        setLoadError(describeError(checkinResult.error))
         return
       }
 
@@ -55,7 +59,7 @@ export function Board({ profile }: Props) {
       setClients(clientResult.data)
       setCheckins(checkinResult.data)
     } catch (thrown) {
-      setLoadError(thrown instanceof Error ? thrown.message : String(thrown))
+      setLoadError(describeError(thrown))
     }
     // useCallback, not a plain function: the effect below depends on it, and an
     // identity that changed every render would refetch on every render. `period`
@@ -92,14 +96,12 @@ export function Board({ profile }: Props) {
       )
 
       if (error) {
-        setSaveError(`Could not save: ${error.message}`)
+        setSaveError(`Could not save: ${describeError(error)}`)
         return
       }
       await load()
     } catch (thrown) {
-      setSaveError(
-        `Could not save: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
-      )
+      setSaveError(`Could not save: ${describeError(thrown)}`)
     } finally {
       setSaving(false)
     }

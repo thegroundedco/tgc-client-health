@@ -16,13 +16,27 @@ export type AppState =
   | { kind: 'active'; profile: Profile }
 
 export function deriveAppState(
-  sessionStatus: 'loading' | 'ready',
+  sessionStatus: 'loading' | 'ready' | 'error',
   session: Session | null,
   profileStatus: 'loading' | 'ready' | 'error',
   profile: Profile | null,
   error: string | null,
+  // Appended last, with a default, rather than slotted in beside `session`
+  // where it logically belongs: this function is called positionally and
+  // inserting a parameter in the middle would silently re-bind every existing
+  // call and every existing test to the wrong argument. The default is only
+  // ever taken by tests written before useSession could fail.
+  sessionError: string | null = null,
 ): AppState {
   if (sessionStatus === 'loading') return { kind: 'loading' }
+
+  // Checked before `!session`, for the same reason profileStatus === 'error' is
+  // checked before `!profile` below: a failed session lookup and a genuinely
+  // absent session both leave `session` null, and only the status tells them
+  // apart. Rendering the sign-in form after a failed lookup would be v1's
+  // "a broken tool looks like an empty one" on the very first screen.
+  if (sessionStatus === 'error') return { kind: 'db-error', error: sessionError }
+
   if (!session) return { kind: 'signed-out' }
   if (profileStatus === 'loading') return { kind: 'loading' }
 

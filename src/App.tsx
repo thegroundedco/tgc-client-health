@@ -7,10 +7,17 @@ import { deriveAppState } from './appState'
 import { Board } from './board/Board'
 
 export default function App() {
-  const { session, status: sessionStatus } = useSession()
+  const { session, status: sessionStatus, error: sessionError } = useSession()
   const { profile, status: profileStatus, error } = useProfile(session)
 
-  const state = deriveAppState(sessionStatus, session, profileStatus, profile, error)
+  const state = deriveAppState(
+    sessionStatus,
+    session,
+    profileStatus,
+    profile,
+    error,
+    sessionError,
+  )
 
   switch (state.kind) {
     case 'loading':

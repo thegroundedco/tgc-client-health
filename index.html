@@ -6,7 +6,18 @@
     <title>TGC Client Health</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Replaced the instant React mounts: createRoot().render() clears the
+           container. So if this text is still on screen, the app never started
+           — the bundle failed to load, or it threw on the way in. src/main.tsx
+           catches the throw and writes a specific message here instead; this
+           fallback covers the case where main.tsx itself never ran. -->
+      <p>Starting TGC Client Health…</p>
+      <p>
+        If this message is still here after a few seconds, the app did not
+        start. See the "Deploying" section of the project README.
+      </p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
