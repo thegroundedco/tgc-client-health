@@ -7,6 +7,7 @@ import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import styles from './Board.module.css'
 import { bandClassName } from '../styles/bandClass'
+import { CheckIn } from '../checkin/CheckIn'
 
 type ClientRow = { id: number; name: string }
 type CheckinRow = { client_id: number; total_score: number | null }
@@ -24,6 +25,11 @@ export function Board({ profile }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const period = currentPeriod()
+  // §5.1: state-based navigation, in the board container. No router, therefore no
+  // URL change, therefore a refresh returns here. A linkable check-in URL needs
+  // the GitHub Pages 404.html redirect trick, which is not worth buying until
+  // somebody wants to send a colleague a link to one check-in.
+  const [selected, setSelected] = useState<ClientRow | null>(null)
 
   const load = useCallback(async () => {
     // postgrest-js resolves fetch failures into `error` rather than rejecting,
@@ -109,6 +115,25 @@ export function Board({ profile }: Props) {
     }
   }
 
+  if (selected) {
+    return (
+      <CheckIn
+        client={selected}
+        period={period}
+        profile={profile}
+        onBack={() => {
+          setSelected(null)
+          // Re-read on the way back, so a check-in that was just saved shows its
+          // new total on the card. Without this the board would show the number
+          // it read before the save, which is the same picture as a save that
+          // did nothing -- the exact defect this slice exists to fix, moved one
+          // screen along.
+          void load()
+        }}
+      />
+    )
+  }
+
   if (loadError) {
     return (
       <section className={styles.state}>
@@ -158,7 +183,15 @@ export function Board({ profile }: Props) {
           return (
             <li className={styles.card} key={client.id}>
               <div className={styles.cardHead}>
-                <h3 className="t-body">{client.name}</h3>
+                <h3 className="t-body">
+                  <button
+                    className={styles.cardOpen}
+                    type="button"
+                    onClick={() => setSelected(client)}
+                  >
+                    {client.name}
+                  </button>
+                </h3>
                 {/* The band always carries its text label. Colour is never the
                     only signal: teal against warm red measures 1.76:1, so any
                     two bands are indistinguishable to a colour-blind viewer.
