@@ -1,8 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 
-// Reads the same .env.local the app uses. These tests hit the real project;
-// they are the only way to know the policies and grants actually work.
+// Reads the same .env.local the app uses. These tests hit the real project.
+//
+// WHAT THIS FILE CAN AND CANNOT PROVE. Every test here uses the ANONYMOUS key,
+// because that is the only session a test can have without a human clicking a
+// magic link in a mailbox. `anon` holds nothing on any table, so every probe
+// below is refused at the GRANT layer and no row-security policy is ever
+// consulted. That is worth asserting -- it is the outer boundary, and this
+// project once shipped with it open -- but it is emphatically not a test of the
+// policies. All six policies on public.clients and public.checkins could be
+// rewritten as `using (true)` and every test in this file would still pass.
+//
+// The policy predicates are asserted in `scripts/verify-privileges.sql` section
+// 10 (`npm run verify:privileges`), which becomes the `authenticated` role
+// inside the database and checks the behaviour: an active account sees the rows
+// it should, a subject with no profile row sees zero rows and is refused an
+// insert, and a claim-less request sees zero rows. It lives there because
+// `set local role` exists only inside Postgres, and a test that needs a human
+// to click an emailed link is not a test.
 //
 // The values arrive on import.meta.env, not process.env. On this toolchain
 // (Vite 8 / Vitest 4) .env.local IS loaded under the default 'test' mode, so
@@ -115,11 +131,12 @@ describe.runIf(url && key)('RLS with no session', () => {
   // future migration re-adding `grant update on public.profiles to
   // authenticated` would leave all of them green.
   //
-  // What actually guards that: `npm run verify:privileges`, which asserts the
-  // column matrix directly and fails if authenticated can write role or
-  // is_active. The signed-in behavioural version — sign in, PATCH your own row,
-  // watch full_name succeed while role fails — belongs in Task 4, where a
-  // session exists.
+  // What actually guards that: `npm run verify:privileges`, whose section 2
+  // asserts the column matrix directly and fails if authenticated can write
+  // role or is_active, and whose section 10 asserts what a signed-in subject can
+  // actually see. The signed-in behavioural version of THIS probe — sign in,
+  // PATCH your own row, watch full_name succeed while role fails — still needs a
+  // real session and is not automated anywhere.
   it('refuses an unauthenticated update', async () => {
     const { data, error } = await client()
       .from('profiles')
@@ -242,5 +259,56 @@ describe.runIf(url && key)('RLS with no session', () => {
       .select()
     expectGrantLayerDenial(error)
     expect(data).toBeNull()
+  })
+  // --------------------------------------------------------------------------
+  // PostgREST's exposed-schema list. Not a grant and not a policy: it is
+  // PROJECT CONFIGURATION that lives in the Supabase dashboard, not in this
+  // repository, and it is one of the two independent reasons schema `private` is
+  // unreachable from a browser (the other is that no browser role holds USAGE on
+  // it — asserted by verify-privileges.sql section 9a).
+  //
+  // Worth testing precisely BECAUSE it is not in the repo. Nothing in a git diff
+  // would show someone adding `private` to that list, and doing so would expose
+  // every security definer helper in it as a callable RPC. These two tests are
+  // the only tripwire on a setting no migration can pin. If either fails, the
+  // fix is in Supabase → Project Settings → API → Exposed schemas, not in code.
+  // See the README, "Configuration that is not in this repository".
+  //
+  // Uses fetch directly rather than supabase-js: the client cannot send an
+  // Accept-Profile header for a schema it has no types for, and the raw status
+  // codes are the evidence.
+  const restHeaders = () => ({
+    apikey: key!,
+    Authorization: `Bearer ${key!}`,
+    'Content-Type': 'application/json',
+  })
+
+  it('does not expose schema private over the Data API', async () => {
+    const response = await fetch(`${url!}/rest/v1/profiles?select=id`, {
+      headers: { ...restHeaders(), 'Accept-Profile': 'private' },
+    })
+
+    // PGRST106 'Invalid schema', and the body names every schema that IS
+    // exposed — which is the assertion that matters, because it fails the moment
+    // someone adds `private` to the list.
+    expect(response.status).toBe(406)
+    const body = (await response.json()) as { code?: string; hint?: string }
+    expect(body.code).toBe('PGRST106')
+    expect(body.hint ?? '').not.toMatch(/\bprivate\b/)
+  })
+
+  it('cannot call private.is_active_user() as an RPC', async () => {
+    const response = await fetch(`${url!}/rest/v1/rpc/is_active_user`, {
+      method: 'POST',
+      headers: restHeaders(),
+      body: '{}',
+    })
+
+    // 404 / PGRST202: PostgREST resolved the name against the exposed schema
+    // (public), where the function does not exist. The helper that gates every
+    // policy on clients and checkins is not addressable from the browser at all.
+    expect(response.status).toBe(404)
+    const body = (await response.json()) as { code?: string }
+    expect(body.code).toBe('PGRST202')
   })
 })

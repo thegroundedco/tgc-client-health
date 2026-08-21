@@ -14,12 +14,43 @@
 -- The authenticated-session equivalent (sign in, PATCH your own row, watch
 -- full_name succeed and role fail) belongs in Task 4, where a session exists.
 -- This asserts the privilege matrix that makes that outcome structural.
+--
+-- Sections 1-9 assert GRANTS. Section 10 asserts POLICY BEHAVIOUR, by becoming
+-- the `authenticated` role inside this transaction and running real queries.
+-- That section was added because without it nothing anywhere exercised a policy
+-- predicate: anon holds nothing, so every test in src/lib/rls.test.ts is denied
+-- at the grant layer before a policy is consulted, and all six policies on
+-- clients/checkins could have been rewritten as `using (true)` with this file
+-- and the whole test suite still green. Read section 10's own header for the
+-- detail; it is the only part of this repository that tests the access boundary
+-- the spec claims to rest on.
 
 do $$
 declare
   problems  text[] := '{}';
   r         record;
   n_tables  int;
+
+  -- Section 10 (policy behaviour) only.
+  active_uid uuid;
+  n_seen     bigint;
+  n_total    bigint;
+
+  -- The subject for every negative case in section 10: a syntactically valid
+  -- uuid that has no row in public.profiles, so private.is_active_user() must
+  -- return false for it. Chosen rather than synthesised because it needs no
+  -- write of any kind -- no auth.users row, no profile row, nothing to clean up
+  -- afterwards. Section 10 asserts it really is absent before relying on it.
+  --
+  -- It stands in for BOTH negative cases the spec cares about, and that is
+  -- exact rather than approximate: is_active_user() is
+  --   exists (select 1 from public.profiles where id = auth.uid() and is_active)
+  -- so a missing profile row and a profile row with is_active = false produce
+  -- the identical false. Covering the second one separately would mean
+  -- INSERTing into auth.users on the live project to get the signup trigger to
+  -- make a profile, and a synthetic account in a real auth table is not worth
+  -- it to re-prove the same `exists`.
+  absent_uid uuid := 'ffffffff-0000-4000-8000-ffffffffffff';
 
   -- Allowlist for section 9, in the same spirit as the table allowlist in
   -- section 4: a definer helper in `private` may be EXECUTE-able by a
@@ -217,17 +248,44 @@ begin
     where n.nspname = 'public'
       and has_function_privilege(g, p.oid, 'EXECUTE')
   loop
-    problems := problems || format('%s can EXECUTE public function %s -- revoke execute from public, anon, authenticated in its migration', r.grantee, r.fn);
+    -- The advice deliberately does NOT say "revoke from public, anon,
+    -- authenticated". That triple is the outage documented in section 9 and in
+    -- spec section 7.2: if the function is referenced by a policy, revoking it
+    -- from `authenticated` makes every query by every signed-in user fail
+    -- 42501. Harmless today only because `public` holds zero functions.
+    problems := problems || format(
+      '%s can EXECUTE public function %s -- revoke execute from public and anon in its migration, then grant it back to exactly the roles that need to call it (or, if a POLICY references it, exactly the roles those policies name -- see section 9)',
+      r.grantee, r.fn);
   end loop;
 
   ----------------------------------------------------------------------------
-  -- 7. RLS must be enabled but NOT forced on profiles. Forcing it subjects the
-  --    table owner to policies, which breaks the security definer trigger that
-  --    creates the profile row on signup.
+  -- 7. RLS must be enabled (section 5) but NOT forced, on EVERY table in
+  --    `public`. Forcing it subjects the table owner to policies, which breaks
+  --    the security definer signup trigger that creates the profile row, and
+  --    subjects service_role to them too, which breaks the admin activation
+  --    path (README: "Activating the first admin").
+  --
+  --    Swept over every table rather than asserted on `profiles` alone. It was
+  --    written for profiles because of the signup trigger, but spec section 7.2
+  --    states the property generally -- "every table has RLS enabled, but not
+  --    forced" -- and section 10 below now DEPENDS on it generally: the
+  --    impersonation there only proves anything because the owner is exempt
+  --    from policies, so a FORCE appearing on clients or checkins would change
+  --    what those assertions mean. It is also what keeps the trigger function
+  --    private.touch_updated_at() firing on clients and checkins.
   ----------------------------------------------------------------------------
-  if (select relforcerowsecurity from pg_class where oid = 'public.profiles'::regclass) then
-    problems := problems || 'public.profiles has FORCE row level security -- this breaks the security definer signup trigger'::text;
-  end if;
+  for r in
+    select c.relname::text as table_name
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind in ('r', 'p')
+      and c.relforcerowsecurity
+  loop
+    problems := problems || format(
+      'public.%s has FORCE row level security -- this subjects the table owner and service_role to the policies, which breaks the security definer signup trigger and the admin activation path',
+      r.table_name);
+  end loop;
 
   ----------------------------------------------------------------------------
   -- 8. No sequence in `public` may be reachable by a browser role.
@@ -358,14 +416,35 @@ begin
   -- 9d. No helper in `private` may be granted to PUBLIC. Postgres adds a `=X`
   --     PUBLIC entry to every new function, and 20260820232429 measured that no
   --     ALTER DEFAULT PRIVILEGES on this project suppresses it, so this is a
-  --     live default rather than a hypothetical. Checked via aclexplode for
-  --     grantee 0 so the diagnosis names PUBLIC directly, instead of surfacing
-  --     only as an anon violation in 9b.
+  --     live default rather than a hypothetical.
+  --
+  --     CORRECTION to what this comment used to claim. It said 9d was what
+  --     caught that default, "instead of surfacing only as an anon violation in
+  --     9b". It was the other way round. A function that has never had an
+  --     explicit grant or revoke has proacl = NULL, its `=X` comes from
+  --     acldefault('f', owner) rather than from any stored row, and
+  --     aclexplode(NULL) returns ZERO rows -- so 9d as written was blind to
+  --     exactly the case it named, and 9b (which asks has_function_privilege,
+  --     and therefore sees privileges reached through PUBLIC) is what actually
+  --     provided the guarantee. That mattered because a reader trusting the old
+  --     comment could have "simplified away" 9b as redundant.
+  --
+  --     The coalesce below is the fix, and is load-bearing: with it 9d sees the
+  --     default case too and names PUBLIC directly, which is a far better
+  --     diagnosis than an anon violation. 9b still independently covers it. A
+  --     new function in `private` therefore trips both, on purpose -- one
+  --     naming the grantee, one naming the mechanism.
+  --
+  --     Measured on this project (Postgres 17.6): `create function private.x()`
+  --     yields proacl = NULL and has_function_privilege('anon', ..., 'EXECUTE')
+  --     = true. A function in `private` is born PUBLIC-executable just as one in
+  --     `public` is; the schema makes no difference to the ACL, only to whether
+  --     the function can be reached BY NAME (see 9a).
   for r in
     select (p.oid::regprocedure)::text as fn
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-    cross join lateral aclexplode(p.proacl) acl
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
     where n.nspname = 'private'
       and acl.grantee = 0
       and acl.privilege_type = 'EXECUTE'
@@ -373,6 +452,320 @@ begin
   loop
     problems := problems || format(
       '%s is granted EXECUTE to PUBLIC -- every role reaches it implicitly; revoke execute from public', r.fn);
+  end loop;
+
+  ----------------------------------------------------------------------------
+  -- 10. POLICY BEHAVIOUR -- what a signed-in user can actually SEE.
+  --
+  --     Sections 1-9 assert the GRANT layer: which role holds which verb on
+  --     which object. Necessary, and on its own not close to sufficient. The
+  --     gap was total, and is worth stating without softening:
+  --
+  --       Nothing in this repository exercised a policy predicate. All 13 tests
+  --       in src/lib/rls.test.ts use the ANONYMOUS client; anon holds nothing,
+  --       so every one is refused at the grant layer before a policy is ever
+  --       consulted. Sections 1-9 read pg_class, pg_proc and the ACLs -- never
+  --       pg_policies. So all six policies on public.clients and public.checkins
+  --       could have been rewritten as `using (true)` and `with check (true)`,
+  --       and this file plus the entire test suite would have stayed green.
+  --
+  --     Which means spec section 7.2's own "practical test of this design" -- an
+  --     account without access, querying the data directly and bypassing the app,
+  --     gets ZERO ROWS -- and the negative cases spec section 10 mandates had no
+  --     automated evidence at all. RLS is the only access boundary this project
+  --     has. It was the only part of it that nothing checked.
+  --
+  --     This section closes that by becoming the `authenticated` role inside
+  --     this transaction and running real queries against the real policies.
+  --
+  --     WHY HERE AND NOT IN VITEST. The JS client cannot become `authenticated`
+  --     without a real session, and a real session needs a magic link clicked in
+  --     a mailbox. A test that requires a human to click an email is not a test.
+  --     `set local role` is the only way to get a policy predicate evaluated on
+  --     demand, and it only exists inside the database. The Vitest suite covers
+  --     what it can reach -- the anon grant layer -- and says so.
+  --
+  --     HOW THE IMPERSONATION WORKS, since none of it is guessable:
+  --       set local role authenticated
+  --         -- stops us being the table owner. The owner bypasses RLS entirely
+  --            unless FORCE is set, which section 7 asserts is NOT set, so
+  --            without this line every query below would see every row and prove
+  --            nothing. This is why section 7 was generalised to every table.
+  --       set_config('request.jwt.claims', '{"sub": "..."}', true)
+  --         -- becomes the subject. auth.uid() on this project is exactly
+  --            coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+  --                     nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid
+  --            so writing that setting is what gives private.is_active_user()
+  --            someone to be. Both settings are transaction-local (the `true`),
+  --            so they expire with this statement no matter how it ends.
+  --
+  --     ZERO WRITES, and that is a hard property, not an intention. Every
+  --     subject below is either the real active account (read-only) or
+  --     `absent_uid`, a uuid with no profile row, which needs no setup. The one
+  --     write attempted anywhere is the INSERT in 10c, which the policy is
+  --     supposed to REFUSE; it runs inside its own plpgsql block, so the refusal
+  --     is caught instead of aborting the run, and if the refusal ever stops
+  --     happening the block raises to roll its own subtransaction back. Neither
+  --     outcome can leave a row behind.
+  --
+  --     Every negative assertion here FAILS if its policy is widened to
+  --     `using (true)`. That was verified by doing it: the six policies were
+  --     rewritten as `using (true)` / `with check (true)` inside a transaction
+  --     that was then rolled back, and this section reported violations for
+  --     every case. A policy-behaviour assertion that cannot fail is worse than
+  --     no assertion, because it reads like evidence.
+  ----------------------------------------------------------------------------
+
+  -- 10a. The subject used by every negative case must really have no profile
+  --      row, or all of them turn vacuous in the quietest possible way.
+  if exists (select 1 from public.profiles where id = absent_uid) then
+    problems := problems || format(
+      'the uuid used as the "no profile" subject (%s) HAS a row in public.profiles, so every negative assertion in section 10 is meaningless -- pick a different uuid in scripts/verify-privileges.sql',
+      absent_uid)::text;
+  end if;
+
+  -- 10b. The positive case: an active account sees the data.
+  --
+  --      Asserted as "sees ALL of them" rather than "sees at least one", so it
+  --      stays meaningful as the table grows, and so a policy narrowed to
+  --      `using (false)` -- the outage direction -- fails here rather than
+  --      looking like an empty month.
+  --
+  --      A missing subject or an empty table is reported as a violation rather
+  --      than skipped. A run that verified nothing must not look like a run that
+  --      verified everything; that is the same rule the unconditional
+  --      credentials test in src/lib/rls.test.ts exists to enforce.
+  select id into active_uid
+  from public.profiles
+  where is_active
+  order by created_at
+  limit 1;
+
+  if active_uid is null then
+    problems := problems || 'public.profiles contains no active row, so the positive half of section 10 could not run and the read path is UNVERIFIED -- activate an account (README: "Activating the first admin") and re-run'::text;
+  else
+    begin
+      select count(*) into n_total from public.clients;
+      if n_total = 0 then
+        problems := problems || 'public.clients is empty, so "an active user can read clients" could not be exercised and the read path is UNVERIFIED -- add a client and re-run'::text;
+      end if;
+
+      perform set_config(
+        'request.jwt.claims',
+        json_build_object('sub', active_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+        true);
+      set local role authenticated;
+
+      select count(*) into n_seen from public.clients;
+      if n_seen <> n_total then
+        problems := problems || format(
+          'an ACTIVE user sees %s of %s rows in public.clients -- clients_select_active_users is denying rows it should return, which is an outage for every signed-in user',
+          n_seen, n_total)::text;
+      end if;
+
+      select count(*) into n_seen from public.profiles;
+      if n_seen <> 1 then
+        problems := problems || format(
+          'an active user sees %s rows in public.profiles, expected exactly their own -- profiles_select_own is wrong in one direction or the other',
+          n_seen)::text;
+      end if;
+
+      reset role;
+
+      select count(*) into n_total from public.checkins;
+      perform set_config(
+        'request.jwt.claims',
+        json_build_object('sub', active_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+        true);
+      set local role authenticated;
+      select count(*) into n_seen from public.checkins;
+      if n_seen <> n_total then
+        problems := problems || format(
+          'an ACTIVE user sees %s of %s rows in public.checkins -- checkins_select_active_users is denying rows it should return',
+          n_seen, n_total)::text;
+      end if;
+
+      reset role;
+    exception when others then
+      -- A raised error here is itself the finding: the most likely cause is a
+      -- missing EXECUTE grant on a policy-referenced helper (42501), which is
+      -- the total-outage case section 9c pins from the grant side.
+      problems := problems || format(
+        'the active-user policy check could not run: %s %s -- the read path is UNVERIFIED',
+        sqlstate, sqlerrm)::text;
+    end;
+  end if;
+
+  -- 10c. The negative case the spec calls the practical test of the whole
+  --      design: a subject with no profile row -- so is_active_user() is false
+  --      -- sees zero rows on both tables and cannot write.
+  begin
+    select count(*) into n_total from public.clients;
+
+    perform set_config(
+      'request.jwt.claims',
+      json_build_object('sub', absent_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+      true);
+    set local role authenticated;
+
+    select count(*) into n_seen from public.clients;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'a user with NO profile row sees %s row(s) in public.clients -- the policy is not gating on private.is_active_user() and any signed-in account reads client data',
+        n_seen)::text;
+    end if;
+
+    select count(*) into n_seen from public.checkins;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'a user with NO profile row sees %s row(s) in public.checkins -- the policy is not gating on private.is_active_user() and any signed-in account reads check-in scores',
+        n_seen)::text;
+    end if;
+
+    select count(*) into n_seen from public.profiles;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'a user with NO profile row sees %s row(s) in public.profiles -- profiles_select_own is not gating on auth.uid() and any signed-in account reads every profile',
+        n_seen)::text;
+    end if;
+
+    -- The write half. `with check` is a separate predicate from `using` and can
+    -- be widened on its own, so a read-only assertion would miss it entirely.
+    begin
+      insert into public.clients (name)
+      values ('verify-privileges probe -- must never persist');
+      -- Reached only if the policy ALLOWED the insert. Raising rolls this inner
+      -- subtransaction back, so the row cannot survive even in that case, and
+      -- the handler below turns it into a reported violation.
+      raise exception 'probe insert was allowed';
+    exception
+      when insufficient_privilege then
+        -- Expected: 42501, 'new row violates row-level security policy for
+        -- table "clients"'. Nothing was written.
+        null;
+      when others then
+        if sqlerrm = 'probe insert was allowed' then
+          problems := problems || 'a user with NO profile row was ALLOWED to insert into public.clients -- clients_insert_active_users is not gating on private.is_active_user() (the row was rolled back by this check, not by the policy)'::text;
+        else
+          problems := problems || format(
+            'the no-profile insert probe failed for an unexpected reason: %s %s',
+            sqlstate, sqlerrm)::text;
+        end if;
+    end;
+
+    reset role;
+  exception when others then
+    problems := problems || format(
+      'the no-profile policy check could not run: %s %s -- the negative case is UNVERIFIED',
+      sqlstate, sqlerrm)::text;
+  end;
+
+  -- 10d. `authenticated` with NO jwt claims at all. This is not the same subject
+  --      as 10c: auth.uid() returns NULL rather than a uuid, so the comparison
+  --      inside is_active_user() is `id = null` and the whole predicate hinges on
+  --      null handling rather than on a lookup miss. It is also the shape of a
+  --      real request that reaches PostgREST with the authenticated role but a
+  --      claim-less or malformed token.
+  begin
+    perform set_config('request.jwt.claims', '', true);
+    perform set_config('request.jwt.claim.sub', '', true);
+    set local role authenticated;
+
+    if (select auth.uid()) is not null then
+      problems := problems || 'auth.uid() is not null with empty jwt claims -- the claim-less subject test below is not testing what it claims to'::text;
+    end if;
+
+    select count(*) into n_seen from public.clients;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'authenticated with NO jwt claims sees %s row(s) in public.clients -- a claim-less request reads client data',
+        n_seen)::text;
+    end if;
+
+    select count(*) into n_seen from public.checkins;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'authenticated with NO jwt claims sees %s row(s) in public.checkins -- a claim-less request reads check-in scores',
+        n_seen)::text;
+    end if;
+
+    select count(*) into n_seen from public.profiles;
+    if n_seen <> 0 then
+      problems := problems || format(
+        'authenticated with NO jwt claims sees %s row(s) in public.profiles',
+        n_seen)::text;
+    end if;
+
+    reset role;
+  exception when others then
+    problems := problems || format(
+      'the claim-less policy check could not run: %s %s -- the negative case is UNVERIFIED',
+      sqlstate, sqlerrm)::text;
+  end;
+
+  -- 10e. Every policy that section 10 relies on must exist and be scoped to
+  --      `authenticated`. Without this, DROPPING a policy would make the
+  --      negative assertions above pass for the wrong reason -- no policy means
+  --      no rows, which looks identical to a correct denial. This is the one
+  --      place in the file that reads pg_policies.
+  for r in
+    with expected (tbl, policy) as (
+      values
+        ('profiles', 'profiles_select_own'),
+        ('profiles', 'profiles_update_own'),
+        ('clients',  'clients_select_active_users'),
+        ('clients',  'clients_insert_active_users'),
+        ('clients',  'clients_update_active_users'),
+        ('checkins', 'checkins_select_active_users'),
+        ('checkins', 'checkins_insert_active_users'),
+        ('checkins', 'checkins_update_active_users')
+    )
+    select e.tbl, e.policy
+    from expected e
+    where not exists (
+      select 1 from pg_policies p
+      where p.schemaname = 'public'
+        and p.tablename = e.tbl
+        and p.policyname = e.policy
+        and p.roles = '{authenticated}'
+    )
+    order by 1, 2
+  loop
+    problems := problems || format(
+      'policy %s on public.%s is missing or is not scoped `to authenticated` -- with it gone the negative checks in section 10 pass for the wrong reason (no policy also means no rows)',
+      r.policy, r.tbl)::text;
+  end loop;
+
+  ----------------------------------------------------------------------------
+  -- 11. service_role must keep reaching every table in `public`.
+  --
+  --     The only assertion in this file that checks for TOO LITTLE privilege
+  --     rather than too much, and it is here for the same reason as 9c: this is
+  --     the direction that locks the owner out. `is_active` defaults to false,
+  --     no UI can change it, and the documented way to activate the first admin
+  --     is a statement run as service_role (README: "Activating the first
+  --     admin"). If service_role loses access there is no way back in at all.
+  --
+  --     Sections 4 and 8 sweep only anon, authenticated and PUBLIC, so nothing
+  --     watched this until 20260821040500_declare_service_role_grants.sql wrote
+  --     the grant down. Before that migration the grant existed only because a
+  --     pg_default_acl row inherited from this project's vintage happened to
+  --     supply it. This assertion is what stops that migration being deleted as
+  --     redundant without the loss being noticed.
+  ----------------------------------------------------------------------------
+  for r in
+    select c.relname::text as table_name, priv
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    cross join unnest(array['SELECT','INSERT','UPDATE','DELETE']) priv
+    where n.nspname = 'public'
+      and c.relkind in ('r', 'p')
+      and not has_table_privilege('service_role', c.oid, priv)
+    order by 1, 2
+  loop
+    problems := problems || format(
+      'service_role CANNOT %s public.%s -- the admin activation path is broken and there is no other way to activate an account (see 20260821040500_declare_service_role_grants.sql)',
+      r.priv, r.table_name);
   end loop;
 
   ----------------------------------------------------------------------------
