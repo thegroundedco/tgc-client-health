@@ -118,9 +118,11 @@
   --alert-text: var(--brand-red-dark);
 
   /* The one purely decorative brand colour. Never carries meaning, so nothing
-     is lost if a rebrand drops it. Unused today, and present anyway: tokens.css
-     IS the palette, and the alternative to an unused token here is somebody
-     typing #FFB3AB into a component the first time they want blush. */
+     is lost if a rebrand drops it. Used by the sign-in screen's confirmation
+     rule, which is a confirmation rather than a client's status and so needs a
+     colour that carries no meaning. It would belong here even unused: tokens.css
+     IS the palette, and the alternative to an unused token is somebody typing
+     #FFB3AB into a component the first time they want blush. */
   --accent-quiet: var(--brand-blush);
 
   /* ==========================================================================

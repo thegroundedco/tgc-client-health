@@ -1,8 +1,12 @@
 // The rebrand answer, made mechanical.
 //
-// Spec §4.1 promises that changing the visual identity later is a one-file
-// change. That promise is only true while every colour and every typeface in
-// the repository lives in tokens.css, and intent alone does not keep it true:
+// Spec §4.1 promises that a later change of PALETTE is a one-file change. It
+// promises nothing so cheap for the typeface — that swap is one file plus the
+// font files, five to seven of them, because the licensed face is a separate cut
+// per width — and a full change of identity is a design pass, most of it redoing
+// the contrast measurements. The one-file promise is the palette's, and it is
+// only true while every colour and every typeface in the repository lives in
+// tokens.css. Intent alone does not keep it true:
 // the first time somebody needs a slightly different grey at 6pm, a hex literal
 // lands in a component and nobody notices for a month. A failing test notices
 // immediately. Spec §4.2: "Intent decays; a failing test does not."
@@ -253,8 +257,9 @@ export function formatViolations(violations: readonly Violation[]): string {
     `${violations.length} styling token violation(s).`,
     '',
     'src/styles/tokens.css is the only file allowed to contain a colour literal',
-    'or a typeface name. This keeps a later change of visual identity a one-file',
-    'change — see docs/superpowers/specs/2026-08-21-phase-1-slice-1-design.md §4.',
+    'or a typeface name. This is what keeps a later change of palette a one-file',
+    'change, and keeps a change of typeface to that file plus the font files —',
+    'see docs/superpowers/specs/2026-08-21-phase-1-slice-1-design.md §4.1.',
     '',
     ...lines,
   ].join('\n')

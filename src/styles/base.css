@@ -16,7 +16,11 @@
 }
 
 html {
-  /* Anchors and skip links land clear of any sticky header. */
+  /* Room above whatever the browser scrolls to, so it does not land flush
+     against the top edge. Today the only thing that triggers it is tabbing to a
+     control below the fold. It is pre-emptive for the rest: there is no anchor,
+     no skip link and no sticky header anywhere in this app, and if one arrives
+     this is already set correctly rather than being noticed later. */
   scroll-padding-top: var(--space-6);
 }
 
