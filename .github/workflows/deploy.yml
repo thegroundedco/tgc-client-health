@@ -15,7 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # The gate. Before this job existed, deploy.yml and test.yml both triggered on
+  # push to main and ran CONCURRENTLY, with no dependency between them — so a
+  # commit that broke the suite still shipped, and the red X on the test run
+  # arrived alongside a green deploy. Running the tests inside this workflow, as
+  # a job the build depends on, is what makes "the tests passed" a precondition
+  # of publishing rather than a coincidence.
+  #
+  # Deliberately duplicated with test.yml rather than chained to it via
+  # `workflow_run`. workflow_run is indirect (it fires on a *completed* run of
+  # another workflow, and needs its conclusion checked by hand), and this
+  # repository is maintained by one person with AI help: a duplicated three-line
+  # job that reads top to bottom is worth more than a clever trigger nobody can
+  # debug at the time it matters. test.yml still covers pull requests.
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +37,30 @@ jobs:
           node-version: lts/*
           cache: npm
       - run: npm ci
+      # Excludes rls.test.ts, which needs live project credentials and cannot
+      # run in a credential-less CI environment by design. See the README.
+      - run: npx vitest run --exclude '**/rls.test.ts'
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      # `npm run build` is `tsc -b && vite build`, so this is the type check too.
+      #
+      # A WARNING that belongs next to these secrets. vite build only INLINES
+      # import.meta.env.* — it never reads the values — so a missing or
+      # misspelled secret here cannot fail this step. It produces a green run, a
+      # successful deploy, and a page that throws on load. src/main.tsx catches
+      # that throw and writes the missing setting's name onto the page; see
+      # src/lib/startupError.ts. If the deployed page says a required setting is
+      # missing, the fix is here (or in Settings → Secrets and variables →
+      # Actions), not in the code.
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

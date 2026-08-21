@@ -1,5 +1,10 @@
 name: test
 
+# Runs on pull requests and on pushes to main. This workflow does NOT gate the
+# deploy: deploy.yml runs its own copy of the test job and depends on it, so a
+# red suite cannot ship even though these two workflows are independent. See the
+# comment on the `test` job in deploy.yml for why it is duplicated rather than
+# chained.
 on:
   push:
     branches: [main]
