@@ -113,16 +113,24 @@ in the code.
 ### What a silent grep looks like
 
 Checking whether a deploy had picked up its secrets once meant fetching the shipped
-JavaScript bundle into a shell variable and piping it to grep. The bundle is one
-~193 KB line, so grep treated it as binary and printed nothing at all. Nothing found
-reads exactly like "the secrets did not deploy" — which was false; they had deployed
-fine.
+JavaScript bundle into a shell variable and grepping it for an expected value. The
+grep produced no output, and no output was read as "the secrets did not deploy" —
+which was false; they had deployed correctly.
 
-The rule: write the response to a file and grep the file. Never pipe a large
-single-line response through a shell variable into grep. More generally, and this
-is the project's governing lesson: **a check that fails silently is the same bug as
-a save that succeeds silently.** Both report success by producing nothing, and both
-are invisible to the person relying on them.
+**The mechanism was never pinned down, and it is not guessed at here.** The bundle
+involved no longer exists to inspect, and re-checking the same shape of check against
+the current build's bundle does not reproduce a silent grep. So the interesting
+failure here is not grep's behaviour — it is the reasoning: silence was read as a
+negative result with no way to tell "found nothing because nothing is wrong" apart
+from "found nothing because the check itself stopped working."
+
+The rule, and it does not depend on ever knowing the mechanism: write the response
+to a file, grep the file, **and assert a positive expected count.** A check that can
+only ever produce silence-or-a-match can never tell those two cases apart, so make
+it require finding something specific and fail loudly when it does not. More
+generally, and this is the project's governing lesson: **a check that fails silently
+is the same bug as a save that succeeds silently.** Both report success by producing
+nothing, and both are invisible to the person relying on them.
 
 ## Configuration that is not in this repository
 
