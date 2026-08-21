@@ -33,11 +33,13 @@
   color: var(--text-secondary);
 }
 
-/* The confirmation after a link is sent. A left rule rather than a filled
-   panel: it reads as a continuation of the same page, not a new screen. */
+/* The confirmation after a link is sent. A left rule, not a health signal: this
+   screen is a confirmation, not a client's status, so the rule borrows the
+   purely decorative brand token rather than a band token whose meaning it does
+   not carry. */
 .sent {
   padding-left: var(--space-4);
-  border-left: 3px solid var(--band-healthy);
+  border-left: 3px solid var(--accent-quiet);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
