@@ -35,9 +35,21 @@ const ALL_BANDS: Record<Band, true> = {
 // survived. That is a false pass, and it is the same failure this test exists
 // to catch, one level up: nothing else in the suite would notice either. The
 // class names here are a closed, known set (no CSS-selector metacharacters),
-// so a hyphen-safe regex with a negative lookahead for a following identifier
-// character or hyphen is enough to require a real word boundary after the
-// name, without needing a full CSS parser.
+// so a hyphen-safe regex is enough, without needing a full CSS parser. The
+// negative lookahead asserts precisely that the character immediately after
+// the class name is neither an identifier character nor a hyphen. That is
+// stricter than a regex word boundary (`\b`): a hyphen is already a
+// non-word character, so `\b` would treat the transition from "band" into
+// "--healthy" as a boundary and accept it anyway, which is exactly the false
+// pass this check exists to rule out. Excluding the hyphen explicitly, not
+// merely requiring a non-identifier character, is what actually stops
+// `.band--healthy` from satisfying a check for `.band`.
+//
+// One limitation this leaves unguarded: the check searches the text of
+// base.css, not its parsed rules, so a class name appearing only inside a
+// CSS comment would satisfy it even though no rule declared that class. That
+// does not happen today — base.css has no such comment — and a comment
+// creates no styling, but the check as written cannot tell the two apart.
 function definesClass(css: string, className: string): boolean {
   const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(`\\.${escaped}(?![\\w-])`).test(css)

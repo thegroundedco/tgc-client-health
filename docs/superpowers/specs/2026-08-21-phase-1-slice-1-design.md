@@ -118,9 +118,13 @@ Three reasons, in order of weight:
 3. It is the exact mechanism a licensed Field Gothic will need, so that swap becomes replacing a
    file rather than rewiring the app.
 
-**Known risk, to be discovered at step 2 rather than step 4:** if the build environment cannot
-fetch the font binary, the fallback is Josh downloading it or linking the Google Fonts CDN. The
-fallback is worse but not blocking.
+**Measured at step 2, 2026-08-21, locally — not a risk any longer.** The file is 90096 bytes,
+sha256 `4c98b9d490d1698ec95f2ff17a6c7d0e72691864c0c5d7bc2a2c161b45afe5ad`, first four bytes `wOF2`.
+`vite build` emits it under `/tgc-client-health/assets/` with a content hash in the filename, and
+both `font-weight: 100 900` and `font-stretch: 62% 125%` survive the build unchanged — which is
+what makes five type widths reachable from one file. Confirmed by building locally and inspecting
+`dist/`; the deployed-site figures (URL served, HTTP status, byte count on the wire, date) are
+appended below once the deploy in this step has run.
 
 ### 4.4 Type roles
 

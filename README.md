@@ -110,6 +110,20 @@ published page says a required setting is missing, fix the secret above and
 re-run the **deploy** workflow from the Actions tab — there is nothing to change
 in the code.
 
+### What a silent grep looks like
+
+Checking whether a deploy had picked up its secrets once meant fetching the shipped
+JavaScript bundle into a shell variable and piping it to grep. The bundle is one
+~193 KB line, so grep treated it as binary and printed nothing at all. Nothing found
+reads exactly like "the secrets did not deploy" — which was false; they had deployed
+fine.
+
+The rule: write the response to a file and grep the file. Never pipe a large
+single-line response through a shell variable into grep. More generally, and this
+is the project's governing lesson: **a check that fails silently is the same bug as
+a save that succeeds silently.** Both report success by producing nothing, and both
+are invisible to the person relying on them.
+
 ## Configuration that is not in this repository
 
 Everything in this section is Supabase or GitHub project configuration. There is
