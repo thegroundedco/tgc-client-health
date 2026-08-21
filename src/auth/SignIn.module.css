@@ -1,0 +1,44 @@
+/* The front door. A narrow centred column, because the screen has exactly one
+   job and nothing to put beside the form. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  max-width: 27rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+  gap: var(--space-6);
+}
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.label {
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+/* The confirmation after a link is sent. A left rule rather than a filled
+   panel: it reads as a continuation of the same page, not a new screen. */
+.sent {
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--band-healthy);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

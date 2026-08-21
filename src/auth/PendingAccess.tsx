@@ -1,3 +1,5 @@
+import styles from './PendingAccess.module.css'
+
 type Props = {
   email: string
   onSignOut: () => void
@@ -5,15 +7,20 @@ type Props = {
 
 export function PendingAccess({ email, onSignOut }: Props) {
   return (
-    <main>
-      <h1>Access pending</h1>
-      <p>
+    <main className={styles.screen}>
+      <div>
+        <p className="t-eyebrow">Client Health</p>
+        <h1 className="t-header">Access pending</h1>
+      </div>
+      <p className="t-body prose">
         You are signed in as {email}, but your account has not been activated yet.
         An administrator needs to grant you access.
       </p>
-      <button type="button" onClick={onSignOut}>
-        Sign out
-      </button>
+      <div className={styles.actions}>
+        <button className="button button--quiet" type="button" onClick={onSignOut}>
+          Sign out
+        </button>
+      </div>
     </main>
   )
 }

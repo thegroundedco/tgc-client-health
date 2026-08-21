@@ -1,0 +1,19 @@
+/* Not an error, and it must not look like one. Someone signed in correctly and
+   is waiting on a human. So: the same calm column as the sign-in screen, an
+   explanation in prose, and a quiet way out. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+  gap: var(--space-5);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+}

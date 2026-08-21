@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import styles from './SignIn.module.css'
 
 export function SignIn() {
   const [email, setEmail] = useState('')
@@ -23,30 +24,44 @@ export function SignIn() {
 
   if (state === 'sent') {
     return (
-      <main>
-        <h1>Check your email</h1>
-        <p>We sent a sign-in link to {email}. Open it on this device.</p>
+      <main className={styles.screen}>
+        <div className={styles.sent}>
+          <h1 className="t-header">Check your email</h1>
+          <p className="t-body prose">
+            We sent a sign-in link to {email}. Open it on this device.
+          </p>
+        </div>
       </main>
     )
   }
 
   return (
-    <main>
-      <h1>TGC Client Health</h1>
-      <form onSubmit={submit}>
-        <label htmlFor="email">Work email</label>
+    <main className={styles.screen}>
+      <div className={styles.masthead}>
+        <p className="t-eyebrow">The Grounded Company</p>
+        <h1 className="t-display">Client Health</h1>
+      </div>
+      <form className={styles.form} onSubmit={submit}>
+        <label className={styles.label} htmlFor="email">
+          Work email
+        </label>
         <input
           id="email"
+          className="field"
           type="email"
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <button type="submit" disabled={state === 'sending'}>
+        <button className="button" type="submit" disabled={state === 'sending'}>
           {state === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
         </button>
       </form>
-      {state === 'error' && <p role="alert">Could not send the link: {message}</p>}
+      {state === 'error' && (
+        <p className="alert prose" role="alert">
+          Could not send the link: {message}
+        </p>
+      )}
     </main>
   )
 }
