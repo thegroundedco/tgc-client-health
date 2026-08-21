@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { readSupabaseConfig } from './env'
+import type { Database } from '../types/database'
 
 const config = readSupabaseConfig(
   import.meta.env as unknown as Record<string, string | undefined>,
@@ -7,7 +8,12 @@ const config = readSupabaseConfig(
 
 // One client for the whole app. Multiple instances race each other over the
 // stored session and cause spurious sign-outs.
-export const supabase = createClient(config.url, config.publishableKey, {
+//
+// The <Database> generic is required, not decorative: without it,
+// ReturnType<typeof createClient> resolves the generics to their defaults and
+// erases every row type — .select() rows become `never` and
+// .update({ role }) arguments become unassignable.
+export const supabase = createClient<Database>(config.url, config.publishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
