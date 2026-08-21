@@ -138,7 +138,8 @@ Recorded here so a reviewer reads them as decisions rather than finding them as 
 **Interfaces:**
 - Consumes: `PILLARS`, `Pillar` from `src/lib/score.ts` (already exist).
 - Produces:
-  - `MAX_PILLAR_SCORE: 5`, `SCORE_VALUES: readonly [1,2,3,4,5]`, `MAX_TOTAL: number` and `scoredCount(pillars: Partial<Record<Pillar, number | null>>): number` from `src/lib/score.ts`.
+  - `MAX_PILLAR_SCORE: number` (value 5), `SCORE_VALUES: readonly number[]` (value `[1,2,3,4,5]`), `MAX_TOTAL: number` (value 25) and `scoredCount(pillars: Partial<Record<Pillar, number | null>>): number` from `src/lib/score.ts`. `SCORE_VALUES` is `readonly number[]` and not a tuple, because it is built with `Array.from` from `MAX_PILLAR_SCORE` rather than written out — deriving it is worth more than the tuple type, since a tuple would have to be hand-edited to stay in step.
+  - The test file needs `Pillar` on its import from `./score`, for the cast in step 1.
   - `PillarDefinition`, `PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition>`, `ANCHOR_VALUES: readonly [1,3,5]` from `src/lib/pillars.ts`.
 
 - [ ] **Step 1: Write the failing tests for the score additions**
@@ -176,7 +177,14 @@ describe('the scoring vocabulary', () => {
     // The form's state is built from PILLARS, but a draft restored from
     // localStorage is arbitrary JSON. A stray key must not inflate the count
     // and make an incomplete check-in look submittable.
-    const strayKey = { relationship: 1, nonsense: 5 } as Record<string, number>
+    //
+    // Cast through `unknown` deliberately: the point of the test is to hand
+    // scoredCount a shape the type system would refuse, which is exactly what
+    // JSON.parse produces at runtime. If a narrower cast compiles, use it --
+    // but do not change the assertion to fit the type.
+    const strayKey = { relationship: 1, nonsense: 5 } as unknown as Partial<
+      Record<Pillar, number>
+    >
     expect(scoredCount(strayKey)).toBe(1)
   })
 })
@@ -550,21 +558,31 @@ describe('saveReducer', () => {
     }
   })
 
-  it('leaves no click without a visible consequence', () => {
+  it('never leaves a press with nothing to show for it', () => {
     // Spec §5.6: "No transition leaves the screen unchanged after a click."
-    // The two events a person can cause are `edited` and `submitted`. From
-    // every state those are reachable from, each must produce a different
-    // state -- otherwise a click does nothing and the screen says nothing,
-    // which is the exact defect this slice exists to fix.
-    const clickable: readonly SaveEvent[] = [{ type: 'edited' }, { type: 'submitted' }]
+    // Pressing the one control is a `submitted`, and it must move the state
+    // from every state it can be pressed in -- otherwise the press does
+    // nothing and the screen says nothing, which is the exact defect this
+    // slice exists to fix.
     for (const state of [CLEAN, DIRTY, SAVED, FAILED]) {
-      for (const event of clickable) {
-        expect(
-          saveReducer(state, event),
-          `${state.kind} + ${event.type} left the screen unchanged`,
-        ).not.toEqual(state)
-      }
+      expect(
+        saveReducer(state, { type: 'submitted' }),
+        `${state.kind} + submitted left the save state unchanged`,
+      ).not.toEqual(state)
     }
+  })
+
+  it('an edit always leaves the form unsaved, whether or not that is a change', () => {
+    // The weaker half of the property above, stated honestly rather than
+    // folded into it. `edited` moves clean, saved and failed to dirty -- a
+    // visible change. From `dirty` it returns `dirty`, which is the SAME
+    // state, and that is correct: the visible change was the pillar the
+    // person just clicked, not the save state. Asserting `.not.toEqual` here
+    // would be asserting something false about the reducer.
+    for (const state of [CLEAN, SAVED, FAILED]) {
+      expect(saveReducer(state, { type: 'edited' })).toEqual({ kind: 'dirty' })
+    }
+    expect(saveReducer(DIRTY, { type: 'edited' })).toEqual(DIRTY)
   })
 })
 
@@ -870,7 +888,7 @@ git commit -m "feat(checkin): the save path as a pure reducer, and its two month
 - Create: `src/checkin/draftCache.test.ts`
 
 **Interfaces:**
-- Consumes: `PILLARS`, `Pillar`, `MAX_PILLAR_SCORE`, `scoredCount` from `src/lib/score.ts`.
+- Consumes: `PILLARS`, `Pillar` and `MAX_PILLAR_SCORE` from `src/lib/score.ts` — and nothing else from it. In particular **not** `scoredCount`: `isDraftEmpty` counts the object's own keys rather than the pillars, because a draft with a stray key is still not empty. `npm run lint` fails on an unused import, so do not add one to match a longer list.
 - Produces:
   - `PillarScores = Partial<Record<Pillar, number>>`
   - `Draft = { pillars: PillarScores; notes: string }`
@@ -1465,11 +1483,17 @@ Read `src/styles/tokens.css` before writing this, and use only semantic tokens. 
   border: 0;
 }
 
+/* --space-7 is 3rem, so the tappable box is 48px. Sized for a thumb on
+   purpose: this is the control the owner presses fifty-five times a month
+   (eleven clients, five pillars), sometimes on a phone, and 48px clears the
+   44px minimum that --space-6 at 32px would not. Five of them plus their gaps
+   overflow the narrowest phones, which is what the flex-wrap on .scale is
+   for -- wrapping to two rows is the intended behaviour there, not a defect. */
 .face {
   display: grid;
   place-items: center;
-  width: var(--space-6);
-  height: var(--space-6);
+  min-width: var(--space-7);
+  height: var(--space-7);
   border: 1px solid var(--rule-hairline);
   border-radius: var(--radius-md);
   background: var(--surface-page);
