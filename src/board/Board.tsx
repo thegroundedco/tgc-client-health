@@ -1,162 +1,78 @@
-import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
-import { describeError } from '../lib/errorText'
-import { BAND_LABELS, MAX_TOTAL, PILLARS, bandFor } from '../lib/score'
-import type { Pillar } from '../lib/score'
+import { useState } from 'react'
 import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
-import styles from './Board.module.css'
-import { bandClassName } from '../styles/bandClass'
 import { CheckIn } from '../checkin/CheckIn'
-
-type ClientRow = { id: number; name: string }
-type CheckinRow = { client_id: number; total_score: number | null }
+import { ClientCard } from './ClientCard'
+import { progressLine } from './cardSummary'
+import { useBoard } from './useBoard'
+import type { BoardClient } from './useBoard'
+import styles from './Board.module.css'
 
 type Props = { profile: Profile }
 
+// The board reads and navigates. It no longer writes anything at all: `Score all
+// 3s` is gone, and the only write in the application is the check-in screen's
+// upsert. That button wrote a fixed value, so it was a guaranteed no-op whenever
+// the data already matched -- a control that could not tell success from having
+// done nothing, which is the second half of the finding this slice exists to
+// fix. The first half was that a save gave no feedback; each card's footer is
+// now that feedback, and it survives a reload, which a toast would not.
 export function Board({ profile }: Props) {
-  const [clients, setClients] = useState<ClientRow[] | null>(null)
-  const [checkins, setCheckins] = useState<CheckinRow[]>([])
-  // Two error states, not one. A failed read means the board has nothing to
-  // show; a failed write means the board is fine and one action did not land.
-  // Reporting the second as "cannot reach the database" is the exact kind of
-  // lie that made v1 impossible to diagnose.
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
   const period = currentPeriod()
-  // §5.1: state-based navigation, in the board container. No router, therefore no
-  // URL change, therefore a refresh returns here. A linkable check-in URL needs
-  // the GitHub Pages 404.html redirect trick, which is not worth buying until
-  // somebody wants to send a colleague a link to one check-in.
-  const [selected, setSelected] = useState<ClientRow | null>(null)
 
-  const load = useCallback(async () => {
-    // postgrest-js resolves fetch failures into `error` rather than rejecting,
-    // so the catch below is defensive. It is here because the failure it guards
-    // is invisible: an unhandled rejection leaves `clients` null forever and the
-    // user staring at "Loading…" with nothing to act on. Surfacing it turns a
-    // dead screen into an error with a Try again button.
-    try {
-      const clientResult = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('status', 'active')
-        .order('name')
+  // §5.1: state-based navigation, in the board container. No router, therefore
+  // no URL change, therefore a refresh returns here. A linkable check-in URL
+  // needs the GitHub Pages 404.html redirect trick, which is not worth buying
+  // until somebody wants to send a colleague a link to one check-in.
+  const [selected, setSelected] = useState<BoardClient | null>(null)
 
-      if (clientResult.error) {
-        // describeError, not `.error.message`: an empty message is falsy, and
-        // `if (loadError)` below would miss it and fall through to the eternal
-        // "Loading…". See src/lib/errorText.ts.
-        setLoadError(describeError(clientResult.error))
-        return
-      }
-
-      const checkinResult = await supabase
-        .from('checkins')
-        .select('client_id, total_score')
-        .eq('period', period)
-
-      if (checkinResult.error) {
-        setLoadError(describeError(checkinResult.error))
-        return
-      }
-
-      // Never write after a failed read. Both succeeded, so this is safe.
-      setLoadError(null)
-      setClients(clientResult.data)
-      setCheckins(checkinResult.data)
-    } catch (thrown) {
-      setLoadError(describeError(thrown))
-    }
-    // useCallback, not a plain function: the effect below depends on it, and an
-    // identity that changed every render would refetch on every render. `period`
-    // is a plain string, so the dependency is stable across renders.
-  }, [period])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  async function scoreAllThrees(clientId: number) {
-    setSaving(true)
-    setSaveError(null)
-    // Built from PILLARS rather than written out, so adding a pillar to the
-    // spec cannot leave this half-updated. The assertion is what gives the
-    // result a precise type; Object.fromEntries only knows it has string keys.
-    const pillars = Object.fromEntries(
-      PILLARS.map((pillar) => [pillar, 3]),
-    ) as Record<Pillar, number>
-
-    // finally, not a plain call after the await: if the upsert ever rejects,
-    // `saving` would latch true, every button would stay disabled for good, and
-    // nothing on screen would say why. Defensive for the same reason as load().
-    try {
-      const { error } = await supabase.from('checkins').upsert(
-        {
-          client_id: clientId,
-          period,
-          ...pillars,
-          submitted_by: profile.id,
-          submitted_at: new Date().toISOString(),
-        },
-        { onConflict: 'client_id,period' },
-      )
-
-      if (error) {
-        setSaveError(`Could not save: ${describeError(error)}`)
-        return
-      }
-      await load()
-    } catch (thrown) {
-      setSaveError(`Could not save: ${describeError(thrown)}`)
-    } finally {
-      setSaving(false)
-    }
-  }
+  const board = useBoard(period)
 
   if (selected) {
     return (
       <CheckIn
         client={selected}
-        period={period}
-        profile={profile}
         onBack={() => {
           setSelected(null)
-          // Re-read on the way back, so a check-in that was just saved shows its
-          // new total on the card. Without this the board would show the number
-          // it read before the save, which is the same picture as a save that
-          // did nothing -- the exact defect this slice exists to fix, moved one
-          // screen along.
-          void load()
+          // Re-read on the way back, so a check-in that was just saved shows
+          // its new total and footer on the card. Without this the board would
+          // show what it read before the save, which is the same picture as a
+          // save that did nothing.
+          board.reload()
         }}
+        period={period}
+        profile={profile}
       />
     )
   }
 
-  if (loadError) {
+  // Error before loading: a failed read must never fall through to a screen
+  // that looks merely empty. That is v1's "a broken tool looks like an empty
+  // one", and it is the reason useBoard reports a status rather than just a
+  // list.
+  if (board.status === 'error') {
     return (
       <section className={styles.state}>
         <h2 className="t-header">Cannot reach the database</h2>
         <p className="alert prose" role="alert">
-          {loadError}
+          {board.loadError}
         </p>
-        <button className="button" type="button" onClick={() => void load()}>
+        <button className="button" type="button" onClick={board.reload}>
           Try again
         </button>
       </section>
     )
   }
 
-  if (clients === null) return <p className="t-body">Loading…</p>
+  if (board.status === 'loading') return <p className="t-body">Loading…</p>
 
-  if (clients.length === 0) {
+  if (board.clients.length === 0) {
     return (
       <section className={styles.state}>
-        <h2 className="t-header">No active clients yet</h2>
-        <p className="t-body prose">
-          Add one in the Supabase dashboard to see it here.
-        </p>
+        {/* The same sentence progressLine gives the populated board, so the two
+            empty states cannot drift apart in wording. */}
+        <h2 className="t-header">{progressLine(0, 0)}</h2>
+        <p className="t-body prose">Add one in the Supabase dashboard to see it here.</p>
       </section>
     )
   }
@@ -165,62 +81,30 @@ export function Board({ profile }: Props) {
     <section className={styles.board}>
       <div className={styles.periodBar}>
         <h2 className="t-header">{formatPeriod(period)}</h2>
-      </div>
-      {saveError && (
-        <p className="alert prose" role="alert">
-          {saveError}
+        {/* §6's progress line. role="status" because this number changes on the
+            way back from a check-in -- the one moment somebody wants to hear
+            that their submission counted. */}
+        <p className="t-caption" role="status">
+          {progressLine(board.submitted, board.clients.length)}
         </p>
-      )}
+      </div>
+
       {/* role="list" because base.css removes the markers globally, and WebKit
           drops a list's semantics when its markers are removed — so in Safari
           with VoiceOver this would otherwise announce as a group of paragraphs
-          with no count and no position. The role puts the semantics back. */}
-      <ul className={styles.grid} role="list">
-        {clients.map((client) => {
-          const checkin = checkins.find((row) => row.client_id === client.id)
-          const total = checkin?.total_score ?? null
-          const band = bandFor(total)
-          return (
-            <li className={styles.card} key={client.id}>
-              <div className={styles.cardHead}>
-                <h3 className="t-body">
-                  <button
-                    className={styles.cardOpen}
-                    type="button"
-                    onClick={() => setSelected(client)}
-                  >
-                    {client.name}
-                  </button>
-                </h3>
-                {/* The band always carries its text label. Colour is never the
-                    only signal: teal against warm red measures 1.76:1, so any
-                    two bands are indistinguishable to a colour-blind viewer.
-                    Parent spec §9.3. */}
-                <span className={bandClassName(band)}>{BAND_LABELS[band]}</span>
-              </div>
-              <p className={styles.score}>
-                {/* An incomplete check-in shows an em dash, never a number.
-                    Parent spec §6.2: incomplete must not read as "at risk". */}
-                <span className={`t-display ${styles.scoreValue} numeric`}>
-                  {total === null ? '—' : total}
-                </span>
-                <span className="t-caption">
-                  {total === null ? 'not scored' : `of ${MAX_TOTAL}`}
-                </span>
-              </p>
-              <div className={styles.cardFoot}>
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void scoreAllThrees(client.id)}
-                >
-                  Score all 3s
-                </button>
-              </div>
-            </li>
-          )
-        })}
+          with no count and no position. The role puts the semantics back. The
+          label is what lets a test address this list, and what tells a screen
+          reader which list it is. */}
+      <ul aria-label="Clients" className={styles.grid} role="list">
+        {board.clients.map((client) => (
+          <ClientCard
+            checkin={board.checkins.get(client.id) ?? null}
+            client={client}
+            key={client.id}
+            onOpen={() => setSelected(client)}
+            viewerId={profile.id}
+          />
+        ))}
       </ul>
     </section>
   )

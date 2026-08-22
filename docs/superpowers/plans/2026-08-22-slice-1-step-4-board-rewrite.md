@@ -796,7 +796,7 @@ git commit -m "feat(board): the client card, with per-pillar bars and a footer t
 - Consumes: `useBoard` (Task 2), `ClientCard` (Task 3), `progressLine` (Task 1).
 - Produces: nothing later tasks rely on. This is the last task in the step.
 
-- [ ] **Step 1: Rewrite the test file first**
+- [x] **Step 1: Rewrite the test file first**
 
 Replace `src/board/Board.test.tsx` entirely. The four `it.skip` entries from Ruling 13 become
 real tests: `useBoard` is mockable, so the loaded grid is now reachable.
@@ -907,13 +907,13 @@ describe('the board', () => {
 })
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx vitest run src/board/Board.test.tsx`
 Expected: FAIL on most tests — `Score all 3s` still renders, there is no progress line, and
 `useBoard` is not consumed yet.
 
-- [ ] **Step 3: Rewrite Board.tsx**
+- [x] **Step 3: Rewrite Board.tsx**
 
 Delete, in `src/board/Board.tsx`:
 - `scoreAllThrees` entirely, and the `Score all 3s` button.
@@ -991,7 +991,7 @@ grep -oE 'styles\.[a-zA-Z]+' src/board/Board.tsx | sort -u   # every class still
 Every declared class must appear in the used list. A CSS module that declares a class nothing
 references is dead code the build will not complain about.
 
-- [ ] **Step 4: Run everything**
+- [x] **Step 4: Run everything**
 
 ```bash
 npx vitest run src/board/Board.test.tsx    # expect PASS, 7 tests
@@ -1003,7 +1003,7 @@ npm run lint
 **The skipped count must now be 0.** Ruling 13's four are gone — replaced, not deleted-and-
 forgotten. If any still says `it.skip`, that is a failure of this task.
 
-- [ ] **Step 5: Prove the board no longer writes**
+- [x] **Step 5: Prove the board no longer writes**
 
 ```bash
 grep -rn 'upsert\|\.insert(\|\.update(\|\.delete(' src/board/
@@ -1013,14 +1013,14 @@ Expected: **no matches.** Every write now goes through the check-in screen. Repo
 and its output; a grep that finds nothing must be shown to be capable of finding something —
 run it against `src/checkin/` as a positive control and report that count too.
 
-- [ ] **Step 6: Answer the question this slice exists for, out loud**
+- [x] **Step 6: Answer the question this slice exists for, out loud**
 
 Write in the report, in your own words: **would a person know their check-in worked?** Name the
 element on the board that tells them, and what it says in each of the three states — not
 started, draft, submitted. If the honest answer is "only if they remember what it said before",
 say that.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/board/Board.tsx src/board/Board.module.css src/board/Board.test.tsx

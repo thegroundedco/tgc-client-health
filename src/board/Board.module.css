@@ -1,5 +1,8 @@
-/* Cards on a responsive grid. auto-fill with a minimum, so eleven clients lay
-   out sensibly on a laptop and on a wide monitor without a breakpoint. */
+/* The board's own layout only. Everything that belongs to one card moved to
+   ClientCard.module.css when the card became a component -- except two rules
+   that were deleted rather than moved: .cardFoot, which existed to lift
+   `Score all 3s` above the click overlay and went with the button, and
+   .scoreValue, which is now the .t-score role in base.css. */
 
 .board {
   display: flex;
@@ -7,6 +10,8 @@
   gap: var(--space-5);
 }
 
+/* The month and the progress line share a baseline, and wrap onto two lines on
+   a narrow screen rather than shrinking. */
 .periodBar {
   display: flex;
   flex-wrap: wrap;
@@ -14,107 +19,20 @@
   gap: var(--space-3);
 }
 
+/* Cards on a responsive grid. auto-fill with a minimum, so eleven clients lay
+   out sensibly on a laptop and on a wide monitor without a breakpoint. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: var(--space-4);
 }
 
-/* The hairline is the card's edge, not the fill: --surface-raised measures
-   1.05:1 against the page. Removing this border makes the card disappear. */
-.card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--rule-hairline);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-}
-
-.cardHead {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.score {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-/* The display role is applied from the JSX; only what is genuinely local to a
-   card stays here — one size step below the display size, and set flush because
-   it is a single line of digits.
-   There is no .scoreOf beside this any more: it declared .t-caption's width,
-   weight, size and colour and only ever differed by leaving the role's
-   letter-spacing off, so the JSX names the role directly instead. */
-.scoreValue {
-  font-size: var(--step-3);
-  line-height: var(--leading-numeric);
-}
-
-/* Score all 3s has to stay clickable through the overlay. Positioned elements
-   paint in document order, and .cardFoot comes after .cardHead, so this is
-   enough -- no z-index needed. Deleted with the button in step 4. */
-.cardFoot {
-  position: relative;
-  display: flex;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--rule-hairline);
-}
-
+/* The loading, error and empty-roster screens: one column, left-aligned, held
+   to a readable measure. */
 .state {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-4);
   max-width: var(--measure-prose);
-}
-
-/* The whole card is the click target, and it is one real button rather than a
-   handler on the <li>: one thing in the tab order, one thing announced, and
-   Enter and Space work without a keydown handler. The overlay below is what
-   widens the hit area from the client name to the card; the button itself stays
-   in normal flow, so nothing above it moves. */
-.cardOpen {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: start;
-  cursor: pointer;
-  /* Buttons do not inherit type, so the body role is named here rather than
-     relying on the .t-body class on the <h3> around it. Face and width
-     together, as everywhere. */
-  font-family: var(--face-body);
-  font-stretch: var(--wdth-body);
-  font-weight: var(--wght-body);
-  font-size: var(--step-0);
-}
-
-.cardOpen::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-md);
-}
-
-.card:hover {
-  border-color: var(--text-secondary);
-}
-
-/* The ring is moved to the overlay because the overlay is the click target: a
-   ring around the client name would point at a few characters when the whole
-   card is what responds. Removing the outline from the button is only safe
-   because the rule below replaces it -- do not delete one without the other. */
-.cardOpen:focus-visible {
-  outline: none;
-}
-
-.cardOpen:focus-visible::after {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
