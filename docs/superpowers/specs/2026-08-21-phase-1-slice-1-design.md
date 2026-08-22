@@ -396,3 +396,17 @@ the user nothing. The fix is procedural, so it lives in the plan where it cannot
    Phase 2 collapses from two tables and four capabilities into a pasted export and a read-only
    column — roughly one session instead of three. Not a decision for today; the single largest
    lever on the finish date.
+
+7. **§6's card footer cannot name who submitted a check-in, because of a policy
+   we chose deliberately.** `profiles_select_own` restricts `profiles` SELECT to
+   `(select auth.uid()) = id`, so embedding the author's email on a check-in
+   somebody else submitted returns null — measured against the migration
+   2026-08-21, not observed on a running query. Step 3's check-in screen works
+   around it by saying "by you" or "by another account manager", which is honest
+   but is not what §6 specifies for the board.
+
+   Fix, when step 4 needs it: a second select policy letting any active user
+   read every profile's `email` and `full_name`. That is a real widening — it
+   makes the staff list readable by every active account manager — so it belongs
+   with Slice 2's permissions work rather than being slipped in as a step 4
+   detail. Until then the board footer names a time and not a person.

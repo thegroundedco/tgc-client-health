@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:privileges": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql",
+    "verify:score": "node scripts/score-parity.mjs && npm run db:which && npx --yes supabase@latest db query --linked -f scripts/.score-parity.generated.sql",
     "db:which": "node scripts/db-which.mjs",
     "db:push": "npm run db:which && npx --yes supabase@latest db push --linked"
   },

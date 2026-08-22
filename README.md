@@ -204,6 +204,27 @@ which is the intended behaviour, not a fault.
 This path depends on `service_role` (and the table owner) keeping full access to
 the three tables — see Security notes.
 
+### Activating a profile on staging
+
+Staging needs the same treatment, and it has its own wrinkle: its profile row
+does not exist until somebody signs in against staging itself, at
+`http://localhost:5173` with `.env.local` pointing at it. Once that is done:
+
+```bash
+npm run db:which        # must print tgc-client-health-staging
+npx --yes supabase@latest db query --linked -f scripts/activate-staging-profile.sql
+```
+
+The script raises if it matched no row, and lists the addresses it did find —
+because an `update` with a `where` clause that matches nothing succeeds
+silently, and "nobody has signed in yet" would otherwise be indistinguishable
+from "done". The address it looks for is a literal at the top of the file; the
+Supabase account is registered on an alias, so if the exception names a
+different address, that is the one to use.
+
+Until this is run, staging has no active profile and none of its policies are
+exercised by anything.
+
 ### Seeding the first client
 
 There is **no client-creation UI in Slice 0.** The only write the application
@@ -466,6 +487,34 @@ live-project rights, and this is a public repository — storing a credential th
 can read and alter the live database in CI is a bigger risk than the guard is
 worth, especially with `pull_request` triggers in play. Run it yourself, by hand,
 before every deploy that touches a migration.
+
+### `npm run verify:score`
+
+Proves the total on screen and the total in the database are the same number.
+Generates every one of the 7,776 pillar combinations (1–5 and unscored, five
+pillars), computes each expected total with the real `totalScore()` from
+`src/lib/score.ts`, then reads the **live** `total_score` expression out of
+Postgres's catalogue and evaluates it against all of them. Any disagreement
+raises an exception naming the chunk.
+
+Nothing is inserted and no sequence advances: the expression is evaluated over
+a `VALUES` list, not over rows in a table. Unlike `verify:privileges` it needs
+no data in the database — an empty `checkins` table is fine, because only the
+column's definition is read.
+
+The generated file is written fresh on every run and is gitignored, so a stale
+file from an earlier `score.ts` can never be the thing that passes. `db:which`
+runs between the generate and the query, and it now **exits non-zero** on
+production, so the `&&` chain is a real gate rather than a printed warning.
+
+`tests/generatedColumn.test.ts` is the cheap half of this and runs in
+`npm test`. It pins the migration's expression as text, so drift is caught in
+CI — it does **not** prove Postgres and JavaScript agree. Only the command
+above does that, and only against a database. `tests/scoreParity.test.ts` is
+the other half of the cheap side: it checks the generator itself covers all
+7,776 combinations exactly once with totals that plain addition agrees with,
+because the "all 7776 combinations agree" line the command prints is generated
+from the same list it describes.
 
 ## Security notes
 
