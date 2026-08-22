@@ -518,7 +518,7 @@ pseudo-element on the button is what covers the card, and that is what a browser
 An earlier draft of this plan had an extra overlay span — it would have been a second stacking
 context over the confirmed one.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/board/ClientCard.dom.test.tsx`:
 
@@ -618,12 +618,12 @@ describe('a client card', () => {
 })
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx vitest run src/board/ClientCard.dom.test.tsx`
 Expected: FAIL — `Failed to resolve import "./ClientCard"`.
 
-- [ ] **Step 3: Add the `.t-score` role, and prove the old override was order-dependent**
+- [x] **Step 3: Add the `.t-score` role, and prove the old override was order-dependent**
 
 Before writing the card, do the groundwork from Decision 4. First demonstrate the hazard is real
 rather than taking this plan's word for it:
@@ -641,7 +641,7 @@ Then add `.t-score` to `src/styles/base.css` exactly as Decision 4 spells it, be
 `.t-*` roles. Run `npm test` — `tests/tokens.test.ts` polices this file, and a `font-family`
 that is not a lone `var()` fails the build.
 
-- [ ] **Step 4: Write the card**
+- [x] **Step 4: Write the card**
 
 Create `src/board/ClientCard.tsx`. Copy the click-target markup out of the current
 `src/board/Board.tsx` (the `<button>` plus the absolutely-positioned overlay) rather than
@@ -755,7 +755,7 @@ after `.cardHead`** — it justifies a stacking order that existed for a button 
 Leaving it would be a comment that explains a mechanism no longer present, which is the exact
 defect class this project has logged eighteen times.
 
-- [ ] **Step 5: Run it and watch it pass**
+- [x] **Step 5: Run it and watch it pass**
 
 Run: `npx vitest run src/board/ClientCard.dom.test.tsx`
 Expected: PASS, 6 tests.
@@ -764,7 +764,7 @@ Then: `npm run build` — the inline `style` here uses a CSS property name in a 
 which is allowed; a camelCase JSX inline style object would fail `tests/tokens.test.ts`. If it
 fails, read the rule in `src/styles/tokenRules.ts` and satisfy it rather than weakening it.
 
-- [ ] **Step 6: Prove the tests can fail**
+- [x] **Step 6: Prove the tests can fail**
 
 One at a time, revert, and report the counts:
 
@@ -774,7 +774,7 @@ One at a time, revert, and report the counts:
 3. Drop the `aria-label` from the bars. Expect the third red.
 4. Map over `PILLARS.slice(0, 4)`. Expect the third red.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 npm run build && npm test && npm run lint

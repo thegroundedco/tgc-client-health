@@ -108,6 +108,26 @@ a {
   text-wrap: balance;
 }
 
+/* The card total. A role of its own rather than .t-display plus a local
+   font-size override, which is how this started life: those two selectors have
+   equal specificity, so the override only ever won because Board.module.css
+   happened to load after this file. Moving that rule into a component module --
+   which step 4 does -- reshuffles the order, and the number would have rendered
+   a quarter larger with every test still green. Measured 2026-08-22:
+   --step-4 is 2.4414rem, --step-3 is 1.9531rem.
+
+   Flush leading, because it is a single line of digits. Pair it with .numeric
+   in the markup; that utility is separate because plenty of numbers want
+   tabular figures without wanting this size. */
+.t-score {
+  font-family: var(--face-display);
+  font-stretch: var(--wdth-display);
+  font-weight: var(--wght-display);
+  font-size: var(--step-3);
+  line-height: var(--leading-numeric);
+  letter-spacing: var(--tracking-display);
+}
+
 .t-header {
   font-family: var(--face-header);
   font-stretch: var(--wdth-header);
