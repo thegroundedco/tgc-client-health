@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { ANCHOR_VALUES, PILLAR_DEFINITIONS } from '../lib/pillars'
 import { SCORE_VALUES } from '../lib/score'
 import type { Pillar } from '../lib/score'
@@ -30,7 +31,17 @@ export function PillarRow({ pillar, value, lastValue, disabled, onChange, onClea
   const firstRadio = useRef<HTMLInputElement>(null)
 
   function handleClear() {
-    onClear()
+    // flushSync, because the ORDER matters and the default order is wrong.
+    // onClear() only queues the parent's state update, so without this the
+    // focus() below runs while the cleared score is still checked in the DOM.
+    // Browsers anchor a radio group's tab order to its checked radio, so the
+    // group ends up anchored to a radio that is about to be unchecked, and the
+    // next Tab stops on the score that was just cleared before leaving the row
+    // -- reported by the owner, and confirmed by a test that reads which radios
+    // are checked at the instant focus arrives.
+    flushSync(() => {
+      onClear()
+    })
     firstRadio.current?.focus()
   }
 
