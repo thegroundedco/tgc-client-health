@@ -142,7 +142,7 @@ This task exists so that every sentence the board puts on screen is decided by a
 with a test, rather than by a ternary buried in JSX. Step 3's whole finding was a screen that
 said nothing; the countermeasure is that the words are the unit under test.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/board/cardSummary.test.ts`:
 
@@ -257,12 +257,12 @@ describe('progressLine', () => {
 })
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `npx vitest run src/board/cardSummary.test.ts`
 Expected: FAIL — `Failed to resolve import "./cardSummary"`.
 
-- [ ] **Step 3: Implement it**
+- [x] **Step 3: Implement it**
 
 Create `src/board/cardSummary.ts`:
 
@@ -309,12 +309,12 @@ export function progressLine(submitted: number, total: number): string {
 }
 ```
 
-- [ ] **Step 4: Run it and watch it pass**
+- [x] **Step 4: Run it and watch it pass**
 
 Run: `npx vitest run src/board/cardSummary.test.ts`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Prove the tests can fail**
+- [x] **Step 5: Prove the tests can fail**
 
 Make each of these changes one at a time, run the file, confirm red, then restore:
 
@@ -325,7 +325,7 @@ Make each of these changes one at a time, run the file, confirm red, then restor
 
 Report the counts. If any change leaves the file green, that test is worthless — say so.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 npm run build && npm test && npm run lint
