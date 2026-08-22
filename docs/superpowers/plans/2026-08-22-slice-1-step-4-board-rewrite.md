@@ -353,7 +353,26 @@ server rendering. With jsdom that specific reason is gone, but the hook is still
 it is what `useCheckin` does, it makes the loading and error states injectable, and it keeps
 `Board` a component about layout. **Do not skip this task and wire the queries inline.**
 
-- [ ] **Step 1: Write the hook**
+**Two corrections found while implementing this task — the plan's draft code below
+was wrong, and the file as committed differs. Read the committed file, not the draft.**
+
+1. **The draft's cancellation flag could not work.** It declared `let cancelled = false`
+   *inside* the async `load` and returned a cleanup function from it. An async function
+   returns a promise, so that cleanup is never invoked and the flag can never become
+   true — a guard that reads as protection and provides none, which is precisely what
+   `scripts/db-which.mjs` did before `d8552ea`. The committed version takes
+   `isCancelled: () => boolean` as a parameter and the effect owns the flag, which is
+   the shape `useCheckin` and `useProfile` already use.
+2. **`CHECKIN_COLUMNS` lives in `cardSummary.ts`, not here,** and is a literal rather
+   than built from `PILLARS`. A literal is what lets supabase-js type the row from the
+   generated database types — verified by naming a bogus column and watching `tsc`
+   report `SelectQueryError<"column 'no_such_column' does not exist on 'checkins'.">`,
+   and by reading an unselected column and watching that error too. So the committed
+   hook needs **no casts**, where the draft below used `as unknown as CardCheckin`. It
+   sits in `cardSummary.ts` beside the type it fills because this file imports the
+   Supabase client, and a test importing it would throw in CI.
+
+- [x] **Step 1: Write the hook**
 
 There is no unit test for this task. It is a hook over the network, and this repo has no
 Supabase test double; the live-credential suite uses the anonymous key and is refused before any
@@ -463,13 +482,13 @@ export function useBoard(period: string): UseBoard {
 }
 ```
 
-- [ ] **Step 2: Typecheck it**
+- [x] **Step 2: Typecheck it**
 
 Run: `npm run build`
 Expected: no `error TS`. `npm test` will not catch a type error here — the constraint at the top
 of this plan applies.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 npm run build && npm test && npm run lint
@@ -788,9 +807,19 @@ real tests: `useBoard` is mockable, so the loaded grid is now reachable.
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-// Mocking the hook, which is the whole reason Task 2 exists. Ruling 13 left
-// four tests permanently skipped because Board held its read in an inline
-// useState/useEffect pair with no seam to mock.
+// TWO mocks, and the second is not optional. Mocking the hook is the whole
+// reason Task 2 exists -- Ruling 13 left four tests permanently skipped because
+// Board held its read in an inline useState/useEffect pair with no seam.
+//
+// `../lib/supabase` must be mocked as well, even though the rewritten Board no
+// longer imports it: Board renders CheckIn, CheckIn uses useCheckin, and
+// useCheckin imports the client. The unmocked client calls readSupabaseConfig
+// at module scope, which THROWS when VITE_ config is absent -- and CI runs
+// `npx vitest run` with no VITE_ env at all (the env block in test.yml is on
+// the build step only). Without this line the whole file fails in CI while
+// passing locally off .env.local. The existing Board.test.tsx already documents
+// this; an earlier draft of this plan omitted it.
+vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
 
 import { Board } from './Board'

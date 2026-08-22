@@ -11,6 +11,25 @@ export type CardCheckin = {
   submitted_by: string | null
 } & Partial<Record<Pillar, number | null>>
 
+// The columns that produce a CardCheckin, spelled as one literal beside the
+// type rather than in useBoard, for two reasons. supabase-js infers the row
+// type from this string, so a literal is checked against the generated database
+// types and a mistyped column fails `npm run build` -- a computed string
+// degrades the row to untyped and the mistake surfaces at runtime as undefined.
+// And it lives here, not in useBoard, because useBoard imports the Supabase
+// client, which throws when VITE_ config is absent; CI runs vitest with no
+// config, so a test importing useBoard would fail there. This file imports
+// nothing but score and month, so the test beside it runs anywhere.
+//
+// The cost of a literal is that it can drift from PILLARS. cardSummary.test.ts
+// pins it: typing from the literal, drift caught by the test.
+//
+// The five pillars are here because the card draws a bar per pillar, not
+// because anything recomputes the total -- the total comes from the generated
+// column, which `npm run verify:score` proves agrees with totalScore().
+export const CHECKIN_COLUMNS =
+  'client_id, total_score, submitted_at, submitted_by, relationship, delivery, financial, sentiment, growth'
+
 // The footer IS the save confirmation -- §6. Better than a toast because it
 // survives a reload, which is the check the owner ran on v1 and got no answer
 // from. Every branch returns a non-empty sentence; the whole slice exists

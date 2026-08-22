@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cardFooter, progressLine } from './cardSummary'
+import { CHECKIN_COLUMNS, cardFooter, progressLine } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
 import { PILLARS } from '../lib/score'
 
@@ -89,6 +89,39 @@ describe('cardFooter', () => {
         }
       }
     }
+  })
+})
+
+describe('CHECKIN_COLUMNS', () => {
+  const columns = () => CHECKIN_COLUMNS.split(',').map((column) => column.trim())
+
+  // The column list is a literal so that supabase-js can type the row from it.
+  // The price of a literal is that it can drift from PILLARS -- a pillar added
+  // to the rubric would silently not be fetched, and its bar would render as
+  // unscored on every card with nothing failing. This is that price being paid.
+  it('names every pillar, so the card can draw a bar for each', () => {
+    for (const pillar of PILLARS) {
+      expect(columns(), `missing pillar: ${pillar}`).toContain(pillar)
+    }
+  })
+
+  it('names exactly the columns the card reads, in order', () => {
+    expect(columns()).toEqual([
+      'client_id',
+      'total_score',
+      'submitted_at',
+      'submitted_by',
+      ...PILLARS,
+    ])
+  })
+
+  // `notes` is the one column on this table with no length bound, and the board
+  // renders none of it -- eleven rows of unread free text on every load of the
+  // screen people open most. Not a security boundary: RLS is row-level, and
+  // what the browser role may read is set by the column grants in the
+  // migration, not by which columns this string happens to name.
+  it('does not fetch notes, which no card renders', () => {
+    expect(columns()).not.toContain('notes')
   })
 })
 
