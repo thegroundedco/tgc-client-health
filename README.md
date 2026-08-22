@@ -251,6 +251,53 @@ appears on reload. Then click **Score all 3s** on it: that writes the first
 check-in, which is what makes section 10's check-in assertions meaningful rather
 than trivially true against an empty table.
 
+### Seeding the real roster, and why it is not a committed file
+
+**This repository is public.** A seed migration, a `seed.sql`, or a test fixture
+holding the agency's client list would put those names somewhere searchable, and
+would leave them in git history permanently even if a later commit removed them.
+So the roster is split in two:
+
+- `clients.local.txt` — gitignored, one client per line, typed once. Never
+  committed, and `git check-ignore clients.local.txt` should always name a rule.
+- `scripts/seed-clients.mjs` — committed and reviewable, and contains no names.
+
+```bash
+node scripts/seed-clients.mjs      # -> scripts/.clients.generated.sql (gitignored)
+```
+
+Then paste the generated file into the Supabase dashboard → SQL Editor. It is
+**not** a CLI command on purpose: the roster belongs in production, and
+`npm run db:which` now exits non-zero on production, so every `&&` chain refuses
+it. The dashboard editor runs with administrative rights, which is what a seed
+needs and is also why RLS is not consulted.
+
+Format is `Name` or `Name | status`, with status defaulting to `active` and
+limited to the four the check constraint allows — `active`, `paused`,
+`cancelled`, `former`. There is **no `inactive`**: a client who leaves is
+`former`, and they keep their row so their check-in history survives them.
+
+**The generated SQL is safe to run twice**, which matters more than it sounds:
+`public.clients` has **no unique constraint on `name`**, so a plain `INSERT` run
+twice produces a duplicate of every client with no error at all. Each row is
+guarded by a `not exists` on the name instead, existing rows are left untouched
+(a client somebody paused does not get set back to active by a re-run), and the
+block raises — rolling the insert back — if the expected number of roster rows is
+not present afterwards. It ends with a `select`, because `NOTICE` output is easy
+to miss and "Success. No rows returned" looks identical to having done nothing.
+
+The generator refuses, rather than warns, on: an empty input, a duplicated name,
+a status outside the four, an empty name, and a control character (which is a
+data-quality guard, not an injection guard — a name pasted out of a spreadsheet
+can carry a tab that then sits invisibly inside it forever). `npm test` covers
+all of it with deliberately fake fixtures.
+
+**Two things this does not do.** It does not add the missing unique index on
+`clients.name` — that is a migration, and the clients admin screen in Slice 2 is
+where duplicate prevention belongs. And it does not remove the placeholder
+`Test Client`: `checkins.client_id` is `on delete cascade`, so deleting a client
+silently deletes its check-ins, and this project has no backups.
+
 ## Rebuilding this project from scratch
 
 Every piece below is documented in its own section. What is easy to get wrong is
