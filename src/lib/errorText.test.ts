@@ -42,6 +42,59 @@ describe('describeError', () => {
     expect(describeError({ code: '42501' })).not.toContain('[object Object]')
   })
 
+  // A dropped connection is the failure a person is most likely to meet, and it
+  // was arriving on screen as "Could not save: TypeError: Failed to fetch."
+  // The rest of that sentence does its job -- nothing is lost, retrying is free
+  // -- so leaking a JavaScript class name into it is the one thing wrong with
+  // the most important error message in the app. Observed by the owner on the
+  // deployed site 2026-08-21 with the wifi off.
+  describe('a failed connection', () => {
+    it('says the connection failed rather than naming a JavaScript type', () => {
+      // The exact shape the owner saw: supabase-js hands the stringified
+      // TypeError through as the message, prefix included.
+      expect(describeError({ message: 'TypeError: Failed to fetch' })).toBe(
+        'the connection failed',
+      )
+      // And the unwrapped form, which is what fetch itself throws.
+      expect(describeError(new TypeError('Failed to fetch'))).toBe('the connection failed')
+    })
+
+    it('recognises the wording of the other engines too', () => {
+      // Chrome and Edge say "Failed to fetch"; Firefox and Safari word it
+      // differently. Only Chrome's was observed here -- the other two are from
+      // the engines' documented messages, not measured on this project.
+      for (const message of [
+        'NetworkError when attempting to fetch resource.',
+        'Load failed',
+      ]) {
+        expect(describeError(new Error(message)), `message: ${message}`).toBe(
+          'the connection failed',
+        )
+      }
+    })
+
+    it('reads correctly in both sentences it appears in', () => {
+      // describeError feeds a bare load error as well as "Could not save: ...",
+      // so the phrase has to work with and without a prefix. Lowercase matches
+      // every other message this function returns, which are raw API strings
+      // like 'permission denied for table clients'.
+      expect(`Could not save: ${describeError(new TypeError('Failed to fetch'))}.`).toBe(
+        'Could not save: the connection failed.',
+      )
+    })
+
+    it('leaves an error that merely mentions the network alone', () => {
+      // Only the known failure shapes are replaced. A real server message has
+      // to survive verbatim, or a diagnosable fault becomes an unhelpful one.
+      expect(describeError(new Error('network policy denies this request'))).toBe(
+        'network policy denies this request',
+      )
+      expect(describeError(new Error('permission denied for table checkins'))).toBe(
+        'permission denied for table checkins',
+      )
+    })
+  })
+
   it('keeps a thrown string', () => {
     expect(describeError('boom')).toBe('boom')
   })

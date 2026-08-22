@@ -9,6 +9,7 @@ import {
 } from './saveState'
 import type { SaveState, SubmitBlock } from './saveState'
 import { PILLARS } from '../lib/score'
+import { describeError } from '../lib/errorText'
 
 const CLEAN: SaveState = { kind: 'clean' }
 const DIRTY: SaveState = { kind: 'dirty' }
@@ -393,6 +394,28 @@ describe('saveStatus', () => {
     })
     expect(draft[0].text).toMatch(/^Draft saved /)
     expect(draft[0].text).toContain(`4 of ${PILLARS.length} pillars scored`)
+  })
+
+  // The exact sentence the owner met on the deployed site with the wifi off,
+  // end to end: the thrown TypeError, through describeError, into the status
+  // line. It read "Could not save: TypeError: Failed to fetch." -- the
+  // reassurance was right and a JavaScript class name was in the middle of it.
+  // Pinned in full rather than by `toContain`, because what was wrong with it
+  // was a fragment that a `toContain` assertion would have sailed past.
+  it('reads as a whole sentence when the connection drops', () => {
+    const lines = saveStatus({
+      state: { kind: 'failed', error: describeError(new TypeError('Failed to fetch')) },
+      block: UNBLOCKED,
+      scored: 3,
+      storedUpdatedAt: null,
+    })
+    expect(lines).toHaveLength(1)
+    expect(lines[0].text).toBe(
+      'Could not save: the connection failed. Nothing was lost — everything you ' +
+        'entered is still on screen, and pressing Save draft again costs nothing.',
+    )
+    expect(lines[0].text).not.toMatch(/TypeError|Failed to fetch/)
+    expect(lines[0].tone).toBe('error')
   })
 
   it('keeps the failed message and the no-cost-to-retry reassurance', () => {

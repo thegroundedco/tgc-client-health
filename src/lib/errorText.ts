@@ -17,7 +17,41 @@
 // placeholder like '' or 'Error'.
 const UNKNOWN = 'Unknown error (the failure gave no message)'
 
+// What a browser says when a fetch never reached the server at all. Chrome and
+// Edge produce the first; Firefox the second; Safari the third. Only Chrome's
+// was observed on this project -- with the wifi off, on the deployed site,
+// 2026-08-21 -- and the other two come from those engines' documented wording
+// rather than from a measurement here.
+//
+// This is a small, closed list on purpose. Anything not on it survives
+// verbatim: a server that answers with a real complaint is diagnosable, and
+// replacing its words with a guess about connectivity would send someone to
+// check a connection that is fine.
+const NETWORK_FAILURE_MESSAGES = new Set([
+  'failed to fetch',
+  'networkerror when attempting to fetch resource.',
+  'load failed',
+])
+
+// Deliberately lowercase and without a full stop: this is embedded mid-sentence
+// as `Could not save: ${...}.` and also shown on its own, exactly like the raw
+// API messages beside it ('permission denied for table clients').
+const NETWORK_FAILURE = 'the connection failed'
+
+function asNetworkFailure(description: string): string {
+  // supabase-js hands the stringified TypeError through in places, so the
+  // message may arrive as 'TypeError: Failed to fetch' rather than bare.
+  const bare = description.replace(/^[A-Za-z]*Error:\s*/, '').trim().toLowerCase()
+  return NETWORK_FAILURE_MESSAGES.has(bare) ? NETWORK_FAILURE : description
+}
+
 export function describeError(thrown: unknown): string {
+  // One wrapper over one resolver: the network rewrite has to apply to every
+  // path out of rawDescription(), and UNKNOWN passing through it is a no-op.
+  return asNetworkFailure(rawDescription(thrown))
+}
+
+function rawDescription(thrown: unknown): string {
   // Covers Error, PostgrestError and AuthError alike: they are not all
   // `instanceof Error` (supabase-js hands back plain objects in places), but
   // they all carry a string `message`.
