@@ -277,7 +277,7 @@ space is 4 statuses × ended_on present or not × code present or not × note pr
 and evaluate it, so the thing under test is what is deployed rather than a copy of what was
 intended.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 Read `scripts/verify-privileges.sql`'s header and `scripts/score-parity.mjs`'s generated
 output first, for the house style: a `do $$` block, `raise exception` on failure listing
@@ -362,7 +362,7 @@ select conname, pg_get_constraintdef(oid) as definition
 this cannot evaluate, that is a fix round, not a failure of the task — report what it
 actually returned.
 
-- [ ] **Step 2: Wire it up**
+- [x] **Step 2: Wire it up**
 
 `package.json`, beside the other two verifiers:
 
@@ -373,7 +373,7 @@ actually returned.
 `db:which` first, and it now exits non-zero on production, so this cannot reach production
 without `ALLOW_PRODUCTION=1`.
 
-- [ ] **Step 3: Do NOT run it. Confirm the target instead**
+- [x] **Step 3: Do NOT run it. Confirm the target instead**
 
 ```bash
 npm run db:which
@@ -382,7 +382,7 @@ npm run db:which
 Expected: `tgc-client-health-staging`. That is the whole of what you run. `verify:lifecycle`
 itself is a database command and belongs to the owner.
 
-- [ ] **Step 4: Document all three in the README**
+- [x] **Step 4: Document all three in the README**
 
 Read the existing `### npm run verify:score` section and match it. Add:
 
@@ -393,7 +393,7 @@ Read the existing `### npm run verify:score` section and match it. Add:
 - one sentence in the two-projects section: the unique index can abort the migration if the
   target holds two names differing only in case.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 npm run build && npm test && npm run lint

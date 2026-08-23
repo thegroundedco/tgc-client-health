@@ -379,6 +379,17 @@ npx supabase@latest link --project-ref <ref>   # Supabase → Project Settings
 npm run db:which                               # confirm before doing anything
 ```
 
+**One migration can abort rather than apply.** The unique index on
+`lower(clients.name)` fails to create if the target already holds two names
+differing only in case. Check before applying it anywhere that matters:
+
+```sql
+select lower(name), count(*) from public.clients group by 1 having count(*) > 1;
+```
+
+Zero rows means it will apply. Rows mean the duplicates have to be resolved first
+— and an aborted migration is the correct outcome, not a fault.
+
 **There are no backups.** The free plan includes no automated backups and no
 point-in-time recovery. `supabase db dump` is not available here either — it
 requires Docker, which is absent, and it writes a **zero-byte file** on failure
@@ -410,6 +421,28 @@ next run. One known inaccuracy to be aware of rather than patch:
   attempt to write it with `428C9 cannot insert a non-DEFAULT value into column
   "total_score"`. Never include it in an `insert` or `upsert` payload; write the
   five pillar columns and read the total back.
+
+### The client lifecycle columns, and the constraint that governs them
+
+`clients` carries `ended_on`, `end_reason_code` and `end_reason_note` alongside
+`status`. `clients_lifecycle_coherent` makes them coherent in **both**
+directions:
+
+- `status` in (`cancelled`, `former`) — `ended_on` and `end_reason_code` are
+  **required**. The churn date cannot be skipped.
+- `status` in (`active`, `paused`) — all three are **required to be null**. An
+  active client carrying an end date is not a state anybody meant to create.
+
+The second half has a consequence worth knowing before you write SQL by hand:
+**reactivating a churned client must clear all three columns in the same
+statement**, or the constraint refuses the update.
+
+`end_reason_code` is one of `price`, `scope_fit`, `in_housed`, `went_quiet`,
+`project_completed`, `agency_initiated`, `other` — a fixed list so reasons are
+countable across clients, with the note carrying the nuance a code cannot.
+
+There is also a unique index on `lower(name)`, because "Colorfil" and "colorfil"
+are the same client. It does not and cannot catch `C.R. Plastics` against `CRP`.
 
 ### Standing convention: every new table starts closed
 
@@ -562,6 +595,36 @@ the other half of the cheap side: it checks the generator itself covers all
 7,776 combinations exactly once with totals that plain addition agrees with,
 because the "all 7776 combinations agree" line the command prints is generated
 from the same list it describes.
+
+### `npm run verify:lifecycle`
+
+Proves the **deployed** `clients_lifecycle_coherent` constraint permits exactly
+what it is meant to, over its whole input space: four statuses × an end date
+present or not × a reason code present or not × a note present or not = **32
+combinations**. It reads the live expression out of `pg_constraint` and evaluates
+it over a `VALUES` list, so what is tested is what is deployed rather than a copy
+of what was intended — the same technique `verify:score` uses on the generated
+column.
+
+Nothing is inserted and no sequence advances. It asserts the combination count as
+well as the result, so "0 disagreements" cannot read as success when the reason is
+that nothing was compared.
+
+Only **6 of the 32** combinations are legal, and that is the intent worth
+checking by eye rather than by test: `active` and `paused` require all three
+lifecycle columns to be null; `cancelled` and `former` require both `ended_on`
+and `end_reason_code`, with `end_reason_note` optional.
+
+It distinguishes two failures, like `verify:privileges`. **`COULD NOT VERIFY`**
+means the constraints are not on the table — normally that the migration has not
+been applied to this project — and is not a finding. **`FAILED`** means the
+deployed expression disagrees with its stated intent, and prints the expression.
+Both exit non-zero.
+
+`tests/clientLifecycle.test.ts` is the cheap half and runs in `npm test`. It pins
+the migration's constraint text, the seven reason codes (membership **and**
+count), and the unique index — so drift is caught in CI. It does **not** prove
+Postgres enforces any of it.
 
 ## Security notes
 
