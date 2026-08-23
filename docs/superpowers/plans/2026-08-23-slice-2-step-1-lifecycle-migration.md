@@ -64,7 +64,7 @@ about to run a database command, that is the error.
 columns existing and on `src/types/database.ts` being regenerated — which is the owner's
 action, recorded in the handoff at the end of this plan.
 
-- [ ] **Step 1: Create the migration file with the CLI, so the timestamp is right**
+- [x] **Step 1: Create the migration file with the CLI, so the timestamp is right**
 
 ```bash
 npx --yes supabase@latest migration new add_client_lifecycle
@@ -74,7 +74,7 @@ This writes an empty timestamped file under `supabase/migrations/` and touches n
 database — `migration new` is local file creation only. Report the filename it generated;
 do not invent a timestamp by hand, because the ordering of migrations is the filename.
 
-- [ ] **Step 2: Write the migration**
+- [x] **Step 2: Write the migration**
 
 Read `supabase/migrations/20260821021840_create_clients_and_checkins.sql` first — the
 `clients` table, its existing `status` check constraint, and the comment style. This
@@ -143,7 +143,7 @@ alter table public.clients add constraint clients_end_reason_code_known check (
 create unique index clients_name_unique on public.clients (lower(name));
 ```
 
-- [ ] **Step 3: Write the drift guard, and run it**
+- [x] **Step 3: Write the drift guard, and run it**
 
 Create `tests/clientLifecycle.test.ts`. This is the cheap half: it pins the migration's
 text so an edit has to change this file too. **It does not prove Postgres enforces
@@ -232,7 +232,7 @@ describe('the client lifecycle migration', () => {
 
 Run: `npx vitest run tests/clientLifecycle.test.ts` — expected PASS, 5 tests.
 
-- [ ] **Step 4: Prove each assertion can fail**
+- [x] **Step 4: Prove each assertion can fail**
 
 One at a time, restore after each, and report the red count for each:
 
@@ -245,7 +245,7 @@ One at a time, restore after each, and report the red count for each:
 
 Then confirm `git diff supabase/` is empty before continuing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 npm run build && npm test && npm run lint
