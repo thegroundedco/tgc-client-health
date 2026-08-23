@@ -105,6 +105,33 @@ describe('a client card', () => {
     expect(labels[4]).toMatch(/^Growth/)
   })
 
+  // The owner's finding on the deployed board: the bars carried their mapping
+  // in an aria-label, so a screen reader knew which bar was which and a sighted
+  // reader got five anonymous columns. I had tested the label and never asked
+  // whether a person could see the mapping.
+  it('puts each pillar initial under its bar, in rubric order', () => {
+    render(<ClientCard checkin={null} client={CLIENT} onOpen={() => {}} viewerId={ME} />)
+
+    expect(screen.getAllByTestId('pillar-initial').map((node) => node.textContent)).toEqual([
+      'R',
+      'D',
+      'F',
+      'S',
+      'G',
+    ])
+  })
+
+  it('does not read the initial out on top of the bar label', () => {
+    render(<ClientCard checkin={null} client={CLIENT} onOpen={() => {}} viewerId={ME} />)
+
+    // The letter is for the eye. The bar keeps role="img" with the full name, so
+    // a screen reader hears "Financial: not scored" and not "F" after it.
+    for (const initial of screen.getAllByTestId('pillar-initial')) {
+      expect(initial.getAttribute('aria-hidden')).toBe('true')
+    }
+    expect(bars()[2].getAttribute('aria-label')).toMatch(/^Financial:/)
+  })
+
   it('opens the check-in when the card is clicked', async () => {
     const onOpen = vi.fn()
     const user = userEvent.setup()

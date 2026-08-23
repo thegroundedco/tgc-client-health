@@ -56,26 +56,38 @@ export function ClientCard({ client, checkin, viewerId, onOpen }: Props) {
           so each carries role="img" and its label. The bar's height cannot be
           read aloud, which makes the label the content and the bar the
           decoration. An unscored pillar is a track with no fill; since scores
-          run 1 to 5, a zero-height fill unambiguously means unscored. */}
+          run 1 to 5, a zero-height fill unambiguously means unscored.
+
+          The initial under each bar exists because the first version had only
+          the aria-label: a screen reader knew which bar was which and a sighted
+          reader got five anonymous columns. It is aria-hidden, so the label
+          stays the single spoken description rather than gaining a stray letter
+          after it. */}
       <div className={styles.bars}>
         {PILLARS.map((pillar) => {
+          const definition = PILLAR_DEFINITIONS[pillar]
           const value = checkin?.[pillar] ?? null
           return (
             <span
               aria-label={
                 value === null
-                  ? `${PILLAR_DEFINITIONS[pillar].label}: not scored`
-                  : `${PILLAR_DEFINITIONS[pillar].label}: ${value} of ${MAX_PILLAR_SCORE}`
+                  ? `${definition.label}: not scored`
+                  : `${definition.label}: ${value} of ${MAX_PILLAR_SCORE}`
               }
-              className={styles.bar}
+              className={styles.pillar}
               data-testid="pillar-bar"
               key={pillar}
               role="img"
             >
-              <span
-                className={styles.fill}
-                style={{ blockSize: `${((value ?? 0) / MAX_PILLAR_SCORE) * 100}%` }}
-              />
+              <span className={styles.track}>
+                <span
+                  className={styles.fill}
+                  style={{ blockSize: `${((value ?? 0) / MAX_PILLAR_SCORE) * 100}%` }}
+                />
+              </span>
+              <span aria-hidden="true" className={styles.initial} data-testid="pillar-initial">
+                {definition.initial}
+              </span>
             </span>
           )
         })}

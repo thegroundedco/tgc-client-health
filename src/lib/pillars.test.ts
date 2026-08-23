@@ -19,6 +19,34 @@ describe('the pillar rubric', () => {
     }
   })
 
+  // The card draws five bars and, before this, gave a sighted reader no way to
+  // tell which bar was which pillar -- the aria-label carried the mapping and
+  // the eye got five anonymous columns. Found by the owner on the deployed
+  // board, which is the only place it was visible.
+  describe('the single-letter initials the card labels its bars with', () => {
+    it('gives every pillar one', () => {
+      for (const pillar of PILLARS) {
+        expect(PILLAR_DEFINITIONS[pillar].initial, pillar).toMatch(/^[A-Z]$/)
+      }
+    })
+
+    it('agrees with the label, so the letter is guessable', () => {
+      for (const pillar of PILLARS) {
+        const definition = PILLAR_DEFINITIONS[pillar]
+        expect(definition.initial, pillar).toBe(definition.label[0])
+      }
+    })
+
+    it('keeps all five distinct', () => {
+      // The reason this is written data rather than label[0]: two pillars
+      // sharing a first letter would silently label two bars the same, and a
+      // derivation would have no way to complain. Renaming a pillar to one that
+      // collides fails here instead.
+      const initials = PILLARS.map((pillar) => PILLAR_DEFINITIONS[pillar].initial)
+      expect(new Set(initials).size).toBe(PILLARS.length)
+    })
+  })
+
   it('anchors 1, 3 and 5 only', () => {
     // Two and four are deliberately unwritten: they read as "between these
     // two", which is how a five-point scale with three written anchors works.

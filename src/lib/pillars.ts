@@ -13,6 +13,12 @@ export type AnchorValue = 1 | 3 | 5
 
 export type PillarDefinition = {
   label: string
+  // The one letter the board's card puts under that pillar's bar. Written out
+  // rather than taken as label[0], because two pillars sharing a first letter
+  // would label two bars identically and a derivation could not complain --
+  // pillars.test.ts asserts all five stay distinct and that each still matches
+  // its label, so a rename that collides fails the build instead of shipping.
+  initial: string
   hint: string
   anchors: Record<AnchorValue, string>
 }
@@ -22,6 +28,7 @@ export const ANCHOR_VALUES: readonly AnchorValue[] = [1, 3, 5]
 export const PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition> = {
   relationship: {
     label: 'Relationship',
+    initial: 'R',
     hint: 'Reply speed, meeting attendance, engagement in reviews',
     anchors: {
       1: 'Slow or no replies; skips meetings without notice; disengaged in reviews.',
@@ -31,6 +38,7 @@ export const PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition> = {
   },
   delivery: {
     label: 'Delivery',
+    initial: 'D',
     hint: 'Revision cycles, approval turnaround, on-time rate',
     anchors: {
       1: 'Excessive revision cycles; slow approvals; frequently late.',
@@ -40,6 +48,7 @@ export const PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition> = {
   },
   financial: {
     label: 'Financial',
+    initial: 'F',
     hint: 'Payment timeliness, scope-to-budget balance',
     anchors: {
       1: 'Late or overdue payments; scope regularly exceeds budget without resolution.',
@@ -49,6 +58,7 @@ export const PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition> = {
   },
   sentiment: {
     label: 'Sentiment',
+    initial: 'S',
     hint: 'Tone in calls/email, unprompted feedback, advocacy',
     anchors: {
       1: 'Frustrated or critical tone; complaints; no positive feedback.',
@@ -58,6 +68,7 @@ export const PILLAR_DEFINITIONS: Record<Pillar, PillarDefinition> = {
   },
   growth: {
     label: 'Growth',
+    initial: 'G',
     hint: 'Are we achieving their goals? Scope/spend trend',
     anchors: {
       1: 'Goals not being met; scope or spend shrinking or at risk.',

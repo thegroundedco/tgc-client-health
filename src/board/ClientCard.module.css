@@ -30,28 +30,46 @@
   gap: var(--space-2);
 }
 
-/* Five equal tracks on one baseline. A fixed height rather than a proportional
-   one, so the same score is the same height on every card regardless of how
-   long the client's name wrapped. */
+/* Five equal columns, each a track with its pillar's initial beneath. */
 .bars {
   display: flex;
   align-items: flex-end;
   gap: var(--space-1);
-  block-size: var(--space-5);
 }
 
-/* The track. Its border is what makes an unscored pillar legible without
-   colour: an empty track still reads as a track, where a bare background at
+.pillar {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+/* The track. A fixed height rather than a proportional one, so the same score
+   is the same height on every card regardless of how long the client's name
+   wrapped. Its border is what makes an unscored pillar legible without colour:
+   an empty track still reads as a track, where a bare background at
    --surface-sunken would nearly vanish against the card. */
-.bar {
+.track {
   display: flex;
   align-items: flex-end;
-  flex: 1;
-  block-size: 100%;
+  block-size: var(--space-5);
   overflow: hidden;
   border: 1px solid var(--rule-hairline);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
+}
+
+/* One letter per bar, for the eye only -- the bar's aria-label is what is
+   spoken, so this is aria-hidden in the markup. Centred under its own track,
+   which is what ties the letter to the bar above it rather than to a neighbour. */
+.initial {
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  line-height: 1;
+  text-align: center;
+  color: var(--text-secondary);
 }
 
 /* Ink rather than a band colour, deliberately. The band chip beside it already
