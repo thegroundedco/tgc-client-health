@@ -72,10 +72,13 @@ begin
   -- the rows in a column are NULL and a VALUES list whose types are guessed is
   -- one edit away from guessing differently.
   --
-  -- `expected` uses %s, not %L. %L would quote the boolean as 'true', the column
-  -- would come out text, and `(expression) is distinct from v.expected` would
-  -- fail with "operator does not exist: boolean = text". Caught before the first
-  -- run, by reading the format string rather than by running it.
+  -- `expected` is %L::boolean, and BOTH simpler spellings are wrong -- measured
+  -- on staging 2026-08-24, not reasoned about. A bare %L quotes it as 'true',
+  -- the column comes out text, and the comparison fails with "operator does not
+  -- exist: boolean = text". A bare %s renders Postgres's own boolean output,
+  -- which is `t` -- and an unquoted t is parsed as a COLUMN REFERENCE, so the
+  -- query dies with `42703: column "t" does not exist`. %L gives the quoted 't'
+  -- and the cast makes it a boolean again.
   ----------------------------------------------------------------------------
   execute format($fmt$
     select
@@ -87,7 +90,7 @@ begin
   $fmt$,
     expression,
     (select string_agg(
-       format('(%L::text, %L::date, %L::text, %L::text, %s)',
+       format('(%L::text, %L::date, %L::text, %L::text, %L::boolean)',
               s.status, e.ended_on, c.code, n.note,
               case
                 when s.status in ('cancelled', 'former')
