@@ -1,0 +1,72 @@
+/* The clients admin screen: a form and a list, on one screen, no modal.
+   Every colour and every face comes from a token -- src/styles/tokens.css is
+   the only file in the tree allowed to name either. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* --measure-prose, matching the check-in screen and App.module.css's
+     .centred, rather than --measure-column, which is sized for the
+     single-field sign-in form. This screen carries a form and a list. */
+  max-width: var(--measure-prose);
+}
+
+.nav {
+  display: flex;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.rowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Not the global .band chip: that one carries a health band, and a status is a
+   different fact. Sharing the class would make a future change to one of them
+   silently change the other. */
+.statusPill {
+  display: inline-flex;
+  /* align-self, because this pill sits in flex containers: display:inline-flex
+     governs the pill's inside, not how it is sized as a flex ITEM, and a
+     default align-items:stretch would pull it across the row. Recorded on
+     .band in base.css after the owner found exactly that on the deployed page. */
+  align-self: flex-start;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-band);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* A churned client, marked as well as labelled. The word is still there; this
+   only makes the row scannable. */
+.statusPillEnded {
+  background: var(--brand-blush);
+  color: var(--text-primary);
+}
