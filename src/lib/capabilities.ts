@@ -54,9 +54,11 @@ export const ROLES = Object.keys(ROLE_CAPABILITIES) as readonly Role[]
 // today -- so the parameter is `string` rather than `Role`. That is deliberate,
 // and it changed in Slice 2 step 4: `Profile['role']` is `string`
 // (src/types/database.ts), so a `Role` parameter meant the only real caller,
-// the clients admin screen, could not pass the value it actually holds without
-// an assertion at the call site. An assertion there would have moved the lie
-// closer to the screen instead of removing it. An unexpected string must answer
+// src/board/Board.tsx -- which is where the clients admin link is drawn, and
+// the only place in the application that calls this function at all -- could
+// not pass the value it actually holds without an assertion at the call site.
+// An assertion there would have moved the lie closer to the screen instead of
+// removing it. An unexpected string must answer
 // "no" rather than throw on `undefined.includes`, because a throw inside a
 // render is how this project's screens go blank.
 export function can(role: string, capability: Capability): boolean {

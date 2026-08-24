@@ -230,10 +230,17 @@ export function updatePayload(draft: ClientDraft) {
   }
 }
 
-// The four things this table can refuse, translated. Every branch ends with the
-// same promise, because the screen deliberately keeps the form populated after a
-// failure: the person is then looking at values that are NOT in the database,
-// and a message that does not say so is Slice 1's defect wearing a new mask.
+// Four of the things this table can refuse, translated -- not all of them, and
+// the difference matters. Anything not matched below reaches the person raw,
+// including two known cases: an UPDATE that matched no row (see
+// UPDATE_MATCHED_NOTHING_TEXT, which is why useClients handles that outcome
+// before it ever gets here) and a foreign-key violation on owner_id, which
+// arrives as `clients_owner_id_fkey` and would be shown verbatim.
+//
+// Every branch ends with the same promise, because the screen deliberately keeps
+// the form populated after a failure: the person is then looking at values that
+// are NOT in the database, and a message that does not say so is Slice 1's
+// defect wearing a new mask.
 export function writeFailureText(message: string, name: string): string {
   const tail = ' Nothing was changed, and pressing save again costs nothing.'
 
@@ -258,6 +265,35 @@ export function writeFailureText(message: string, name: string): string {
 
   return `${message}.${tail}`
 }
+
+// The two refusals that never arrive as a Postgres error, so writeFailureText
+// above never sees either of them. They live here rather than in useClients.ts
+// for the same reason every other sentence on this screen does: what the screen
+// SAYS is a decision, and decisions are testable without a browser.
+
+// A second save pressed inside one round trip. The old code returned silently:
+// no request, no message, nothing at all. A control that does nothing is its own
+// defect, and the silence was also what let the first write's confirmation land
+// beside the second row. This one is safe to retry, and says so, because the
+// condition clears itself the moment the first write lands.
+export const CONCURRENT_SAVE_TEXT =
+  'Another save is still finishing, so this change was not sent. Nothing was changed. Try again in a moment.'
+
+// An UPDATE that matched no row. clients_update_manage_clients is
+// `using (...) with check (...)`, and when the caller lacks manage_clients the
+// USING clause filters the row out rather than raising: zero rows updated, no
+// error, and .single() then answers PGRST116 ("JSON object requested, multiple
+// (or no) rows returned"), which is not a sentence to put in front of an account
+// manager. The INSERT path is different -- WITH CHECK does raise, and the
+// 'row-level security' branch above catches it.
+//
+// Deliberately no invitation to retry. Every retry will be refused identically,
+// so "pressing save again costs nothing" would be sending somebody to press a
+// button that cannot ever succeed. The reachable route is an admin deactivating
+// or demoting an account while its holder has this screen open: useProfile holds
+// the profile from mount, so the UI never notices.
+export const UPDATE_MATCHED_NOTHING_TEXT =
+  'That change was not applied, and nothing was changed. The database matched no client to update, which is what happens when the account signed in here is no longer allowed to change clients. Ask an admin.'
 
 export type WriteState =
   | { kind: 'idle' }

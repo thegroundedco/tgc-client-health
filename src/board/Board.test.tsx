@@ -36,6 +36,7 @@ vi.mock('../clients/useClients', () => ({
     owners: [],
     addState: { kind: 'idle' },
     editState: { kind: 'idle' },
+    editStateFor: null,
     reload: vi.fn(),
     addClient: vi.fn(),
     saveClient: vi.fn(),
@@ -235,7 +236,11 @@ describe('reaching the clients admin', () => {
   })
 
   it('opens the screen, and comes back', async () => {
-    vi.mocked(useBoard).mockReturnValue(READY)
+    // A fresh spy rather than READY's own: READY is built once for this whole
+    // describe, and vi.mocked(useBoard).mockReset() in afterEach does not clear
+    // the calls recorded on a function inside it.
+    const reload = vi.fn()
+    vi.mocked(useBoard).mockReturnValue({ ...READY, reload })
     render(<Board profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
@@ -244,6 +249,13 @@ describe('reaching the clients admin', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Board' }))
     expect(screen.queryByRole('heading', { name: 'Client admin' })).toBeNull()
     expect(screen.getByRole('list', { name: 'Clients' })).toBeTruthy()
+
+    // The board re-reads on the way back, which is the whole reason onBack does
+    // more than flip a boolean: without it an account manager renames a client,
+    // returns here, sees the old name, and cannot tell a working rename from a
+    // failed one. Deleting board.reload() from Board.tsx left all 413 tests
+    // green until this line existed.
+    expect(reload).toHaveBeenCalled()
   })
 
   it('offers the link when the board is empty, which is when it is needed most', () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CLIENT_STATUSES,
   END_REASON_CODES,
@@ -37,7 +37,7 @@ const TONE_CLASS = {
 // in JSX."
 export function EditClientForm({ client, owners, state, onSave, onCancel, onEdited }: Props) {
   // Correct today because of the per-row mount, not this key: this component
-  // renders only inside the `editing.id === client.id` branch of one <li>, so
+  // renders only inside the `editing?.id === client.id` branch of one <li>, so
   // opening a different row unmounts this instance and mounts a fresh one no
   // matter what key it carries. The key stays anyway -- cheap belt-and-braces
   // against a future refactor that hoists a single form out of the list, which
@@ -57,6 +57,26 @@ export function EditClientForm({ client, owners, state, onSave, onCancel, onEdit
     setDraft(next)
     if (state.kind !== 'idle') onEdited()
   }
+
+  // Re-read from the row on a CONFIRMED save, never on the press -- the same
+  // shape, and the same reason, as AddClientForm clearing its field only on
+  // confirmation. Holding the draft across a save is right for a rename; it was
+  // wrong after a reactivation, which nulls all three lifecycle columns in the
+  // database while the draft still held the old end date and reason. Selecting
+  // `former` again in the same still-open form revealed those destroyed values
+  // and saving wrote them back as if they were today's departure -- a false fact
+  // recorded in a database with no backups.
+  //
+  // Cannot fire on a failure: a failed save must keep the typed values, because
+  // that is the one moment somebody most wants to look at them, and this runs
+  // only for 'saved'. Cannot discard later typing either: a keystroke goes
+  // through edit(), which calls onEdited and moves the state off 'saved', so the
+  // dependency changes to something this branch ignores. `client` is a
+  // dependency because it is what is being read -- the hook replaces that row
+  // object in the same render the state becomes 'saved'.
+  useEffect(() => {
+    if (state.kind === 'saved') setDraft(draftFromRow(client))
+  }, [state, client])
 
   function submit() {
     if (problems.length > 0 || saving) return

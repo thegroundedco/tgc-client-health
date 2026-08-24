@@ -33,9 +33,21 @@ export function ClientsAdmin({ onBack }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const editing = admin.clients.find((client) => client.id === editingId) ?? null
 
+  // Disabled while either write is in flight, for the same reason both forms
+  // disable their own controls: leaving unmounts this screen, and the update
+  // then lands with nobody left to read its confirmation -- a write that worked
+  // looking exactly like one that did not. The two navigation controls, this and
+  // each row's Edit button, were the omission.
+  const writing = admin.editState.kind === 'saving' || admin.addState.kind === 'saving'
+
   const back = (
     <nav className={styles.nav}>
-      <button className="button button--quiet" type="button" onClick={onBack}>
+      <button
+        className="button button--quiet"
+        disabled={writing}
+        type="button"
+        onClick={onBack}
+      >
         Board
       </button>
     </nav>
@@ -156,12 +168,26 @@ export function ClientsAdmin({ onBack }: Props) {
                   onEdited={admin.resetEdit}
                   onSave={admin.saveClient}
                   owners={admin.owners}
-                  state={admin.editState}
+                  // Only when the state belongs to THIS row. There is one
+                  // editState for the whole screen and one form per row, so
+                  // passing it unconditionally put Acme's "Changes saved
+                  // <time>" beside Test Client's untouched fields the moment
+                  // the rows were swapped mid-flight. A confirmation is a claim
+                  // about a specific client, and a claim rendered beside a
+                  // different one is false -- the defect this feature exists to
+                  // eliminate, with the polarity reversed.
+                  state={admin.editStateFor === client.id ? admin.editState : { kind: 'idle' }}
                 />
               ) : (
                 <div className={styles.actions}>
                   <button
                     className="button button--quiet"
+                    // Not openable while an edit save is in flight. Two
+                    // ordinary clicks inside one network round trip -- Save
+                    // here, then Edit there -- swapped the form under a pending
+                    // write. EditClientForm already disabled its own Save and
+                    // Cancel; these were left out.
+                    disabled={admin.editState.kind === 'saving'}
                     onClick={() => {
                       setEditingId(client.id)
                       // A confirmation from the previous row must not appear

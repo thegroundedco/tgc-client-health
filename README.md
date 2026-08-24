@@ -687,9 +687,30 @@ owner, and gives a departing client an end date and a coded reason.
 The button is hidden from a viewer, and that is convenience rather than
 security. What actually stops a viewer changing a client is
 `clients_insert_manage_clients` and `clients_update_manage_clients` in Postgres.
-A viewer who reached the screen would see every save refused, and the screen
-says so in words rather than showing Postgres's `permission denied for table
-clients`.
+A viewer who reached the screen would have every write refused -- but the two
+policies refuse in **different ways**, and the screen says something different
+for each:
+
+- **Adding** is refused with a raised error. `WITH CHECK` fails, Postgres
+  answers `new row violates row-level security policy`, and the screen shows
+  "Your account is not allowed to change clients. Ask an admin." plus its usual
+  promise that nothing was changed and pressing save again costs nothing.
+- **Renaming, re-assigning and retiring** are refused by *filtering the row
+  away*. `clients_update_manage_clients` is `using (...) with check (...)`, so
+  the USING clause simply excludes the row: zero rows are updated and **no error
+  is raised at all**. The screen treats that as its own outcome -- "That change
+  was not applied, and nothing was changed. The database matched no client to
+  update, which is what happens when the account signed in here is no longer
+  allowed to change clients. Ask an admin." -- and deliberately does *not* invite
+  a retry, because every retry would be refused identically.
+
+Neither case shows Postgres's own words. The second is the one worth knowing
+about: before this was handled, an update refused this way surfaced PostgREST's
+`JSON object requested, multiple (or no) rows returned` with an invitation to
+try again. It does not need a viewer to reach the hidden button, either -- an
+admin deactivating or demoting an account while its holder has this screen open
+produces exactly the same refusal, because the browser holds the profile it read
+at sign-in.
 
 **There is no delete, and there will not be one.** `checkins.client_id` is
 `on delete cascade` and this project has no backups, so deleting a client would

@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import {
   CLIENT_COLUMNS,
+  CONCURRENT_SAVE_TEXT,
+  UPDATE_MATCHED_NOTHING_TEXT,
   insertPayload,
   ownerLabel,
   sortClients,
@@ -27,6 +29,11 @@ export type UseClients = {
   // same time and a confirmation for one must never appear beside the other.
   addState: WriteState
   editState: WriteState
+  // Which client editState is ABOUT. The edit form is per-row and this state is
+  // one per screen, so without the id a confirmation for one client could render
+  // beside another one's fields -- and did. addState needs no equivalent: there
+  // is only ever one add form.
+  editStateFor: number | null
   reload: () => void
   addClient: (draft: ClientDraft) => void
   saveClient: (id: number, draft: ClientDraft) => void
@@ -41,6 +48,7 @@ export function useClients(): UseClients {
   const [owners, setOwners] = useState<OwnerOption[]>([])
   const [addState, setAddState] = useState<WriteState>({ kind: 'idle' })
   const [editState, setEditState] = useState<WriteState>({ kind: 'idle' })
+  const [editStateFor, setEditStateFor] = useState<number | null>(null)
 
   // Read at the top of each write to refuse a second concurrent one. A state
   // update is not visible until the next render, so two presses in the same tick
@@ -175,9 +183,27 @@ export function useClients(): UseClients {
   }, [])
 
   const saveClient = useCallback((id: number, draft: ClientDraft) => {
-    if (editInFlight.current) return
+    // Every report of this write names the client it is about, in one place, so
+    // no branch below can set a state without attributing it. A confirmation is
+    // a claim about a specific client, and a claim rendered beside a different
+    // one is false: setting the state without the id is how "Changes saved"
+    // ended up under a row whose fields nobody had touched.
+    const report = (next: WriteState) => {
+      setEditStateFor(id)
+      setEditState(next)
+    }
+
+    if (editInFlight.current) {
+      // Speaks rather than vanishing. This used to be a bare `return`: no
+      // request, no message, and -- because the other row's Edit press had
+      // already reset the state to idle -- the button was enabled and the press
+      // looked accepted. The first write's confirmation then landed here, which
+      // is the screen confirming a write that never happened.
+      report({ kind: 'failed', message: CONCURRENT_SAVE_TEXT })
+      return
+    }
     editInFlight.current = true
-    setEditState({ kind: 'saving' })
+    report({ kind: 'saving' })
 
     void (async () => {
       try {
@@ -190,19 +216,34 @@ export function useClients(): UseClients {
           .update(updatePayload(draft))
           .eq('id', id)
           .select(CLIENT_COLUMNS)
-          .single()
+          // .maybeSingle(), not .single(), and this is not a style choice.
+          // clients_update_manage_clients is `using (...) with check (...)`: a
+          // caller without manage_clients has the row filtered out by USING, so
+          // zero rows are updated and NOTHING is raised. .single() turns that
+          // into PostgREST's PGRST116 -- "JSON object requested, multiple (or
+          // no) rows returned" -- which no branch of writeFailureText matches,
+          // so it reached the person verbatim with an invitation to try again.
+          .maybeSingle()
 
         if (error) {
-          setEditState({ kind: 'failed', message: writeFailureText(describeError(error), draft.name.trim()) })
+          report({ kind: 'failed', message: writeFailureText(describeError(error), draft.name.trim()) })
+          return
+        }
+
+        // No error and no row: the update matched nothing. Its own outcome, and
+        // deliberately not treated as a success -- the list must keep saying
+        // what the database holds, not what the form was hoping for.
+        if (data === null) {
+          report({ kind: 'failed', message: UPDATE_MATCHED_NOTHING_TEXT })
           return
         }
 
         setClients((current) =>
           sortClients(current.map((client) => (client.id === id ? data : client))),
         )
-        setEditState({ kind: 'saved', at: data.updated_at, what: 'Changes saved' })
+        report({ kind: 'saved', at: data.updated_at, what: 'Changes saved' })
       } catch (thrown) {
-        setEditState({ kind: 'failed', message: writeFailureText(describeError(thrown), draft.name.trim()) })
+        report({ kind: 'failed', message: writeFailureText(describeError(thrown), draft.name.trim()) })
       } finally {
         editInFlight.current = false
       }
@@ -220,6 +261,7 @@ export function useClients(): UseClients {
     owners,
     addState,
     editState,
+    editStateFor,
     reload: () => void load(),
     addClient,
     saveClient,

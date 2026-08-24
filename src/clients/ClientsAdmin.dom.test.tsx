@@ -55,6 +55,10 @@ function hook(overrides: Partial<UseClients> = {}): UseClients {
     reload: vi.fn(),
     addState: { kind: 'idle' },
     editState: { kind: 'idle' },
+    // Null, not 1: the default hook is saving nothing, so no row owns the edit
+    // write state. Every test that wants the edit form to SHOW a state has to
+    // name the row that state belongs to -- which is the point of the field.
+    editStateFor: null,
     addClient: vi.fn(),
     saveClient: vi.fn(),
     resetAdd: vi.fn(),
@@ -459,8 +463,12 @@ describe('the clients admin screen, editing', () => {
   })
 
   it('confirms a save, and names the time', async () => {
+    // editStateFor names the row the confirmation is about. Without it the
+    // screen deliberately renders nothing here -- see "never shows one row's
+    // confirmation beside another row's fields" below.
     await open('Acme', {
       editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+      editStateFor: ACME.id,
     })
 
     const line = screen.getByTestId('edit-status')
@@ -474,6 +482,7 @@ describe('the clients admin screen, editing', () => {
         kind: 'failed',
         message: 'Your account is not allowed to change clients. Ask an admin. Nothing was changed, and pressing save again costs nothing.',
       },
+      editStateFor: ACME.id,
     })
 
     expect(screen.getByLabelText('Client name')).toHaveProperty('value', 'Acme')
@@ -501,6 +510,7 @@ describe('the clients admin screen, editing', () => {
           kind: 'failed',
           message: 'Your account is not allowed to change clients. Ask an admin. Nothing was changed, and pressing save again costs nothing.',
         },
+        editStateFor: ACME.id,
       }),
     )
     rerender(<ClientsAdmin onBack={vi.fn()} />)
@@ -516,6 +526,7 @@ describe('the clients admin screen, editing', () => {
     const resetEdit = vi.fn()
     await open('Acme', {
       editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+      editStateFor: ACME.id,
       resetEdit,
     })
     // open() itself presses "Edit Acme", which also calls resetEdit -- cleared
@@ -527,18 +538,168 @@ describe('the clients admin screen, editing', () => {
     expect(resetEdit).toHaveBeenCalled()
   })
 
-  it('clears a stale confirmation from the previous row when another is opened', async () => {
-    // Spec's promise that a confirmation for one row never appears beside
-    // another. open() presses the Edit button, which is where this reset lives
-    // in ClientsAdmin -- this is the standing test for that press.
+  it("never shows one row's confirmation beside another row's fields", async () => {
+    // The two-row test that replaces "clears a stale confirmation from the
+    // previous row when another is opened". That one pressed ONE row's Edit
+    // button and asserted resetEdit had been called; it never opened a second
+    // row, so it passed on any code where that call existed -- including code
+    // where the confirmation for row 1 then landed beside row 2's fields.
+    //
+    // A confirmation is a claim about a specific client. Test Client's form is
+    // the one on screen; the write that finished belongs to Acme. The only
+    // honest thing to render beside Test Client is nothing at all.
     const resetEdit = vi.fn()
-    await open('Acme', { resetEdit })
-
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE], resetEdit }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
+    // The Edit press still clears the previous row's state -- the old test's
+    // one real assertion, kept. It is no longer the guarantee, though: the
+    // attribution below is.
     expect(resetEdit).toHaveBeenCalled()
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        clients: [ACME, GONE],
+        editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+        editStateFor: ACME.id,
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    expect(screen.getByRole('heading', { name: 'Editing Test Client' })).toBeTruthy()
+    const line = screen.getByTestId('edit-status')
+    expect(line.textContent).not.toContain('Changes saved')
+    expect(line.textContent).toContain('Ready to save.')
+  })
+
+  it("never shows a failure that names another client beside this row's fields", async () => {
+    // The same misattribution with the polarity reversed: Acme's save was
+    // refused, and the sentence naming Acme must not appear under Test Client's
+    // fields, where it reads as a refusal of a save nobody attempted.
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        clients: [ACME, GONE],
+        editState: {
+          kind: 'failed',
+          message: 'A client called "Acme" already exists. Nothing was changed, and pressing save again costs nothing.',
+        },
+        editStateFor: ACME.id,
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    expect(screen.getByTestId('edit-status').textContent).not.toContain('Acme')
+  })
+
+  it('will not open another row while an edit save is in flight', async () => {
+    // Path A of the misattribution, closed at the source. Two ordinary clicks
+    // inside one network round trip is all it took: Save on Acme, then Edit on
+    // Test Client. EditClientForm already disabled its own Save and Cancel
+    // while saving; the list's Edit buttons were the omission.
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({ clients: [ACME, GONE], editState: { kind: 'saving' }, editStateFor: ACME.id }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'Edit Test Client' })).toHaveProperty(
+      'disabled',
+      true,
+    )
+  })
+
+  it('never confirms a save beside a row that never sent one', async () => {
+    // Path B, the serious one, as a sequence of real presses: open Acme, save,
+    // and while that request is in flight press Edit on Test Client. Before the
+    // fix that press swapped the form (setEditingId plus resetEdit batch into
+    // one render), the hook's editInFlight ref then made Test Client's own Save
+    // return without sending anything or setting any state, and Acme's write
+    // resolving printed "Changes saved <time>" beside Test Client's untouched
+    // fields -- a confirmation of a write that never happened.
+    const saveClient = vi.fn()
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE], saveClient }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(saveClient.mock.calls[0][0]).toBe(ACME.id)
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({ clients: [ACME, GONE], saveClient, editState: { kind: 'saving' }, editStateFor: ACME.id }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        clients: [ACME, GONE],
+        saveClient,
+        editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+        editStateFor: ACME.id,
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    // The confirmation is Acme's, so Acme's form is the only place it may
+    // appear -- and Test Client's form must not have opened at all.
+    expect(screen.queryByRole('heading', { name: 'Editing Test Client' })).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Editing Acme' })).toBeTruthy()
+    expect(screen.getByTestId('edit-status').textContent).toContain('Changes saved')
+    // One press, one write: the second Save was never offered.
+    expect(saveClient).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer a destroyed end date back after a reactivation is confirmed', async () => {
+    // The form keeps its own draft across a confirmed save, which is right for
+    // a rename. It was wrong here: reactivate a former client, and the three
+    // lifecycle columns are nulled in the database while the draft still holds
+    // the old end date and reason. Re-selecting `former` in the same still-open
+    // form revealed them again and saving wrote them back as if they were
+    // today's departure -- a false fact recorded in a database with no backups.
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'active')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    // What the database now holds: reactivated, all three lifecycle columns
+    // null. Same id, so the form is not remounted by its key.
+    const REVIVED = client({ id: GONE.id, name: 'Test Client', status: 'active' })
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        clients: [ACME, REVIVED],
+        editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+        editStateFor: REVIVED.id,
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'former')
+
+    expect(screen.getByLabelText('End date')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Reason they left')).toHaveProperty('value', '')
+    expect(screen.getByLabelText('Note (optional)')).toHaveProperty('value', '')
   })
 
   it('disables every control while a save is in flight', async () => {
-    await open('Acme', { editState: { kind: 'saving' } })
+    // Two renders rather than open(): the row's own Edit button is now disabled
+    // while a save is in flight, so a screen mounted straight into 'saving' can
+    // no longer have a form opened on it. Same assertions, same intent -- the
+    // form's own controls are dead while its write is pending.
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({ clients: [ACME, GONE], editState: { kind: 'saving' }, editStateFor: ACME.id }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
 
     expect(screen.getByLabelText('Client name')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Status')).toHaveProperty('disabled', true)
@@ -553,5 +714,33 @@ describe('the clients admin screen, editing', () => {
 
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /remove/i })).toBeNull()
+  })
+})
+
+describe('the clients admin screen, leaving', () => {
+  const ACME = client({ id: 1, name: 'Acme' })
+
+  it('will not leave for the board while an edit save is in flight', async () => {
+    // Same root cause as the misattribution above, from the other side:
+    // pressing Save and then Board unmounts the screen while the update is
+    // still pending, so the write lands and its confirmation is never seen --
+    // which is exactly "a write that worked looks like one that did not".
+    const onBack = vi.fn()
+    mount({ clients: [ACME], editState: { kind: 'saving' }, editStateFor: ACME.id }, onBack)
+
+    const back = screen.getByRole('button', { name: 'Board' })
+    expect(back).toHaveProperty('disabled', true)
+    await userEvent.click(back)
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('will not leave for the board while an add is in flight', async () => {
+    const onBack = vi.fn()
+    mount({ clients: [ACME], addState: { kind: 'saving' } }, onBack)
+
+    const back = screen.getByRole('button', { name: 'Board' })
+    expect(back).toHaveProperty('disabled', true)
+    await userEvent.click(back)
+    expect(onBack).not.toHaveBeenCalled()
   })
 })

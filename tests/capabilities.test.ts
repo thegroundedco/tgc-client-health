@@ -93,8 +93,10 @@ describe('the role presets', () => {
   // The guard at src/lib/capabilities.ts:52 says an unexpected string must
   // answer "no" rather than throw. Until Slice 2 step 4 the parameter was typed
   // `Role`, so that sentence described behaviour no caller could reach and no
-  // test could ask for. The screen passes `profile.role`, which is a text
-  // column typed `string`, so the guard is now load-bearing.
+  // test could ask for without lying to the type system -- which the test
+  // fifteen lines above does, with `'sales' as Role`, reaching the same runtime
+  // case by that route. Board.tsx passes `profile.role`, which is a text column
+  // typed `string`, so the guard is now load-bearing without any cast.
   //
   // 'sales' is the same fourth role scripts/verify-capability.sql evaluates the
   // deployed CASE against, so both halves of the model are probed with the same

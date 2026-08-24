@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   CLIENT_STATUSES,
+  CONCURRENT_SAVE_TEXT,
   END_REASON_CODES,
   EMPTY_DRAFT,
+  UPDATE_MATCHED_NOTHING_TEXT,
   draftFromRow,
   formProblems,
   insertPayload,
@@ -300,6 +302,28 @@ describe('what a refused write says', () => {
     for (const message of messages) {
       expect(writeFailureText(message, 'Acme')).toContain('Nothing was changed')
     }
+  })
+})
+
+describe('the two refusals Postgres never raises', () => {
+  // Neither reaches writeFailureText, because neither arrives as an error: a
+  // second save inside one round trip is refused by this app before a request
+  // is sent, and an UPDATE filtered away by clients_update_manage_clients
+  // returns zero rows with no error at all.
+  it('promises nothing was changed in both', () => {
+    for (const text of [CONCURRENT_SAVE_TEXT, UPDATE_MATCHED_NOTHING_TEXT]) {
+      expect(text).toContain('othing was changed')
+    }
+  })
+
+  it('invites a retry only where retrying can work', () => {
+    // The concurrent one clears by itself in a moment, so saying "try again" is
+    // true. The zero-row one is a permission the account does not hold: every
+    // retry will be refused identically, and inviting one sends somebody to
+    // press a button that cannot ever succeed.
+    expect(CONCURRENT_SAVE_TEXT).toContain('again')
+    expect(UPDATE_MATCHED_NOTHING_TEXT).not.toContain('again')
+    expect(UPDATE_MATCHED_NOTHING_TEXT).toContain('Ask an admin')
   })
 })
 
