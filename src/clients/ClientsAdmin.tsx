@@ -139,8 +139,13 @@ export function ClientsAdmin({ onBack }: Props) {
               </p>
 
               {editing?.id === client.id ? (
-                // Keyed by id so opening a different row remounts the form with
-                // that row's values rather than keeping the first row's draft.
+                // Correct today because this renders only inside the
+                // `editing?.id === client.id` branch of one <li> -- opening a
+                // different row unmounts this instance regardless of the key.
+                // The key stays anyway, cheap belt-and-braces against a future
+                // refactor that hoists a single form out of the list, so a
+                // hoisted layout does not silently inherit a cross-row draft
+                // bug.
                 <EditClientForm
                   client={editing}
                   key={editing.id}

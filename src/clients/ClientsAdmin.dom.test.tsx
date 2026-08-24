@@ -235,8 +235,14 @@ describe('the clients admin screen, adding', () => {
     const addClient = vi.fn()
     mount({ addClient })
 
-    expect(screen.getByRole('button', { name: 'Add client' })).toHaveProperty('disabled', true)
+    const button = screen.getByRole('button', { name: 'Add client' })
+    expect(button).toHaveProperty('disabled', true)
     expect(screen.getByTestId('add-status').textContent).toContain('A client needs a name.')
+
+    // A disabled button does not fire a click in a real browser, and jsdom
+    // agrees -- pressing it here is what makes the assertion below mean
+    // something, rather than checking a handler that was never invoked.
+    await userEvent.click(button)
     expect(addClient).not.toHaveBeenCalled()
   })
 
@@ -278,7 +284,50 @@ describe('the clients admin screen, adding', () => {
     const line = screen.getByTestId('add-status')
     expect(line.textContent).toContain('already exists')
     expect(line.textContent).toContain('Nothing was changed')
-    expect(line.textContent).not.toContain('clients_name_unique')
+    // No assertion that the raw constraint name is absent: this test injected
+    // the message itself, so that could never fail here. It is proved where it
+    // belongs, in clientForm.test.ts.
+  })
+
+  it('keeps a refused name in the field, not just the row\'s own unmodified value', async () => {
+    // Same two-render technique as "clears the field only once the add is
+    // confirmed": the first render presses with the state still idle, the
+    // second supplies the failure the hook would then report. A failed write
+    // must never lose what was typed -- it is the one moment the person most
+    // wants to look at it.
+    vi.mocked(useClients).mockReturnValue(hook())
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Acme')
+    await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        addState: {
+          kind: 'failed',
+          message: 'A client called "Acme" already exists. Nothing was changed, and pressing save again costs nothing.',
+        },
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    expect(screen.getByLabelText('Name')).toHaveProperty('value', 'Acme')
+  })
+
+  it('clears a stale confirmation on the add form when the name is edited again', async () => {
+    // The third named failure mode: a confirmation left standing beside a form
+    // somebody has since changed is the same class of lie as no confirmation at
+    // all. edit() in AddClientForm is the one place that both updates the draft
+    // and calls onEdited -- this is what proves it still does the second half.
+    const resetAdd = vi.fn()
+    mount({
+      addState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Client added' },
+      resetAdd,
+    })
+
+    await userEvent.type(screen.getByLabelText('Name'), 'B')
+
+    expect(resetAdd).toHaveBeenCalled()
   })
 })
 
@@ -374,7 +423,11 @@ describe('the clients admin screen, editing', () => {
     expect(screen.getByTestId('reactivation-warning').textContent).toContain('clear the end date')
   })
 
-  it('sends the reactivation as one update that clears all three columns', async () => {
+  it("sends the reactivation with the opened row's id and the live status", async () => {
+    // This only proves saveClient is called with the right id and status --
+    // the three-column clear happens inside updatePayload, behind the mocked
+    // hook, where this test cannot see it. That fact is proved directly at
+    // clientForm.test.ts:123,138,151.
     const saveClient = vi.fn()
     await open('Test Client', { saveClient })
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'active')
@@ -425,6 +478,63 @@ describe('the clients admin screen, editing', () => {
 
     expect(screen.getByLabelText('Client name')).toHaveProperty('value', 'Acme')
     expect(screen.getByTestId('edit-status').textContent).toContain('not allowed')
+  })
+
+  it('keeps a typed rename after a refused save, not the stored name', async () => {
+    // The row's own name is 'Acme' -- the test above alone could not tell a
+    // refusal that resets the draft back to the stored row apart from one that
+    // kept what was actually typed, because both look identical when nothing
+    // was changed first. Same two-render technique as the add form's
+    // equivalent test: the first render types into the open form, the second
+    // supplies the failure the hook would then report.
+    vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
+    const { rerender } = render(<ClientsAdmin onBack={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    await userEvent.clear(screen.getByLabelText('Client name'))
+    await userEvent.type(screen.getByLabelText('Client name'), 'Acme Holdings')
+
+    vi.mocked(useClients).mockReturnValue(
+      hook({
+        clients: [ACME, GONE],
+        editState: {
+          kind: 'failed',
+          message: 'Your account is not allowed to change clients. Ask an admin. Nothing was changed, and pressing save again costs nothing.',
+        },
+      }),
+    )
+    rerender(<ClientsAdmin onBack={vi.fn()} />)
+
+    expect(screen.getByLabelText('Client name')).toHaveProperty('value', 'Acme Holdings')
+  })
+
+  it('clears a stale confirmation on the edit form when a field changes', async () => {
+    // The third named failure mode: a confirmation left standing beside a form
+    // somebody has since changed is the same class of lie as no confirmation at
+    // all. edit() in EditClientForm is the one place that both updates the
+    // draft and calls onEdited -- this proves it still does the second half.
+    const resetEdit = vi.fn()
+    await open('Acme', {
+      editState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Changes saved' },
+      resetEdit,
+    })
+    // open() itself presses "Edit Acme", which also calls resetEdit -- cleared
+    // here so the assertion below is about typing, not about opening the row.
+    resetEdit.mockClear()
+
+    await userEvent.type(screen.getByLabelText('Client name'), ' Holdings')
+
+    expect(resetEdit).toHaveBeenCalled()
+  })
+
+  it('clears a stale confirmation from the previous row when another is opened', async () => {
+    // Spec's promise that a confirmation for one row never appears beside
+    // another. open() presses the Edit button, which is where this reset lives
+    // in ClientsAdmin -- this is the standing test for that press.
+    const resetEdit = vi.fn()
+    await open('Acme', { resetEdit })
+
+    expect(resetEdit).toHaveBeenCalled()
   })
 
   it('disables every control while a save is in flight', async () => {

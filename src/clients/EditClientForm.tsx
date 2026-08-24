@@ -36,10 +36,13 @@ const TONE_CLASS = {
 // updatePayload, rule 3 is STATUS_HINTS. Spec §9: "The rules are not ternaries
 // in JSX."
 export function EditClientForm({ client, owners, state, onSave, onCancel, onEdited }: Props) {
-  // Keyed by the client's id at the call site, so opening a different row
-  // remounts this component with that row's values. Without the key this
-  // useState would keep the first row's draft and quietly edit the wrong
-  // client's name into the second row's id.
+  // Correct today because of the per-row mount, not this key: this component
+  // renders only inside the `editing.id === client.id` branch of one <li>, so
+  // opening a different row unmounts this instance and mounts a fresh one no
+  // matter what key it carries. The key stays anyway -- cheap belt-and-braces
+  // against a future refactor that hoists a single form out of the list, which
+  // the spec's own "a list and a form" wording invites, so that a hoisted
+  // layout does not silently inherit a cross-row draft bug.
   const [draft, setDraft] = useState<ClientDraft>(() => draftFromRow(client))
 
   const problems = formProblems(draft)
@@ -79,8 +82,13 @@ export function EditClientForm({ client, owners, state, onSave, onCancel, onEdit
       </div>
 
       <div className={styles.fieldBlock}>
+        {/* "Client owner", not "Owner": the add form already uses "Owner" for
+            its own owner picker, and both forms can be on screen at once, so
+            an identical label would announce as two indistinguishable combo
+            boxes and make getByLabelText('Owner') ambiguous with a form open.
+            Matches the existing "Client name" / "Name" asymmetry below. */}
         <label className="t-label" htmlFor="edit-client-owner">
-          Owner
+          Client owner
         </label>
         <select
           className="field"
