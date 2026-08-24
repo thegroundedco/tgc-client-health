@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
@@ -24,6 +24,25 @@ import type { UseBoard } from './useBoard'
 // fails in CI.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
+// The third mock, and it is not optional. Board now renders ClientsAdmin, which
+// uses useClients, which imports the Supabase client. `supabase` is mocked as
+// `{}` above, so an unmocked useClients would call `.from` on an empty object
+// and this file would fail on navigation rather than on anything it is testing.
+vi.mock('../clients/useClients', () => ({
+  useClients: () => ({
+    status: 'ready',
+    loadError: null,
+    clients: [],
+    owners: [],
+    addState: { kind: 'idle' },
+    editState: { kind: 'idle' },
+    reload: vi.fn(),
+    addClient: vi.fn(),
+    saveClient: vi.fn(),
+    resetAdd: vi.fn(),
+    resetEdit: vi.fn(),
+  }),
+}))
 
 import { Board } from './Board'
 import { useBoard } from './useBoard'
@@ -96,7 +115,10 @@ describe('the loaded client grid', () => {
     given()
     // One per card and nothing else: no Score all 3s, no per-card menu. A second
     // button on a card would sit under the click overlay and stop responding.
-    expect(screen.getAllByRole('button')).toHaveLength(CLIENTS.length)
+    // Scoped to the client list itself, rather than the whole page: the board
+    // now also carries the Clients admin-link button above the grid, which is
+    // page-level chrome, not a second button on any one card.
+    expect(within(clientList()!).getAllByRole('button')).toHaveLength(CLIENTS.length)
   })
 
   it('has deleted Score all 3s', () => {
@@ -157,7 +179,7 @@ describe('the board', () => {
   it('says the roster is empty, and how to fix it, rather than rendering nothing', () => {
     given({ clients: [] })
     expect(screen.getByText('No active clients')).toBeTruthy()
-    expect(screen.getByText(/Supabase dashboard/)).toBeTruthy()
+    expect(screen.getByText(/client admin screen/)).toBeTruthy()
     expect(clientList()).toBeNull()
   })
 
@@ -167,5 +189,81 @@ describe('the board', () => {
     // looks live.
     given()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('reaching the clients admin', () => {
+  const READY = {
+    status: 'ready' as const,
+    loadError: null,
+    clients: [{ id: 1, name: 'Acme' }],
+    checkins: new Map(),
+    submitted: 0,
+    reload: vi.fn(),
+  }
+
+  it('offers the link to an account manager', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
+  })
+
+  it('offers it to an admin', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={{ ...PROFILE, role: 'admin' }} />)
+
+    expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
+  })
+
+  it('does not draw it for a viewer', () => {
+    // Convenience, not security -- spec §7.2. A viewer who reached the screen
+    // anyway would have every write refused by clients_insert_manage_clients
+    // and clients_update_manage_clients, which is what actually enforces this.
+    // Hiding the control just stops offering somebody a button that fails.
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={{ ...PROFILE, role: 'viewer' }} />)
+
+    expect(screen.queryByRole('button', { name: 'Clients' })).toBeNull()
+  })
+
+  it('does not draw it for a role nobody has heard of', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={{ ...PROFILE, role: 'sales' }} />)
+
+    expect(screen.queryByRole('button', { name: 'Clients' })).toBeNull()
+  })
+
+  it('opens the screen, and comes back', async () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
+    expect(screen.getByRole('heading', { name: 'Client admin' })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Board' }))
+    expect(screen.queryByRole('heading', { name: 'Client admin' })).toBeNull()
+    expect(screen.getByRole('list', { name: 'Clients' })).toBeTruthy()
+  })
+
+  it('offers the link when the board is empty, which is when it is needed most', () => {
+    // The old copy sent the reader to the Supabase dashboard. A board with no
+    // clients and no way to add one is the exact state this screen exists for.
+    vi.mocked(useBoard).mockReturnValue({ ...READY, clients: [] })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
+    expect(screen.queryByText(/Supabase dashboard/)).toBeNull()
+  })
+
+  it('offers the link when the read failed, so the screen is not a dead end', () => {
+    vi.mocked(useBoard).mockReturnValue({
+      ...READY,
+      status: 'error',
+      loadError: 'the connection failed',
+    })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
   })
 })

@@ -678,6 +678,40 @@ after the last one. The second pins `src/lib/capabilities.ts` against the
 migration's presets in both directions, because the UI keeps a second copy to
 decide what to draw.
 
+## The clients admin screen
+
+Reached from the board by anyone whose role preset includes `manage_clients` --
+today an admin or an account manager. It adds a client, renames one, assigns an
+owner, and gives a departing client an end date and a coded reason.
+
+The button is hidden from a viewer, and that is convenience rather than
+security. What actually stops a viewer changing a client is
+`clients_insert_manage_clients` and `clients_update_manage_clients` in Postgres.
+A viewer who reached the screen would see every save refused, and the screen
+says so in words rather than showing Postgres's `permission denied for table
+clients`.
+
+**There is no delete, and there will not be one.** `checkins.client_id` is
+`on delete cascade` and this project has no backups, so deleting a client would
+silently destroy that client's entire check-in history. `former` is how a client
+goes away, and a former client stays visible on this screen -- that is the reason
+the screen reads every row while the board reads only the active ones.
+
+Three refusals come from the database and are worth knowing by name, because the
+screen translates them rather than repeating them:
+
+- Two clients whose names differ only in case cannot both exist --
+  `clients_name_unique`, a unique index on `lower(name)`.
+- A cancelled or former client must have an end date and a coded reason, and an
+  active or paused one must have none of the three -- `clients_lifecycle_coherent`.
+  This is why reactivating a client clears all three columns in the same update,
+  and why the form warns before it does.
+- The reason must be one of seven -- `clients_end_reason_code_known`.
+
+`npm run verify:lifecycle` proves the second and third of those are what is
+actually deployed, by reading the constraints out of `pg_constraint` and
+evaluating them over all 32 combinations of their inputs.
+
 ## Security notes
 
 - The browser receives only the **publishable** key. The secret key must never appear

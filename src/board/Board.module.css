@@ -36,3 +36,10 @@
   gap: var(--space-4);
   max-width: var(--measure-prose);
 }
+
+/* The link to the clients admin, above whatever the board is showing. A flex
+   row of its own so it hugs its content and sits left, rather than stretching
+   across the column its parent is. */
+.adminLink {
+  display: flex;
+}

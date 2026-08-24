@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { currentPeriod, formatPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import { CheckIn } from '../checkin/CheckIn'
+import { can } from '../lib/capabilities'
+import { ClientsAdmin } from '../clients/ClientsAdmin'
 import { ClientCard } from './ClientCard'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
@@ -26,6 +28,12 @@ export function Board({ profile }: Props) {
   // until somebody wants to send a colleague a link to one check-in.
   const [selected, setSelected] = useState<BoardClient | null>(null)
 
+  // §5.1 again: state-based navigation in the board container, no router,
+  // therefore no URL change and a refresh returns to the board. A linkable
+  // admin URL needs the GitHub Pages 404.html redirect trick, which is not
+  // worth buying until somebody wants to send a colleague a link to it.
+  const [showingClients, setShowingClients] = useState(false)
+
   const board = useBoard(period)
 
   if (selected) {
@@ -46,6 +54,43 @@ export function Board({ profile }: Props) {
     )
   }
 
+  if (showingClients) {
+    return (
+      <ClientsAdmin
+        onBack={() => {
+          setShowingClients(false)
+          // Re-read on the way back, so a client added, renamed or retired here
+          // shows correctly on the board. Without this the board would show what
+          // it read before the change -- the same picture as a change that did
+          // nothing.
+          board.reload()
+        }}
+      />
+    )
+  }
+
+  // Drawn only for a role whose preset includes manage_clients. Convenience,
+  // not security: spec §7.2, "UI hiding is convenience; the database refusing is
+  // the security". A viewer who reached the screen would have every write
+  // refused by clients_insert_manage_clients and clients_update_manage_clients.
+  // This is the first caller of can() in the application.
+  //
+  // Defined here, above the four early returns below, and included in every one
+  // of them. It has to be reachable from the empty state and from the failed
+  // read in particular: a board with no clients is exactly when somebody needs
+  // to add one, and a failed read is not a reason to strand them.
+  const adminLink = can(profile.role, 'manage_clients') ? (
+    <nav className={styles.adminLink}>
+      <button
+        className="button button--quiet"
+        onClick={() => setShowingClients(true)}
+        type="button"
+      >
+        Clients
+      </button>
+    </nav>
+  ) : null
+
   // Error before loading: a failed read must never fall through to a screen
   // that looks merely empty. That is v1's "a broken tool looks like an empty
   // one", and it is the reason useBoard reports a status rather than just a
@@ -53,6 +98,7 @@ export function Board({ profile }: Props) {
   if (board.status === 'error') {
     return (
       <section className={styles.state}>
+        {adminLink}
         <h2 className="t-header">Cannot reach the database</h2>
         <p className="alert prose" role="alert">
           {board.loadError}
@@ -64,21 +110,32 @@ export function Board({ profile }: Props) {
     )
   }
 
-  if (board.status === 'loading') return <p className="t-body">Loading…</p>
+  if (board.status === 'loading') {
+    return (
+      <section className={styles.state}>
+        {adminLink}
+        <p className="t-body">Loading…</p>
+      </section>
+    )
+  }
 
   if (board.clients.length === 0) {
     return (
       <section className={styles.state}>
+        {adminLink}
         {/* The same sentence progressLine gives the populated board, so the two
             empty states cannot drift apart in wording. */}
         <h2 className="t-header">{progressLine(0, 0)}</h2>
-        <p className="t-body prose">Add one in the Supabase dashboard to see it here.</p>
+        <p className="t-body prose">
+          Add one on the client admin screen to see it here.
+        </p>
       </section>
     )
   }
 
   return (
     <section className={styles.board}>
+      {adminLink}
       <div className={styles.periodBar}>
         <h2 className="t-header">{formatPeriod(period)}</h2>
         {/* §6's progress line. role="status" because this number changes on the
