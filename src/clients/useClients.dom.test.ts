@@ -20,6 +20,15 @@ type Result = { data: unknown; error: unknown }
 
 const db = vi.hoisted(() => ({
   updates: 0,
+  // What the last update actually sent, and what it filtered on. Captured
+  // rather than discarded because `.eq('id', id)` is the most dangerous single
+  // expression in this feature: an UPDATE that loses its filter rewrites every
+  // row in public.clients, and this project has no backups. Nothing anywhere
+  // asserted that filter until this was added -- the fake used to ignore both
+  // arguments and hand back the same row whichever id was saved, so a dropped
+  // filter passed every test.
+  lastUpdate: null as unknown,
+  lastFilter: null as [string, unknown] | null,
   read: async (): Promise<Result> => ({ data: [], error: null }),
   profiles: async (): Promise<Result> => ({ data: [], error: null }),
   // Both are provided, always. .single() is what the code called before the
@@ -37,15 +46,19 @@ vi.mock('../lib/supabase', () => ({
         ? { select: () => ({ eq: () => db.profiles() }) }
         : {
             select: () => ({ order: () => db.read() }),
-            update: () => {
+            update: (payload: unknown) => {
               db.updates += 1
+              db.lastUpdate = payload
               return {
-                eq: () => ({
-                  select: () => ({
-                    single: () => db.single(),
-                    maybeSingle: () => db.maybeSingle(),
-                  }),
-                }),
+                eq: (column: string, value: unknown) => {
+                  db.lastFilter = [column, value]
+                  return {
+                    select: () => ({
+                      single: () => db.single(),
+                      maybeSingle: () => db.maybeSingle(),
+                    }),
+                  }
+                },
               }
             },
           },
@@ -76,10 +89,16 @@ const DRAFT: ClientDraft = {
   endReasonNote: '',
 }
 
-// PostgREST's own words for "you asked for one row and got none". This is what
-// an UPDATE refused by clients_update_manage_clients produces: the USING clause
-// filters the row out, so zero rows are updated and no error is raised -- the
-// 42501 the INSERT path relies on never happens.
+// PostgREST's own words for "you asked for one row and got none", and the shape
+// the code used to see. Two layers, which the first draft of this comment ran
+// together and contradicted itself doing: POSTGRES raises nothing, because
+// clients_update_manage_clients' USING clause filters the row out rather than
+// refusing the statement, so zero rows are updated and the 42501 the INSERT path
+// relies on never happens. POSTGREST then turns that empty result into an error
+// of its own, but only for .single(). The code now ends the chain in
+// .maybeSingle(), which resolves { data: null, error: null } instead -- so this
+// fixture is what the PRE-FIX call produced, kept because the tests below feed
+// it to .single() to prove the old sentence is gone.
 const PGRST116 = {
   code: 'PGRST116',
   message: 'JSON object requested, multiple (or no) rows returned',
@@ -94,6 +113,8 @@ function failure(state: WriteState): string {
 
 beforeEach(() => {
   db.updates = 0
+  db.lastUpdate = null
+  db.lastFilter = null
   db.read = async () => ({ data: [ACME, GONE], error: null })
   db.profiles = async () => ({ data: [], error: null })
   db.single = async () => ({ data: ACME, error: null })
@@ -130,6 +151,43 @@ describe('the clients hook, updating', () => {
     // somebody to press a button that cannot ever succeed.
     expect(message).not.toContain('JSON object requested')
     expect(message).not.toContain('pressing save again')
+  })
+
+  it('filters the update to the one row it was given, by id', async () => {
+    // The guard against the worst thing this feature can do. An UPDATE with no
+    // filter, or a filter on the wrong value, rewrites the whole table -- and
+    // because .select().maybeSingle() would still hand back a plausible row,
+    // the screen would confirm it cheerfully. Nothing else in the suite can see
+    // this: clientForm.test.ts tests the payload with no knowledge of the
+    // query, and ClientsAdmin.dom.test.tsx mocks this hook away entirely.
+    const { result } = await ready()
+    await act(async () => {
+      result.current.saveClient(GONE.id, DRAFT)
+    })
+
+    expect(db.lastFilter).toEqual(['id', GONE.id])
+  })
+
+  it('sends all six columns on the update, whatever the draft holds', async () => {
+    // The hook-level half of the bidirectional-constraint guarantee.
+    // clients_lifecycle_coherent refuses a partial update, so a payload that
+    // omitted a lifecycle column would be rejected by Postgres -- and
+    // updatePayload building all six is only load-bearing if the hook actually
+    // sends what it built. clientForm.test.ts proves the builder; this proves
+    // the wire.
+    const { result } = await ready()
+    await act(async () => {
+      result.current.saveClient(ACME.id, DRAFT)
+    })
+
+    expect(Object.keys(db.lastUpdate as object).sort()).toEqual([
+      'end_reason_code',
+      'end_reason_note',
+      'ended_on',
+      'name',
+      'owner_id',
+      'status',
+    ])
   })
 
   it('leaves the list alone when the update matched no row', async () => {

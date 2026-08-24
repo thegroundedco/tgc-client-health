@@ -651,8 +651,14 @@ describe('the clients admin screen, editing', () => {
     expect(screen.queryByRole('heading', { name: 'Editing Test Client' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Editing Acme' })).toBeTruthy()
     expect(screen.getByTestId('edit-status').textContent).toContain('Changes saved')
-    // One press, one write: the second Save was never offered.
-    expect(saveClient).toHaveBeenCalledTimes(1)
+    // Deliberately NOT `expect(saveClient).toHaveBeenCalledTimes(1)` under a
+    // comment claiming the second Save was never offered: this test presses
+    // Save exactly once, so that count could never have been anything but 1 and
+    // the sentence claimed more than the assertion proved. What actually keeps a
+    // second press from being offered is the disabled Edit button asserted in
+    // `will not open another row while an edit save is in flight`, and the hook
+    // half is `refuses a second save inside one round trip out loud, not
+    // silently` in useClients.dom.test.ts. Both can fail; this could not.
   })
 
   it('does not offer a destroyed end date back after a reactivation is confirmed', async () => {
