@@ -61,9 +61,9 @@ const PROFILE: Profile = {
 }
 
 const CLIENTS = [
-  { id: 1, name: 'Babaloo' },
-  { id: 2, name: 'Colorfil' },
-  { id: 3, name: 'Sno-Go' },
+  { id: 1, name: 'Babaloo', status: 'active' },
+  { id: 2, name: 'Colorfil', status: 'active' },
+  { id: 3, name: 'Sno-Go', status: 'active' },
 ]
 
 const SUBMITTED: CardCheckin = {
@@ -197,7 +197,7 @@ describe('reaching the clients admin', () => {
   const READY = {
     status: 'ready' as const,
     loadError: null,
-    clients: [{ id: 1, name: 'Acme' }],
+    clients: [{ id: 1, name: 'Acme', status: 'active' }],
     checkins: new Map(),
     submitted: 0,
     reload: vi.fn(),

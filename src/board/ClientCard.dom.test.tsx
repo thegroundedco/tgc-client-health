@@ -203,3 +203,87 @@ describe('a client card', () => {
     expect(screen.queryAllByRole('link')).toHaveLength(0)
   })
 })
+
+describe('an archived client card', () => {
+  const ARCHIVED = { id: 8, name: 'Test Client', status: 'former' }
+  const PAUSED = { id: 9, name: 'Bellwether', status: 'paused' }
+
+  it('marks an active card with no status pill, so the working roster stays quiet', () => {
+    render(<ClientCard checkin={null} client={CLIENT} onOpen={() => {}} viewerId={ME} />)
+
+    // The default case carries no marker: eleven identical pills reading ACTIVE
+    // would be noise on the screen whose whole job is the active roster.
+    expect(screen.queryByTestId('card-status')).toBeNull()
+  })
+
+  it('names the status in words, not only as a colour', () => {
+    // Parent spec §9.3: the brand's status fills are within 1.9:1 of each other,
+    // so the distinction rests on hue plus a mandatory text label. A pill with
+    // no word is unreadable in greyscale and to a colour-blind viewer.
+    render(<ClientCard checkin={null} client={ARCHIVED} onOpen={() => {}} viewerId={ME} />)
+
+    expect(screen.getByTestId('card-status').textContent).toBe('Former')
+  })
+
+  it('does not offer the name as a button', async () => {
+    // checkins_insert_edit_scores has no status predicate, so the database would
+    // accept a check-in for a client who left. This is the only thing that
+    // stops one being written.
+    const onOpen = vi.fn()
+    render(<ClientCard checkin={null} client={ARCHIVED} onOpen={onOpen} viewerId={ME} />)
+
+    expect(screen.queryByRole('button', { name: /Test Client/ })).toBeNull()
+    // Still legible, and still a heading: the card must remain findable and
+    // readable, it just is not a link.
+    expect(screen.getByRole('heading', { name: 'Test Client' })).toBeTruthy()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('says why it cannot be scored', async () => {
+    render(<ClientCard checkin={null} client={ARCHIVED} onOpen={() => {}} viewerId={ME} />)
+
+    expect(screen.getByTestId('card-locked').textContent).toContain('cannot be scored')
+  })
+
+  it('gives a paused client its own reason, not a churned one', async () => {
+    render(<ClientCard checkin={null} client={PAUSED} onOpen={() => {}} viewerId={ME} />)
+
+    expect(screen.getByTestId('card-status').textContent).toBe('Paused')
+    expect(screen.getByTestId('card-locked').textContent).toContain('paused')
+  })
+
+  it('still shows the scores a former client did have', async () => {
+    // Their history is unchanged, and hiding it would make the card look like a
+    // client who was never scored.
+    render(
+      <ClientCard
+        checkin={{
+          total_score: 21,
+          submitted_at: '2026-08-21T17:04:00.000Z',
+          submitted_by: ME,
+          relationship: 5,
+          delivery: 4,
+          financial: 4,
+          sentiment: 4,
+          growth: 4,
+        }}
+        client={ARCHIVED}
+        onOpen={() => {}}
+        viewerId={ME}
+      />,
+    )
+
+    expect(screen.getByTestId('total').textContent).toBe('21')
+  })
+
+  it('keeps the open button on an active card', async () => {
+    // The regression guard for the branch above: an implementation that removed
+    // the button for everyone would pass every test in the archived block.
+    const onOpen = vi.fn()
+    render(<ClientCard checkin={null} client={CLIENT} onOpen={onOpen} viewerId={ME} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /Polar Divide/ }))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('card-locked')).toBeNull()
+  })
+})

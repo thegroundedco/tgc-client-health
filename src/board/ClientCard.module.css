@@ -135,3 +135,12 @@
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
+
+/* The name of a card that cannot be opened. It inherits the h3's type role, so
+   this only removes the affordances .cardOpen adds -- no pointer, no underline,
+   no hover. Deliberately NOT dimmed: a former client's card is still there to
+   be read, and greying it out would make the whole card look disabled rather
+   than the one control that is. */
+.cardName {
+  cursor: default;
+}

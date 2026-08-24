@@ -5,6 +5,8 @@ import { cardFooter } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient } from './useBoard'
 import styles from './ClientCard.module.css'
+import { isChurned, statusLabel } from '../clients/clientForm'
+import { isOpenable, notOpenableReason } from './boardScope'
 
 type Props = {
   client: BoardClient
@@ -20,6 +22,7 @@ export function ClientCard({ client, checkin, viewerId, onOpen }: Props) {
   // second local calculation would be a second thing to keep in agreement.
   const total = checkin?.total_score ?? null
   const band = bandFor(total)
+  const openable = isOpenable(client.status)
 
   return (
     <li className={styles.card}>
@@ -29,14 +32,33 @@ export function ClientCard({ client, checkin, viewerId, onOpen }: Props) {
           not re-derived here. */}
       <div className={styles.cardHead}>
         <h3 className="t-body">
-          <button className={styles.cardOpen} type="button" onClick={onOpen}>
-            {client.name}
-          </button>
+          {openable ? (
+            <button className={styles.cardOpen} type="button" onClick={onOpen}>
+              {client.name}
+            </button>
+          ) : (
+            // Text, not a disabled button. A disabled control invites the
+            // reader to work out why it is disabled; the sentence below says
+            // so outright. It stays inside the h3 so the card is still a
+            // findable, labelled heading.
+            <span className={styles.cardName}>{client.name}</span>
+          )}
         </h3>
         {/* The band always carries its text label. Colour is never the only
             signal: teal against warm red measures 1.76:1, so any two bands are
             indistinguishable to a colour-blind viewer. Parent spec §9.3. */}
         <span className={bandClassName(band)}>{BAND_LABELS[band]}</span>
+        {/* Only when it is not active. Eleven identical pills reading ACTIVE
+            would be noise on the screen whose whole job is the active roster,
+            so the default case is the unmarked one. */}
+        {!openable && (
+          <span
+            className={`status-pill ${isChurned(client.status) ? 'status-pill--ended' : ''}`}
+            data-testid="card-status"
+          >
+            {statusLabel(client.status)}
+          </span>
+        )}
       </div>
 
       <p className={styles.score}>
@@ -97,6 +119,16 @@ export function ClientCard({ client, checkin, viewerId, onOpen }: Props) {
           survives a reload, which is the check v1 failed. cardFooter guarantees
           it is never empty. */}
       <p className={`t-caption ${styles.footerLine}`}>{cardFooter(checkin ?? null, viewerId)}</p>
+
+      {/* Why the name is not a link. Without this the card is a dead end that
+          looks like a bug -- and the reason is worth stating rather than
+          implying, because the database would in fact accept a check-in for
+          this client: checkins_insert_edit_scores has no status predicate. */}
+      {!openable && (
+        <p className="t-caption" data-testid="card-locked">
+          {notOpenableReason(client.status)}
+        </p>
+      )}
     </li>
   )
 }

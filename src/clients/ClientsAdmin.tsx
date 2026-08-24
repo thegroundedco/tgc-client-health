@@ -126,7 +126,7 @@ export function ClientsAdmin({ onBack }: Props) {
                 {/* The label is the information; the fill is decoration. A
                     greyscale print or a colour-blind reader gets the word. */}
                 <span
-                  className={`${styles.statusPill} ${isChurned(client.status) ? styles.statusPillEnded : ''}`}
+                  className={`status-pill ${isChurned(client.status) ? 'status-pill--ended' : ''}`}
                 >
                   {statusLabel(client.status)}
                 </span>
