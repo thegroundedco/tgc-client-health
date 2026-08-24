@@ -311,16 +311,29 @@ describe.runIf(url && key)('RLS with no session', () => {
     expect(body.hint).not.toMatch(/\bprivate\b/)
   })
 
-  it('cannot call private.is_active_user() as an RPC', async () => {
-    const response = await fetch(`${url!}/rest/v1/rpc/is_active_user`, {
+  // THIS PROBE WAS MOVED DELIBERATELY, and the reason is worth more than the
+  // assertion. It used to name private.is_active_user(), which
+  // 20260824160306_has_capability.sql DROPPED. A 404 for a function that no
+  // longer exists anywhere proves nothing about schema exposure -- the test
+  // would have stayed green while its subject was deleted, which is this
+  // project's standing definition of a worthless test. Renaming the subject was
+  // not automatic and nothing would have caught it; if the capability helper is
+  // ever renamed again, this line has to move with it.
+  it('cannot call private.has_capability() as an RPC', async () => {
+    const response = await fetch(`${url!}/rest/v1/rpc/has_capability`, {
       method: 'POST',
       headers: restHeaders(),
-      body: '{}',
+      body: JSON.stringify({ wanted: 'view_scores' }),
     })
 
     // 404 / PGRST202: PostgREST resolved the name against the exposed schema
     // (public), where the function does not exist. The helper that gates every
     // policy on clients and checkins is not addressable from the browser at all.
+    //
+    // The argument is sent rather than an empty body so a 404 cannot be blamed
+    // on the signature not matching: if has_capability were ever exposed in
+    // `public`, this call would be a well-formed invocation of it and would
+    // return a boolean instead.
     expect(response.status).toBe(404)
     const body = (await response.json()) as { code?: string }
     expect(body.code).toBe('PGRST202')

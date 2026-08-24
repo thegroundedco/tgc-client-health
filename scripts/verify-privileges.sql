@@ -50,20 +50,49 @@ declare
   n_clients_total bigint;
   n_checkins_total bigint;
 
+  -- Section 10f only: the capability checks, which need a real profile row per
+  -- role rather than a synthetic subject. Null means "this project has nobody
+  -- with that role", which is reported as a precondition and not as a finding.
+  viewer_uid      uuid;
+  am_uid          uuid;
+
+  -- A real client id, read as the table owner before any impersonation, so 10f
+  -- can attempt a check-in insert at all: checkins.client_id is NOT NULL and
+  -- references public.clients, and referential integrity is checked with the
+  -- owner rights rather than through RLS, so this is a valid target even for a
+  -- subject who cannot see the row.
+  probe_client_id bigint;
+
+  -- The period 10f writes its probe check-ins to. The first of a month, because
+  -- checkins.period carries `check (period = date_trunc('month', period))`, and
+  -- a century before any real reporting range so it cannot collide with the
+  -- unique (client_id, period). Every probe is rolled back regardless; this is
+  -- belt and braces on a database with no backups.
+  probe_period date := '1900-01-01';
+
   -- The subject for every negative case in section 10: a syntactically valid
-  -- uuid that has no row in public.profiles, so private.is_active_user() must
-  -- return false for it. Chosen rather than synthesised because it needs no
-  -- write of any kind -- no auth.users row, no profile row, nothing to clean up
-  -- afterwards. Section 10 asserts it really is absent before relying on it.
+  -- uuid that has no row in public.profiles, so private.has_capability()
+  -- returns false for EVERY capability. Chosen rather than synthesised because
+  -- it needs no write of any kind -- no auth.users row, no profile row, nothing
+  -- to clean up afterwards. Section 10 asserts it really is absent before
+  -- relying on it.
   --
-  -- It stands in for BOTH negative cases the spec cares about, and that is
-  -- exact rather than approximate: is_active_user() is
-  --   exists (select 1 from public.profiles where id = auth.uid() and is_active)
+  -- It stands in for two of the three ways has_capability can answer false, and
+  -- that is exact rather than approximate. The function is
+  --   exists (select 1 from public.profiles p
+  --            where p.id = auth.uid() and p.is_active
+  --              and wanted = any (<the preset for p.role>))
   -- so a missing profile row and a profile row with is_active = false produce
   -- the identical false. Covering the second one separately would mean
   -- INSERTing into auth.users on the live project to get the signup trigger to
   -- make a profile, and a synthetic account in a real auth table is not worth
   -- it to re-prove the same `exists`.
+  --
+  -- The THIRD way is new with has_capability and cannot be reached with this
+  -- uuid: an ACTIVE account whose role's preset does not include the wanted
+  -- capability. That is the whole point of the migration, so it gets its own
+  -- check -- 10f, which needs real profile rows and says so when they are
+  -- absent rather than quietly proving nothing.
   absent_uid uuid := 'ffffffff-0000-4000-8000-ffffffffffff';
 
   -- Allowlist for section 9, in the same spirit as the table allowlist in
@@ -72,12 +101,18 @@ declare
   -- '<signature>|<role>'. Declared once and read by BOTH directions of the
   -- section 9 sweep, so an entry cannot pin one half and drift on the other.
   private_fn_allowed text[] := array[
-    -- private.is_active_user(): referenced by all six policies on
+    -- private.has_capability(text): referenced by all six policies on
     -- public.clients and public.checkins, every one of them `to authenticated`.
     -- Postgres checks EXECUTE on a policy-referenced function at query time
     -- against the querying role, so without this grant every read and write
     -- fails 42501 for every signed-in user. See section 9's header comment.
-    'private.is_active_user()|authenticated'
+    --
+    -- The argument type is spelled because 9c casts this half with
+    -- ::regprocedure, which needs a resolvable signature and will not take a
+    -- bare name. It replaced 'private.is_active_user()|authenticated' in
+    -- 20260824160306_has_capability.sql; the reasoning above is older than
+    -- either function and outlives both.
+    'private.has_capability(text)|authenticated'
   ];
 begin
   ----------------------------------------------------------------------------
@@ -180,8 +215,10 @@ begin
         -- public.clients: the board reads every active client, creates one, and
         -- edits one. No DELETE: a client is retired by setting `status`, never
         -- destroyed from the browser. Which rows are reachable is RLS's job
-        -- (clients_*_active_users, gated on private.is_active_user()); these
-        -- three entries only say the verbs exist at all.
+        -- (clients_select_view_scores and clients_{insert,update}_manage_clients,
+        -- gated on private.has_capability()); these three entries only say the
+        -- verbs exist at all -- SELECT being granted is not the same as a viewer
+        -- being allowed to INSERT, which is 10f's business.
         ('clients', 'authenticated', 'SELECT'),
         ('clients', 'authenticated', 'INSERT'),
         ('clients', 'authenticated', 'UPDATE'),
@@ -356,6 +393,12 @@ begin
   --    before the migration was written; transcript in
   --    20260821021840_create_clients_and_checkins.sql.
   --
+  --    That function is GONE -- 20260824160306_has_capability.sql replaced it
+  --    with private.has_capability(text) and dropped it. The name is left in the
+  --    paragraph above because that is where the measurement was actually taken;
+  --    the fact is about the pattern, not about that function, which is exactly
+  --    why the sweep below is an allowlist rather than a check on one name.
+  --
   --    The correct shape is therefore a PATTERN, not a one-off: a policy-
   --    referenced definer helper gets EXECUTE revoked from PUBLIC and anon, and
   --    granted to exactly the roles its policies name. Schema `private` gets NO
@@ -509,7 +552,7 @@ begin
   --         -- becomes the subject. auth.uid() on this project is exactly
   --            coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
   --                     nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid
-  --            so writing that setting is what gives private.is_active_user()
+  --            so writing that setting is what gives private.has_capability()
   --            someone to be. Both settings are transaction-local (the `true`),
   --            so they expire with this statement no matter how it ends.
   --
@@ -557,8 +600,9 @@ begin
   --         {one activated profile, one or more clients, ZERO check-ins}
   --       the run reported OK while all three of the check-in assertions had gone
   --       unexercised in either direction -- and
-  --       `checkins_select_active_users` widened to `using (true)` would have
-  --       passed. `clients` was guarded from the start and `checkins` was not,
+  --       the check-in select policy -- `checkins_select_view_scores`, called
+  --       `checkins_select_active_users` at the time -- widened to
+  --       `using (true)` would have passed. `clients` was guarded from the start and `checkins` was not,
   --       which is exactly the defect class this whole file exists to eliminate,
   --       sitting inside the guard built to eliminate it. Both tables are guarded
   --       now, and the guards are here so that one check covers all three
@@ -608,7 +652,7 @@ begin
       select count(*) into n_seen from public.clients;
       if n_seen <> n_clients_total then
         problems := problems || format(
-          'an ACTIVE user sees %s of %s rows in public.clients -- clients_select_active_users is denying rows it should return, which is an outage for every signed-in user',
+          'an ACTIVE user sees %s of %s rows in public.clients -- clients_select_view_scores is denying rows it should return, which is an outage for every signed-in user',
           n_seen, n_clients_total)::text;
       end if;
 
@@ -622,7 +666,7 @@ begin
       select count(*) into n_seen from public.checkins;
       if n_seen <> n_checkins_total then
         problems := problems || format(
-          'an ACTIVE user sees %s of %s rows in public.checkins -- checkins_select_active_users is denying rows it should return',
+          'an ACTIVE user sees %s of %s rows in public.checkins -- checkins_select_view_scores is denying rows it should return',
           n_seen, n_checkins_total)::text;
       end if;
 
@@ -638,8 +682,8 @@ begin
   end if;
 
   -- 10c. The negative case the spec calls the practical test of the whole
-  --      design: a subject with no profile row -- so is_active_user() is false
-  --      -- sees zero rows on both tables and cannot write.
+  --      design: a subject with no profile row -- so has_capability() is false
+  --      for every capability -- sees zero rows on both tables and cannot write.
   begin
     perform set_config(
       'request.jwt.claims',
@@ -650,14 +694,14 @@ begin
     select count(*) into n_seen from public.clients;
     if n_seen <> 0 then
       problems := problems || format(
-        'a user with NO profile row sees %s row(s) in public.clients -- the policy is not gating on private.is_active_user() and any signed-in account reads client data',
+        'a user with NO profile row sees %s row(s) in public.clients -- clients_select_view_scores is not gating on private.has_capability() and any signed-in account reads client data',
         n_seen)::text;
     end if;
 
     select count(*) into n_seen from public.checkins;
     if n_seen <> 0 then
       problems := problems || format(
-        'a user with NO profile row sees %s row(s) in public.checkins -- the policy is not gating on private.is_active_user() and any signed-in account reads check-in scores',
+        'a user with NO profile row sees %s row(s) in public.checkins -- checkins_select_view_scores is not gating on private.has_capability() and any signed-in account reads check-in scores',
         n_seen)::text;
     end if;
 
@@ -684,7 +728,7 @@ begin
         null;
       when others then
         if sqlerrm = 'probe insert was allowed' then
-          problems := problems || 'a user with NO profile row was ALLOWED to insert into public.clients -- clients_insert_active_users is not gating on private.is_active_user() (the row was rolled back by this check, not by the policy)'::text;
+          problems := problems || 'a user with NO profile row was ALLOWED to insert into public.clients -- clients_insert_manage_clients is not gating on private.has_capability() (the row was rolled back by this check, not by the policy)'::text;
         else
           problems := problems || format(
             'the no-profile insert probe failed for an unexpected reason: %s %s',
@@ -701,8 +745,8 @@ begin
 
   -- 10d. `authenticated` with NO jwt claims at all. This is not the same subject
   --      as 10c: auth.uid() returns NULL rather than a uuid, so the comparison
-  --      inside is_active_user() is `id = null` and the whole predicate hinges on
-  --      null handling rather than on a lookup miss. It is also the shape of a
+  --      inside has_capability() is `p.id = null` and the whole predicate hinges
+  --      on null handling rather than on a lookup miss. It is also the shape of a
   --      real request that reaches PostgREST with the authenticated role but a
   --      claim-less or malformed token.
   begin
@@ -752,12 +796,12 @@ begin
       values
         ('profiles', 'profiles_select_own'),
         ('profiles', 'profiles_update_own'),
-        ('clients',  'clients_select_active_users'),
-        ('clients',  'clients_insert_active_users'),
-        ('clients',  'clients_update_active_users'),
-        ('checkins', 'checkins_select_active_users'),
-        ('checkins', 'checkins_insert_active_users'),
-        ('checkins', 'checkins_update_active_users')
+        ('clients',  'clients_select_view_scores'),
+        ('clients',  'clients_insert_manage_clients'),
+        ('clients',  'clients_update_manage_clients'),
+        ('checkins', 'checkins_select_view_scores'),
+        ('checkins', 'checkins_insert_edit_scores'),
+        ('checkins', 'checkins_update_edit_scores')
     )
     select e.tbl, e.policy
     from expected e
@@ -774,6 +818,188 @@ begin
       'policy %s on public.%s is missing or is not scoped `to authenticated` -- with it gone the negative checks in section 10 pass for the wrong reason (no policy also means no rows)',
       r.policy, r.tbl)::text;
   end loop;
+
+  -- 10f. THE CAPABILITY CHECKS -- the ones that would have FAILED on every
+  --      schema this project has ever had before
+  --      20260824160306_has_capability.sql, and the reason that migration
+  --      exists.
+  --
+  --      Until then all six policies gated on private.is_active_user(), which
+  --      answers only "does this account exist and is it switched on". So an
+  --      active `viewer` -- whose only preset capability is view_scores -- could
+  --      insert and update check-ins, and could create and rename clients.
+  --      Sections 10b through 10d could not see that: every one of their
+  --      subjects is either fully entitled or has no profile row at all, and
+  --      both of those answered the same before and after the migration. The
+  --      gap was invisible to this file by construction.
+  --
+  --      BOTH DIRECTIONS, for the reason section 9c exists. A policy that
+  --      denies everything passes every negative assertion in this file while
+  --      making the app unusable, so a viewer being refused is only half the
+  --      evidence -- the other half is an account manager being allowed. The
+  --      failure that locks everyone out is the one nobody writes a test for.
+  --
+  --      PRECONDITIONS, NOT FINDINGS. These checks need an active profile row
+  --      with each role. Production has one user and he is an admin, so the
+  --      expected result there is two preconditions and nothing checked. That
+  --      must not read as a pass: it is reported under the COULD NOT VERIFY
+  --      heading, which still exits non-zero.
+  --
+  --      ZERO WRITES SURVIVE. Two of the four probes below are meant to
+  --      SUCCEED, which is new -- 10c only ever probed a refusal. A successful
+  --      insert is rolled back by raising inside its own subtransaction, so the
+  --      sentinel `probe rollback` means "the policy allowed it" and is read as
+  --      a violation in the viewer block and as the expected result in the
+  --      account-manager block. What does NOT roll back is clients_id_seq: an
+  --      identity sequence advances outside the transaction, so the account
+  --      manager probe leaves a gap in the client ids. That is a cosmetic cost
+  --      of exercising the real write path and is accepted deliberately.
+  select id into probe_client_id from public.clients order by id limit 1;
+
+  select id into viewer_uid
+  from public.profiles
+  where is_active and role = 'viewer'
+  order by created_at
+  limit 1;
+
+  select id into am_uid
+  from public.profiles
+  where is_active and role = 'account_manager'
+  order by created_at
+  limit 1;
+
+  if probe_client_id is null then
+    preconditions := preconditions || 'public.clients is empty, so section 10f could not attempt a check-in insert and NO capability check ran -- seed one client and re-run (README: "Seeding the first client")'::text;
+  else
+    -- The viewer: reads everything, writes nothing.
+    if viewer_uid is null then
+      preconditions := preconditions || 'public.profiles contains no ACTIVE row with role = viewer, so the check that a viewer cannot write went UNEXERCISED -- this is the expected state on a project with one admin, and it is the check the has_capability migration was written for'::text;
+    else
+      begin
+        perform set_config(
+          'request.jwt.claims',
+          json_build_object('sub', viewer_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+          true);
+        set local role authenticated;
+
+        -- view_scores IS in the viewer preset, so the reads must still work.
+        -- Asserted as "all of them" for the same reason as 10b.
+        select count(*) into n_seen from public.clients;
+        if n_seen <> n_clients_total then
+          problems := problems || format(
+            'an active VIEWER sees %s of %s rows in public.clients -- clients_select_view_scores is denying rows a viewer preset includes (view_scores), so the board is empty for every viewer',
+            n_seen, n_clients_total)::text;
+        end if;
+
+        select count(*) into n_seen from public.checkins;
+        if n_seen <> n_checkins_total then
+          problems := problems || format(
+            'an active VIEWER sees %s of %s rows in public.checkins -- checkins_select_view_scores is denying rows a viewer preset includes (view_scores)',
+            n_seen, n_checkins_total)::text;
+        end if;
+
+        -- edit_scores is NOT in the viewer preset.
+        begin
+          insert into public.checkins (client_id, period)
+          values (probe_client_id, probe_period);
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active VIEWER was ALLOWED to insert into public.checkins -- checkins_insert_edit_scores is not gating on edit_scores, so anybody who can sign in can write scores (the row was rolled back by this check, not by the policy)'::text;
+            else
+              problems := problems || format(
+                'the viewer check-in insert probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        -- manage_clients is NOT in the viewer preset.
+        begin
+          insert into public.clients (name)
+          values ('verify-privileges viewer probe -- must never persist');
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active VIEWER was ALLOWED to insert into public.clients -- clients_insert_manage_clients is not gating on manage_clients, so anybody who can sign in can create clients (the row was rolled back by this check, not by the policy)'::text;
+            else
+              problems := problems || format(
+                'the viewer client insert probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        reset role;
+      exception when others then
+        problems := problems || format(
+          'the viewer capability check could not run: %s %s -- whether a viewer can write is UNVERIFIED',
+          sqlstate, sqlerrm)::text;
+      end;
+    end if;
+
+    -- The account manager: the direction that locks everyone out if it is wrong.
+    if am_uid is null then
+      preconditions := preconditions || 'public.profiles contains no ACTIVE row with role = account_manager, so the check that an account manager CAN still write went UNEXERCISED -- and that is the direction in which a mistake here takes the app away from everybody'::text;
+    else
+      begin
+        perform set_config(
+          'request.jwt.claims',
+          json_build_object('sub', am_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+          true);
+        set local role authenticated;
+
+        -- edit_scores IS in the account_manager preset. Saving a check-in is the
+        -- one write this whole application exists to perform.
+        begin
+          insert into public.checkins (client_id, period)
+          values (probe_client_id, probe_period);
+          -- Allowed, which is the expected outcome. Raising rolls the insert
+          -- back so a passing check leaves nothing behind.
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            problems := problems || 'an active ACCOUNT MANAGER was REFUSED an insert into public.checkins -- checkins_insert_edit_scores is denying edit_scores, which is in the account_manager preset, so nobody but an admin can save a check-in'::text;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              null;
+            else
+              problems := problems || format(
+                'the account-manager check-in insert probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        -- manage_clients IS in the account_manager preset.
+        begin
+          insert into public.clients (name)
+          values ('verify-privileges account-manager probe -- must never persist');
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            problems := problems || 'an active ACCOUNT MANAGER was REFUSED an insert into public.clients -- clients_insert_manage_clients is denying manage_clients, which is in the account_manager preset, so the clients admin screen is unusable for them'::text;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              null;
+            else
+              problems := problems || format(
+                'the account-manager client insert probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        reset role;
+      exception when others then
+        problems := problems || format(
+          'the account-manager capability check could not run: %s %s -- whether an account manager can still write is UNVERIFIED',
+          sqlstate, sqlerrm)::text;
+      end;
+    end if;
+  end if;
 
   ----------------------------------------------------------------------------
   -- 11. service_role must keep reaching every table in `public`.
