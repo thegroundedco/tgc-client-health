@@ -243,9 +243,11 @@ describe('reaching the clients admin', () => {
   })
 
   it('opens the screen, and comes back', async () => {
-    // A fresh spy rather than READY's own: READY is built once for this whole
-    // describe, and vi.mocked(useBoard).mockReset() in afterEach does not clear
-    // the calls recorded on a function inside it.
+    // A fresh spy rather than READY's own: READY is module-scoped, shared by
+    // this describe and 'the show-archived toggle', so its reload is the same
+    // vi.fn() across every test that does not override it -- and
+    // vi.mocked(useBoard).mockReset() in afterEach does not clear the calls
+    // recorded on a function inside it.
     const reload = vi.fn()
     vi.mocked(useBoard).mockReturnValue({ ...READY, reload })
     render(<Board profile={PROFILE} />)
@@ -384,14 +386,17 @@ describe('the show-archived toggle', () => {
   })
 
   it('does not offer the toggle on a failed read', () => {
-    // A count derived from a list that could not be read would be a made-up
-    // number, and the error must own the screen.
+    // MIXED, not READY: useBoard does not clear `clients` on a failed reload
+    // (its error branches return before setClients), so a failed read can
+    // leave the previous successful load's rows -- archived ones included --
+    // still sitting in state. A fixture with clients: [] would pass this
+    // assertion whether the toggle were suppressed on error or simply had
+    // nothing to show; archivedCount(MIXED.clients) is 2, so this fixture
+    // fails if the suppression is ever removed.
     vi.mocked(useBoard).mockReturnValue({
-      ...READY,
+      ...MIXED,
       status: 'error',
       loadError: 'the connection failed',
-      clients: [],
-      activeTotal: 0,
     })
     render(<Board profile={PROFILE} />)
 

@@ -107,9 +107,12 @@ export function Board({ profile }: Props) {
   // nothing is worse than no control: it implies something is hidden.
   //
   // Not drawn on a failed read either -- that branch returns before this is
-  // used -- because the count would come from a list that could not be read,
-  // which is a made-up number on a screen whose job at that moment is to say
-  // the read failed.
+  // used. Not because the count would be invented: useBoard leaves the
+  // previous successful load's rows in state when a reload fails, so on a
+  // failed read the count can be real and simply stale. The reason is that
+  // the error must own the screen -- a control offering more rows beside
+  // "cannot reach the database" would invite someone to act on data of
+  // unknown freshness.
   const archiveToggle = archived > 0 ? (
     <button
       className="button button--quiet"
