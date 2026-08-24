@@ -8,6 +8,7 @@ import { ClientCard } from './ClientCard'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
 import type { BoardClient } from './useBoard'
+import { archivedCount, toggleLabel, visibleClients } from './boardScope'
 import styles from './Board.module.css'
 
 type Props = { profile: Profile }
@@ -33,6 +34,12 @@ export function Board({ profile }: Props) {
   // admin URL needs the GitHub Pages 404.html redirect trick, which is not
   // worth buying until somebody wants to send a colleague a link to it.
   const [showingClients, setShowingClients] = useState(false)
+
+  // Not persisted, deliberately. A reload returns to the working view, which is
+  // the same choice §5.1 makes for the check-in screen: no router, no URL
+  // state, so a refresh lands somewhere predictable rather than wherever the
+  // last visit left off.
+  const [showArchived, setShowArchived] = useState(false)
 
   const board = useBoard(period)
 
@@ -91,6 +98,28 @@ export function Board({ profile }: Props) {
     </nav>
   ) : null
 
+  // Derived after the two navigation returns and before the four render
+  // branches, so every branch below can use them.
+  const archived = archivedCount(board.clients)
+  const visible = visibleClients(board.clients, showArchived)
+
+  // Drawn only when there is something to reveal. A control that reveals
+  // nothing is worse than no control: it implies something is hidden.
+  //
+  // Not drawn on a failed read either -- that branch returns before this is
+  // used -- because the count would come from a list that could not be read,
+  // which is a made-up number on a screen whose job at that moment is to say
+  // the read failed.
+  const archiveToggle = archived > 0 ? (
+    <button
+      className="button button--quiet"
+      onClick={() => setShowArchived((shown) => !shown)}
+      type="button"
+    >
+      {toggleLabel(archived, showArchived)}
+    </button>
+  ) : null
+
   // Error before loading: a failed read must never fall through to a screen
   // that looks merely empty. That is v1's "a broken tool looks like an empty
   // one", and it is the reason useBoard reports a status rather than just a
@@ -119,16 +148,25 @@ export function Board({ profile }: Props) {
     )
   }
 
-  if (board.clients.length === 0) {
+  if (visible.length === 0) {
     return (
       <section className={styles.state}>
         {adminLink}
         {/* The same sentence progressLine gives the populated board, so the two
-            empty states cannot drift apart in wording. */}
-        <h2 className="t-header">{progressLine(0, 0)}</h2>
-        <p className="t-body prose">
-          Add one on the client admin screen to see it here.
-        </p>
+            empty states cannot drift apart in wording. activeTotal, not
+            visible.length: this line is about the roster, not about what the
+            toggle happens to be showing. */}
+        <h2 className="t-header">{progressLine(board.submitted, board.activeTotal)}</h2>
+        {archived > 0 ? (
+          // Reachable the moment somebody retires their last client. Without
+          // this the roster looks permanently empty with no hint that anything
+          // exists.
+          <div className={styles.archiveBar}>{archiveToggle}</div>
+        ) : (
+          <p className="t-body prose">
+            Add one on the client admin screen to see it here.
+          </p>
+        )}
       </section>
     )
   }
@@ -140,10 +178,14 @@ export function Board({ profile }: Props) {
         <h2 className="t-header">{formatPeriod(period)}</h2>
         {/* §6's progress line. role="status" because this number changes on the
             way back from a check-in -- the one moment somebody wants to hear
-            that their submission counted. */}
+            that their submission counted.
+            activeTotal, never visible.length: a former client cannot owe a
+            check-in, so counting one here would make this sentence false, and
+            pressing the toggle must not change what it says. */}
         <p className="t-caption" role="status">
-          {progressLine(board.submitted, board.clients.length)}
+          {progressLine(board.submitted, board.activeTotal)}
         </p>
+        {archiveToggle}
       </div>
 
       {/* role="list" because base.css removes the markers globally, and WebKit
@@ -153,7 +195,7 @@ export function Board({ profile }: Props) {
           label is what lets a test address this list, and what tells a screen
           reader which list it is. */}
       <ul aria-label="Clients" className={styles.grid} role="list">
-        {board.clients.map((client) => (
+        {visible.map((client) => (
           <ClientCard
             checkin={board.checkins.get(client.id) ?? null}
             client={client}

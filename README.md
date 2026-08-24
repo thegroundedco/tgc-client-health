@@ -678,6 +678,36 @@ after the last one. The second pins `src/lib/capabilities.ts` against the
 migration's presets in both directions, because the UI keeps a second copy to
 decide what to draw.
 
+## The board's show-archived toggle
+
+The board is the month's check-in grid, so by default it shows only `active`
+clients — the ones a check-in is expected for. **Show N archived** reveals the
+rest: `paused`, `cancelled` and `former`, sorted after the active roster.
+
+The parent spec names only `former` as hidden behind this toggle. It reveals all
+three because the board has only ever read `active`, so `paused` and `cancelled`
+were invisible with no way at all to see them — and the clients admin screen
+already tells the reader that a paused client is "Off the board."
+
+Two things the toggle deliberately does not do:
+
+- **It never changes the progress line.** That line reads "N of M check-ins
+  submitted this month", and M is the count of *active* clients whatever the
+  toggle says. A former client cannot owe a check-in, and can still hold one
+  from when they were active, so both halves of that fraction filter on status.
+  `useBoard` computes them; `clients.length` is the wrong denominator and there
+  is a test that fails if it is used.
+- **It does not make an archived client scorable.** Their card shows its status
+  and its past scores, but the name is text rather than a link, and the card
+  says why. This is a UI-only guard and it is the only one there is:
+  `checkins_insert_edit_scores` gates on the `edit_scores` capability and
+  carries **no status predicate**, so Postgres would accept a check-in for a
+  client who left. Before this toggle the board never drew such a client, so the
+  path did not exist.
+
+The toggle is not remembered across a reload. A refresh returns to the working
+view, the same choice the board makes for its other navigation.
+
 ## The clients admin screen
 
 Reached from the board by anyone whose role preset includes `manage_clients` --

@@ -84,6 +84,10 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
     clients: CLIENTS,
     checkins: new Map(),
     submitted: 0,
+    // All three of CLIENTS are active, so this is the same number as
+    // clients.length here -- but it is a separate field, and overrides below
+    // that shrink clients must shrink this too.
+    activeTotal: 3,
     reload: () => {},
     ...overrides,
   }
@@ -95,6 +99,18 @@ const given = (state: Partial<UseBoard> = {}) => {
 }
 
 const clientList = () => screen.queryByRole('list', { name: /clients/i })
+
+// Module scope, not inside one describe: both 'reaching the clients admin'
+// and 'the show-archived toggle' build their fixtures from this one client.
+const READY = {
+  status: 'ready' as const,
+  loadError: null,
+  clients: [{ id: 1, name: 'Acme', status: 'active' }],
+  checkins: new Map(),
+  submitted: 0,
+  activeTotal: 1,
+  reload: vi.fn(),
+}
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -158,7 +174,7 @@ describe('the board', () => {
   })
 
   it('says it is loading, and shows no list', () => {
-    given({ status: 'loading', clients: [] })
+    given({ status: 'loading', clients: [], activeTotal: 0 })
     expect(clientList()).toBeNull()
     // Not a blank screen. "A broken tool looks like an empty one" is the v1
     // failure this whole rebuild exists to end.
@@ -168,7 +184,7 @@ describe('the board', () => {
   it('shows a failed read instead of an empty board, and offers a retry', async () => {
     const reload = vi.fn()
     const user = userEvent.setup()
-    given({ status: 'error', loadError: 'the connection failed', clients: [], reload })
+    given({ status: 'error', loadError: 'the connection failed', clients: [], activeTotal: 0, reload })
 
     expect(screen.getByRole('alert').textContent).toContain('the connection failed')
     expect(clientList()).toBeNull()
@@ -178,7 +194,7 @@ describe('the board', () => {
   })
 
   it('says the roster is empty, and how to fix it, rather than rendering nothing', () => {
-    given({ clients: [] })
+    given({ clients: [], activeTotal: 0 })
     expect(screen.getByText('No active clients')).toBeTruthy()
     expect(screen.getByText(/client admin screen/)).toBeTruthy()
     expect(clientList()).toBeNull()
@@ -194,15 +210,6 @@ describe('the board', () => {
 })
 
 describe('reaching the clients admin', () => {
-  const READY = {
-    status: 'ready' as const,
-    loadError: null,
-    clients: [{ id: 1, name: 'Acme', status: 'active' }],
-    checkins: new Map(),
-    submitted: 0,
-    reload: vi.fn(),
-  }
-
   it('offers the link to an account manager', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
     render(<Board profile={PROFILE} />)
@@ -261,7 +268,7 @@ describe('reaching the clients admin', () => {
   it('offers the link when the board is empty, which is when it is needed most', () => {
     // The old copy sent the reader to the Supabase dashboard. A board with no
     // clients and no way to add one is the exact state this screen exists for.
-    vi.mocked(useBoard).mockReturnValue({ ...READY, clients: [] })
+    vi.mocked(useBoard).mockReturnValue({ ...READY, clients: [], activeTotal: 0 })
     render(<Board profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
@@ -277,5 +284,118 @@ describe('reaching the clients admin', () => {
     render(<Board profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Clients' })).toBeTruthy()
+  })
+})
+
+describe('the show-archived toggle', () => {
+  const MIXED = {
+    ...READY,
+    clients: [
+      { id: 1, name: 'Acme', status: 'active' },
+      { id: 2, name: 'Bellwether', status: 'paused' },
+      { id: 3, name: 'Test Client', status: 'former' },
+    ],
+    activeTotal: 1,
+  }
+
+  const cardNames = () =>
+    [...screen.getByRole('list', { name: 'Clients' }).querySelectorAll('h3')].map(
+      (heading) => heading.textContent,
+    )
+
+  it('shows only the active roster by default', () => {
+    vi.mocked(useBoard).mockReturnValue(MIXED)
+    render(<Board profile={PROFILE} />)
+
+    expect(cardNames()).toEqual(['Acme'])
+  })
+
+  it('offers a toggle naming how many are hidden', () => {
+    vi.mocked(useBoard).mockReturnValue(MIXED)
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('button', { name: 'Show 2 archived' })).toBeTruthy()
+  })
+
+  it('reveals them, active roster first, and offers to hide them again', async () => {
+    vi.mocked(useBoard).mockReturnValue(MIXED)
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
+
+    expect(cardNames()).toEqual(['Acme', 'Bellwether', 'Test Client'])
+    expect(screen.getByRole('button', { name: 'Hide 2 archived' })).toBeTruthy()
+  })
+
+  it('hides them again', async () => {
+    vi.mocked(useBoard).mockReturnValue(MIXED)
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Hide 2 archived' }))
+
+    expect(cardNames()).toEqual(['Acme'])
+  })
+
+  it('does not draw the toggle when nothing is archived', () => {
+    // A control that reveals nothing is worse than no control: it implies
+    // there is something hidden.
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
+  })
+
+  it('never counts an archived client in the progress line', async () => {
+    // The sharpest requirement in this step. "1 of 3" would tell the reader
+    // that three check-ins are owed this month, two of them for a paused
+    // client and a client who has left.
+    vi.mocked(useBoard).mockReturnValue({ ...MIXED, submitted: 1 })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('status').textContent).toBe(
+      'All 1 check-ins submitted this month',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
+
+    // Unchanged by the toggle. This is the assertion that would fail if the
+    // denominator were clients.length.
+    expect(screen.getByRole('status').textContent).toBe(
+      'All 1 check-ins submitted this month',
+    )
+  })
+
+  it('offers the toggle when every client is archived, rather than an empty board', async () => {
+    // Reachable the moment somebody retires their last client. Without the
+    // toggle here, the roster would look permanently empty with no hint that
+    // three clients exist.
+    vi.mocked(useBoard).mockReturnValue({
+      ...MIXED,
+      clients: [{ id: 3, name: 'Test Client', status: 'former' }],
+      activeTotal: 0,
+      submitted: 0,
+    })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByText('No active clients')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Show 1 archived' }))
+    expect(cardNames()).toEqual(['Test Client'])
+  })
+
+  it('does not offer the toggle on a failed read', () => {
+    // A count derived from a list that could not be read would be a made-up
+    // number, and the error must own the screen.
+    vi.mocked(useBoard).mockReturnValue({
+      ...READY,
+      status: 'error',
+      loadError: 'the connection failed',
+      clients: [],
+      activeTotal: 0,
+    })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
+    expect(screen.getByRole('alert')).toBeTruthy()
   })
 })
