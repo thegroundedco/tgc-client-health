@@ -83,6 +83,9 @@ export type Database = {
       clients: {
         Row: {
           created_at: string
+          end_reason_code: string | null
+          end_reason_note: string | null
+          ended_on: string | null
           id: number
           name: string
           owner_id: string | null
@@ -91,6 +94,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          end_reason_code?: string | null
+          end_reason_note?: string | null
+          ended_on?: string | null
           id?: never
           name: string
           owner_id?: string | null
@@ -99,6 +105,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          end_reason_code?: string | null
+          end_reason_note?: string | null
+          ended_on?: string | null
           id?: never
           name?: string
           owner_id?: string | null
