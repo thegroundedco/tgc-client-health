@@ -352,17 +352,22 @@ export function ownerLabel(profile: { full_name: string | null; email: string })
   return name === '' ? profile.email : name
 }
 
+// The order statuses read in, extracted from sortClients in Slice 2 step 5 so
+// the board and this screen cannot disagree about it. An unknown status ranks
+// LAST rather than -1: -1 would sort a status nobody meant to the top of the
+// board, which is the opposite of what an unrecognised value deserves.
+export function statusRank(status: string): number {
+  const index = CLIENT_STATUSES.indexOf(status as ClientStatus)
+  return index === -1 ? CLIENT_STATUSES.length : index
+}
+
 // Status then name, so the active roster reads first (spec §7). A status the
 // four do not cover sorts last rather than being dropped: this screen is the
 // only place such a row is visible at all.
 export function sortClients(rows: readonly AdminClient[]): AdminClient[] {
-  const rank = (status: string) => {
-    const index = CLIENT_STATUSES.indexOf(status as ClientStatus)
-    return index === -1 ? CLIENT_STATUSES.length : index
-  }
   // Copied first: sorting the array the hook holds in state would mutate it in
   // place, and React compares by identity.
   return [...rows].sort(
-    (a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name),
+    (a, b) => statusRank(a.status) - statusRank(b.status) || a.name.localeCompare(b.name),
   )
 }

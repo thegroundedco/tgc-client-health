@@ -14,6 +14,7 @@ import {
   reasonLabel,
   sortClients,
   statusLabel,
+  statusRank,
   updatePayload,
   writeFailureText,
   writeStatusLine,
@@ -246,6 +247,16 @@ describe('the list order', () => {
     const input = [row({ id: 1, name: 'Zinc' }), row({ id: 2, name: 'Acme' })]
     sortClients(input)
     expect(input.map((c) => c.name)).toEqual(['Zinc', 'Acme'])
+  })
+
+  it('ranks the four statuses in board-reading order', () => {
+    expect(CLIENT_STATUSES.map(statusRank)).toEqual([0, 1, 2, 3])
+  })
+
+  it('ranks a status it does not know after all the ones it does', () => {
+    // Not -1, which would sort an unknown status FIRST and put a row nobody
+    // meant at the top of the board.
+    expect(statusRank('archived')).toBe(CLIENT_STATUSES.length)
   })
 })
 
