@@ -89,4 +89,20 @@ describe('the role presets', () => {
     // Closed by default: the same posture as the migration's `else array[]`.
     expect(can('sales' as Role, 'view_scores')).toBe(false)
   })
+
+  // The guard at src/lib/capabilities.ts:52 says an unexpected string must
+  // answer "no" rather than throw. Until Slice 2 step 4 the parameter was typed
+  // `Role`, so that sentence described behaviour no caller could reach and no
+  // test could ask for. The screen passes `profile.role`, which is a text
+  // column typed `string`, so the guard is now load-bearing.
+  //
+  // 'sales' is the same fourth role scripts/verify-capability.sql evaluates the
+  // deployed CASE against, so both halves of the model are probed with the same
+  // unknown value.
+  it('answers no for a role it does not know, rather than throwing', () => {
+    for (const capability of CAPABILITIES) {
+      expect(can('sales', capability)).toBe(false)
+      expect(can('', capability)).toBe(false)
+    }
+  })
 })

@@ -50,9 +50,19 @@ export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
 export const ROLES = Object.keys(ROLE_CAPABILITIES) as readonly Role[]
 
 // Closed by default. `role` arrives from a profiles row -- a text column whose
-// check constraint makes an unknown value unreachable today -- but an unexpected
-// string must answer "no" rather than throw on `undefined.includes`, because a
-// throw inside a render is how this project's screens go blank.
-export function can(role: Role, capability: Capability): boolean {
-  return ROLE_CAPABILITIES[role]?.includes(capability) ?? false
+// check constraint makes an unknown value unreachable through the database
+// today -- so the parameter is `string` rather than `Role`. That is deliberate,
+// and it changed in Slice 2 step 4: `Profile['role']` is `string`
+// (src/types/database.ts), so a `Role` parameter meant the only real caller,
+// the clients admin screen, could not pass the value it actually holds without
+// an assertion at the call site. An assertion there would have moved the lie
+// closer to the screen instead of removing it. An unexpected string must answer
+// "no" rather than throw on `undefined.includes`, because a throw inside a
+// render is how this project's screens go blank.
+export function can(role: string, capability: Capability): boolean {
+  // Annotated `| undefined` on purpose: `Record<Role, …>` indexed by an
+  // asserted key is typed as always-present, which would make the `?.` below
+  // read as dead code the next person deletes. The lookup genuinely can miss.
+  const preset: readonly Capability[] | undefined = ROLE_CAPABILITIES[role as Role]
+  return preset?.includes(capability) ?? false
 }
