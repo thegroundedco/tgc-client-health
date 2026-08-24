@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify:capability": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-capability.sql",
     "verify:privileges": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql",
     "verify:score": "node scripts/score-parity.mjs && npm run db:which && npx --yes supabase@latest db query --linked -f scripts/.score-parity.generated.sql",
     "verify:lifecycle": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-lifecycle.sql",

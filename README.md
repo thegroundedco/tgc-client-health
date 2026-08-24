@@ -368,6 +368,7 @@ npm run db:which        # prints the linked project's name, ref and region,
                         #   and shouts if it is not named 'staging'
 npm run db:push         # db:which, then db push --linked
 npm run verify:privileges   # db:which, then the assertions
+npm run verify:capability   # db:which, then the preset table, no rows needed
 ```
 
 Switch target deliberately, one command at a time, and never leave production
@@ -625,6 +626,57 @@ Both exit non-zero.
 the migration's constraint text, the seven reason codes (membership **and**
 count), and the unique index — so drift is caught in CI. It does **not** prove
 Postgres enforces any of it.
+
+### `npm run verify:capability`
+
+Proves the **deployed** `private.has_capability` gives the right answer for every
+role and every capability: four roles × four capabilities = **16 combinations**.
+It reads the `CASE` out of `pg_proc.prosrc` and evaluates it over a `VALUES`
+list, so what is tested is what is deployed — the same technique
+`verify:lifecycle` uses on a check constraint.
+
+The fourth role is `sales`, which no preset knows. It must answer false for
+everything, which is what exercises the function's `else array[]::text[]` branch.
+That value is unreachable while `profiles.role` carries its check constraint; the
+branch exists so that adding a role to the constraint and forgetting the `CASE`
+fails closed, and an unexercised fail-closed branch is only an intention.
+
+Nothing is inserted and no sequence advances, and unlike `verify:privileges` it
+needs **no rows in any table** — which is the reason it exists. Section 10f of
+`verify:privileges` checks the same guarantee the right way round, by becoming
+`authenticated` with a viewer's claims and watching a real `insert` be refused,
+but it needs an active profile row per role. Neither database has one, so on a
+project with a single admin 10f reports `COULD NOT VERIFY` and the preset table
+would otherwise go unexercised.
+
+**It covers only the preset table.** The `exists (...)` wrapper around it — the
+`auth.uid()` lookup and the `is_active` test — is not exercised, because that
+needs a subject and a profile row. So a function that answers correctly per role
+could still be wired to the wrong subject and this would pass. Sections 10b–10d
+of `verify:privileges` are what cover the wiring. **Neither file is sufficient
+alone**, and that is stated at the top of both.
+
+It distinguishes the same two failures. **`COULD NOT VERIFY`** means the function
+is absent (normally: the migration is not applied here) or has been rewritten
+into a shape the script cannot read — the second one is not a pass, and the
+script says so rather than shrugging. **`FAILED`** means somebody holds a
+capability their role should not, or is denied one it should, and it prints the
+deployed `CASE`. Both exit non-zero.
+
+A passing run echoes the function's identity arguments, `security definer`,
+`stable`, and the two grants that matter: `authenticated_execute` must be
+**true** — a policy-referenced definer function that `authenticated` cannot
+execute fails `42501` for every signed-in user — and `anon_execute` must be
+**false**. Those two are *asserted*, in both directions, by section 9 of
+`verify:privileges`; here they are printed beside the answers they govern.
+
+`tests/hasCapability.test.ts` and `tests/capabilities.test.ts` are the cheap half
+and run in `npm test`. The first pins the migration's function body, its grants,
+the six policy predicates and the **order** of the three sections — creating and
+granting the function before any policy names it, and dropping the old helper
+after the last one. The second pins `src/lib/capabilities.ts` against the
+migration's presets in both directions, because the UI keeps a second copy to
+decide what to draw.
 
 ## Security notes
 
