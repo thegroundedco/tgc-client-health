@@ -115,6 +115,7 @@ export function Board({ profile }: Props) {
   // unknown freshness.
   const archiveToggle = archived > 0 ? (
     <button
+      aria-expanded={showArchived}
       className="button button--quiet"
       onClick={() => setShowArchived((shown) => !shown)}
       type="button"
@@ -160,15 +161,16 @@ export function Board({ profile }: Props) {
             visible.length: this line is about the roster, not about what the
             toggle happens to be showing. */}
         <h2 className="t-header">{progressLine(board.submitted, board.activeTotal)}</h2>
-        {archived > 0 ? (
+        {/* Always rendered, not one arm of a ternary with the toggle below:
+            the sentence is how to get a working roster back, and that is
+            exactly what somebody needs the moment they retire their last
+            client -- whether or not there is anything archived to reveal. */}
+        <p className="t-body prose">Add one on the client admin screen to see it here.</p>
+        {archived > 0 && (
           // Reachable the moment somebody retires their last client. Without
           // this the roster looks permanently empty with no hint that anything
           // exists.
           <div className={styles.archiveBar}>{archiveToggle}</div>
-        ) : (
-          <p className="t-body prose">
-            Add one on the client admin screen to see it here.
-          </p>
         )}
       </section>
     )

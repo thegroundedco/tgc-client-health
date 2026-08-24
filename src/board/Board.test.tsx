@@ -385,6 +385,38 @@ describe('the show-archived toggle', () => {
     expect(cardNames()).toEqual(['Test Client'])
   })
 
+  it('still tells the reader how to add a client when the empty roster also offers the toggle', () => {
+    // The empty branch used to be one ternary: the toggle OR the instruction,
+    // never both. That left the exact moment somebody retires their last
+    // client -- when the toggle first appears -- as the moment the sentence
+    // telling them how to get a working roster back disappeared.
+    vi.mocked(useBoard).mockReturnValue({
+      ...MIXED,
+      clients: [{ id: 3, name: 'Test Client', status: 'former' }],
+      activeTotal: 0,
+      submitted: 0,
+    })
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByText('No active clients')).toBeTruthy()
+    expect(screen.getByText(/Add one on the client admin screen/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show 1 archived' })).toBeTruthy()
+  })
+
+  it('marks the toggle expanded or collapsed for a screen reader', async () => {
+    vi.mocked(useBoard).mockReturnValue(MIXED)
+    render(<Board profile={PROFILE} />)
+
+    const toggle = screen.getByRole('button', { name: 'Show 2 archived' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+
+    await userEvent.click(toggle)
+
+    expect(screen.getByRole('button', { name: 'Hide 2 archived' }).getAttribute('aria-expanded')).toBe(
+      'true',
+    )
+  })
+
   it('does not offer the toggle on a failed read', () => {
     // MIXED, not READY: useBoard does not clear `clients` on a failed reload
     // (its error branches return before setClients), so a failed read can

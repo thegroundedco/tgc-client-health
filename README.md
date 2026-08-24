@@ -698,7 +698,7 @@ Two things the toggle deliberately does not do:
   `useBoard` computes them; `clients.length` is the wrong denominator and there
   is a test that fails if it is used.
 - **It does not make an archived client scorable.** Their card shows its status
-  and its past scores, but the name is text rather than a link, and the card
+  and its past scores, but the name is text rather than a button, and the card
   says why. This is a UI-only guard and it is the only one there is:
   `checkins_insert_edit_scores` gates on the `edit_scores` capability and
   carries **no status predicate**, so Postgres would accept a check-in for a

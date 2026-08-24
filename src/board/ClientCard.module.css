@@ -119,7 +119,12 @@
   border-radius: var(--radius-md);
 }
 
-.card:hover {
+/* Scoped to a card that actually contains .cardOpen: an archived card has no
+   button to react to, and before this rule was scoped every card lit up on
+   hover regardless -- a highlight that used to always mean "clickable" and,
+   once archived cards stopped being buttons, meant nothing on part of the
+   grid. */
+.card:has(.cardOpen):hover {
   border-color: var(--text-secondary);
 }
 
@@ -136,11 +141,16 @@
   outline-offset: 2px;
 }
 
-/* The name of a card that cannot be opened. It inherits the h3's type role, so
-   this only removes the affordances .cardOpen adds -- no pointer, no underline,
-   no hover. Deliberately NOT dimmed: a former client's card is still there to
-   be read, and greying it out would make the whole card look disabled rather
-   than the one control that is. */
+/* The name of a card that cannot be opened. It inherits the h3's type role.
+   .cardOpen contributes two things this rule undoes the one visible part of:
+   the pointer cursor, reset to default here, and the card-wide click overlay
+   from .cardOpen::after, which simply is not rendered because there is no
+   .cardOpen to render it from. The hover that highlights an openable card
+   lives on .card:has(.cardOpen):hover above, scoped separately so it never
+   lights up a card with nothing to open. There was never an underline to
+   remove -- .cardOpen carries none. Deliberately NOT dimmed: a former
+   client's card is still there to be read, and greying it out would make the
+   whole card look disabled rather than the one control that is. */
 .cardName {
   cursor: default;
 }

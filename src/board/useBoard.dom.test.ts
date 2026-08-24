@@ -54,8 +54,13 @@ beforeEach(() => {
   db.checkins = async () => ({ data: [], error: null })
 })
 
-// Passed by reference rather than as an arrow holding the hook call: an arrow
-// trips react/rules-of-hooks, which this repo runs as an error.
+// An arrow, not a bare reference: useBoard takes the period argument, and
+// there is no zero-argument form to pass by reference the way
+// src/clients/useClients.dom.test.ts does for the argument-free useClients.
+// react/rules-of-hooks -- which this repo runs as an error -- does not object
+// to a hook call inside an arrow; it is calling a hook conditionally, or
+// outside a component or another hook, that trips it, and this arrow does
+// neither.
 async function ready() {
   const rendered = renderHook(() => useBoard('2026-08-01'))
   await waitFor(() => expect(rendered.result.current.status).toBe('ready'))
