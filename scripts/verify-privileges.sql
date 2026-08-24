@@ -49,12 +49,18 @@ declare
   n_seen          bigint;
   n_clients_total bigint;
   n_checkins_total bigint;
+  n_profiles_total bigint;
 
   -- Section 10f only: the capability checks, which need a real profile row per
   -- role rather than a synthetic subject. Null means "this project has nobody
   -- with that role", which is reported as a precondition and not as a finding.
   viewer_uid      uuid;
   am_uid          uuid;
+
+  -- Section 10g only: the inactive account. New accounts are created inactive,
+  -- so this becomes checkable the first time somebody signs up and is not
+  -- activated. Null means nobody on this project is inactive.
+  inactive_uid    uuid;
 
   -- A real client id, read as the table owner before any impersonation, so 10f
   -- can attempt a check-in insert at all: checkins.client_id is NOT NULL and
@@ -208,8 +214,13 @@ begin
   for r in
     with allowed (table_name, grantee, privilege_type) as (
       values
-        -- public.profiles: authenticated may read its own row (RLS-scoped) and
-        -- rename itself via a column-level grant that needs no table-level entry.
+        -- public.profiles: authenticated may read its own row and -- since the
+        -- Slice 2 step 3 widening -- every other profile too, when active. Which
+        -- rows are reachable is RLS's job (profiles_select_own OR
+        -- profiles_select_active_users, permissive policies being OR-combined);
+        -- this entry only says SELECT exists at all. The narrow WRITE surface is
+        -- asserted in section 2 and has NOT moved: full_name only, by a
+        -- column-level grant that needs no table-level entry here.
         ('profiles', 'authenticated', 'SELECT'),
 
         -- public.clients: the board reads every active client, creates one, and
@@ -609,6 +620,21 @@ begin
   --       sections.
   select count(*) into n_clients_total  from public.clients;
   select count(*) into n_checkins_total from public.checkins;
+  select count(*) into n_profiles_total from public.profiles;
+
+  -- THE PROFILES WIDENING CANNOT BE CHECKED WITH ONE PROFILE ROW, and this is
+  -- exactly the vacuity the rest of this section was built to prevent. With a
+  -- single row, "an active user sees all 1 of 1 rows in profiles" is TRUE under
+  -- profiles_select_own alone -- so 10b's comparison below passes identically
+  -- whether or not 20260824180533_widen_profiles_select.sql was ever applied.
+  -- Production held exactly one profile row on the day that migration was
+  -- written, and staging held none, so this is the state to expect rather than a
+  -- hypothetical.
+  if n_profiles_total < 2 then
+    preconditions := preconditions || format(
+      'public.profiles holds %s row(s), so the profiles widening went UNEXERCISED -- with fewer than two rows, "sees every profile" and "sees only its own" are the same assertion and 10b passes either way. This becomes checkable when a second account exists (README: "Activating the first admin")',
+      n_profiles_total)::text;
+  end if;
 
   if n_clients_total = 0 then
     preconditions := preconditions || 'public.clients is empty, so every assertion about who can read a client row is true for the wrong reason (0 = 0) and the clients policies went UNEXERCISED -- seed one client and re-run (README: "Seeding the first client")'::text;
@@ -656,11 +682,19 @@ begin
           n_seen, n_clients_total)::text;
       end if;
 
+      -- Was `<> 1` until 20260824180533_widen_profiles_select.sql. That was the
+      -- old guarantee, and leaving it would have reported a VIOLATION for a
+      -- widening working exactly as designed on any project with two accounts.
+      -- Asserted as "all of them" for the same reason as the clients comparison
+      -- above: it stays meaningful as the staff list grows, and the outage
+      -- direction -- a policy narrowed to `using (false)` -- fails here rather
+      -- than looking like a small team. The precondition in 10a2 is what stops
+      -- this reading as evidence on a one-profile database.
       select count(*) into n_seen from public.profiles;
-      if n_seen <> 1 then
+      if n_seen <> n_profiles_total then
         problems := problems || format(
-          'an active user sees %s rows in public.profiles, expected exactly their own -- profiles_select_own is wrong in one direction or the other',
-          n_seen)::text;
+          'an active user sees %s of %s rows in public.profiles -- profiles_select_active_users is denying rows the Slice 2 step 3 widening is meant to expose, so step 4 owner picker will be empty or short',
+          n_seen, n_profiles_total)::text;
       end if;
 
       select count(*) into n_seen from public.checkins;
@@ -708,7 +742,7 @@ begin
     select count(*) into n_seen from public.profiles;
     if n_seen <> 0 then
       problems := problems || format(
-        'a user with NO profile row sees %s row(s) in public.profiles -- profiles_select_own is not gating on auth.uid() and any signed-in account reads every profile',
+        'a user with NO profile row sees %s row(s) in public.profiles -- neither profiles_select_own nor profiles_select_active_users is gating correctly, and any signed-in account reads the staff list',
         n_seen)::text;
     end if;
 
@@ -795,6 +829,7 @@ begin
     with expected (tbl, policy) as (
       values
         ('profiles', 'profiles_select_own'),
+        ('profiles', 'profiles_select_active_users'),
         ('profiles', 'profiles_update_own'),
         ('clients',  'clients_select_view_scores'),
         ('clients',  'clients_insert_manage_clients'),
@@ -999,6 +1034,85 @@ begin
           sqlstate, sqlerrm)::text;
       end;
     end if;
+  end if;
+
+  -- 10g. An INACTIVE account. This is the subject the profiles widening is
+  --      scoped against, and no other check in this file can see it:
+  --      has_capability returns false for an inactive account, so
+  --      profiles_select_active_users admits nothing, while profiles_select_own
+  --      still admits its own row. The answer is therefore exactly ONE, not
+  --      zero.
+  --
+  --      SLICE 2 DESIGN §9 SAYS "an inactive one reads zero", AND THAT IS WRONG
+  --      while profiles_select_own exists. Zero would only hold if
+  --      20260824180533_widen_profiles_select.sql had REPLACED the own-row
+  --      policy, and §8 says "a second policy". Asserting the spec's number here
+  --      would have failed a correct schema, so the divergence is recorded
+  --      rather than taken on trust -- in this comment, in the migration, and in
+  --      the step 3 plan.
+  --
+  --      What it actually catches: an inactive account reading the STAFF LIST.
+  --      New accounts are created inactive by design (profiles.is_active
+  --      defaults to false, so signing up must not grant access), which means an
+  --      unapproved signup is a reachable state on a project with public
+  --      sign-up. If the widening admitted them, they would read every
+  --      colleague's email, name and role. Nothing else here would notice: 10b
+  --      uses an ACTIVE subject and 10c uses one with no profile row at all.
+  --
+  --      Reported as a precondition when nobody is inactive, for the same reason
+  --      as 10f: a check that could not run must not read as one that passed.
+  select id into inactive_uid
+  from public.profiles
+  where not is_active
+  order by created_at
+  limit 1;
+
+  if inactive_uid is null then
+    preconditions := preconditions || 'public.profiles contains no INACTIVE row, so the check that an inactive account cannot read the staff list went UNEXERCISED -- new accounts are created inactive, so this becomes checkable the first time somebody signs up and is not activated'::text;
+  else
+    begin
+      perform set_config(
+        'request.jwt.claims',
+        json_build_object('sub', inactive_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+        true);
+      set local role authenticated;
+
+      -- Exactly one, and both directions of that number are findings. More than
+      -- one means the widening admits inactive accounts. Zero means
+      -- profiles_select_own has stopped working, and profiles_update_own can no
+      -- longer see the row it updates -- so an inactive user renaming themselves
+      -- would silently affect nothing, which is the failure that migration's
+      -- comment exists to prevent.
+      select count(*) into n_seen from public.profiles;
+      if n_seen <> 1 then
+        problems := problems || format(
+          'an INACTIVE account sees %s row(s) in public.profiles, expected exactly 1 (its own, via profiles_select_own) -- more than 1 means profiles_select_active_users is admitting inactive accounts and an unapproved signup reads the staff list; 0 means profiles_update_own can no longer see the row it updates',
+          n_seen)::text;
+      end if;
+
+      -- And nothing else. An inactive account holds no capability at all, so
+      -- this is the same guarantee 10c asserts for a subject with no profile
+      -- row -- reached by a different route, through a row that DOES exist.
+      select count(*) into n_seen from public.clients;
+      if n_seen <> 0 then
+        problems := problems || format(
+          'an INACTIVE account sees %s row(s) in public.clients -- has_capability is admitting an account whose is_active is false, so deactivating somebody does not remove their access',
+          n_seen)::text;
+      end if;
+
+      select count(*) into n_seen from public.checkins;
+      if n_seen <> 0 then
+        problems := problems || format(
+          'an INACTIVE account sees %s row(s) in public.checkins -- has_capability is admitting an account whose is_active is false',
+          n_seen)::text;
+      end if;
+
+      reset role;
+    exception when others then
+      problems := problems || format(
+        'the inactive-account check could not run: %s %s -- whether an inactive account reads the staff list is UNVERIFIED',
+        sqlstate, sqlerrm)::text;
+    end;
   end if;
 
   ----------------------------------------------------------------------------

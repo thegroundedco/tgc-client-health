@@ -38,9 +38,18 @@ export function cardFooter(checkin: CardCheckin | null, viewerId: string): strin
   if (!checkin) return 'Not started'
 
   if (checkin.submitted_at !== null) {
-    // "you" or the role, never a name: profiles_select_own makes another
-    // person's profile unreadable, so a name here would have to be invented.
-    // Recorded in spec §10 item 7.
+    // "you" or the role, never a name -- and as of Slice 2 step 3 that is a
+    // CHOICE rather than a constraint. profiles_select_active_users made other
+    // people's profile rows readable, so the name is now available; wiring it up
+    // needs the board to fetch profiles, which Slice 2 design §8 defers to the
+    // first slice that touches the board again. Until then this sentence stays
+    // honest about what it knows rather than inventing a name.
+    //
+    // The old reason -- profiles_select_own makes another person's profile
+    // unreadable -- was true when this was written and is not any more. Left
+    // recorded rather than deleted, because "why does this still say a role"
+    // is the question a reader will arrive with. Originally Slice 1 spec §10
+    // item 7.
     const who = checkin.submitted_by === viewerId ? 'you' : 'another account manager'
     return `Submitted ${formatSavedAt(checkin.submitted_at)} by ${who}`
   }
