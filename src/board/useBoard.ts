@@ -3,8 +3,14 @@ import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { CHECKIN_COLUMNS } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
+import { activeCount, isOnBoard } from './boardScope'
 
-export type BoardClient = { id: number; name: string }
+// `status` joins the row in Slice 2 step 5, because the board now reads every
+// client and decides in the browser which ones to draw. It is `string`, not a
+// union, for the same reason AdminClient's is: that is what the column holds --
+// text with a check constraint -- and narrowing it here would be a claim this
+// file cannot verify.
+export type BoardClient = { id: number; name: string; status: string }
 
 export type UseBoard = {
   status: 'loading' | 'ready' | 'error'
@@ -12,6 +18,9 @@ export type UseBoard = {
   clients: BoardClient[]
   checkins: Map<number, CardCheckin>
   submitted: number
+  // The denominator of the progress line, and deliberately NOT clients.length.
+  // See the count below.
+  activeTotal: number
   reload: () => void
 }
 
@@ -39,8 +48,11 @@ export function useBoard(period: string): UseBoard {
       try {
         const clientResult = await supabase
           .from('clients')
-          .select('id, name')
-          .eq('status', 'active')
+          // No status filter, as of Slice 2 step 5. The board used to read only
+          // active clients; it now reads every row and the show-archived toggle
+          // decides what is drawn. `status` is selected because that decision
+          // needs it.
+          .select('id, name, status')
           .order('name')
 
         if (isCancelled()) return
@@ -102,14 +114,27 @@ export function useBoard(period: string): UseBoard {
     }
   }, [load])
 
-  // Counted here rather than in the component so the progress line and the
-  // card footers cannot disagree: both read submitted_at, from the same rows.
-  // Only active clients are counted, because only active clients were read.
+  // Counted here rather than in the component so the progress line and the card
+  // footers cannot disagree: both read submitted_at, from the same rows.
+  //
+  // Both numbers count ACTIVE clients only, and as of Slice 2 step 5 that is a
+  // rule this code enforces rather than a side effect of the query. The comment
+  // here used to say "only active clients are counted, because only active
+  // clients were read" -- true then, false the moment the filter came off, and
+  // the behaviour it described is the one thing that must not change with it.
+  //
+  // Why it must not change: the progress line reads "N of M check-ins submitted
+  // this month". A former client cannot owe a check-in, so counting one in M
+  // would make that sentence false -- and a former client CAN hold a check-in
+  // from when they were active, so counting it in N would too.
   let submitted = 0
   for (const client of clients) {
+    if (!isOnBoard(client.status)) continue
     if (checkins.get(client.id)?.submitted_at != null) submitted += 1
   }
 
+  const activeTotal = activeCount(clients)
+
   // A manual reload has nothing to be cancelled by, so it uses the default.
-  return { status, loadError, clients, checkins, submitted, reload: () => void load() }
+  return { status, loadError, clients, checkins, submitted, activeTotal, reload: () => void load() }
 }

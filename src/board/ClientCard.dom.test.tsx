@@ -10,7 +10,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const CLIENT = { id: 7, name: 'Polar Divide' }
+const CLIENT = { id: 7, name: 'Polar Divide', status: 'active' }
 const ME = '11111111-1111-1111-1111-111111111111'
 
 const bars = () => screen.getAllByTestId('pillar-bar')
