@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
-import { CLIENT_COLUMNS, ownerLabel, sortClients } from './clientForm'
-import type { AdminClient } from './clientForm'
+import {
+  CLIENT_COLUMNS,
+  insertPayload,
+  ownerLabel,
+  sortClients,
+  updatePayload,
+  writeFailureText,
+} from './clientForm'
+import type { AdminClient, ClientDraft, WriteState } from './clientForm'
 
 // The one place this screen talks to the database, so the screen itself can be
 // rendered in a test with this module mocked. Same seam, and the same reason, as
@@ -16,7 +23,15 @@ export type UseClients = {
   loadError: string | null
   clients: AdminClient[]
   owners: OwnerOption[]
+  // Two independent write states, because the two forms are on screen at the
+  // same time and a confirmation for one must never appear beside the other.
+  addState: WriteState
+  editState: WriteState
   reload: () => void
+  addClient: (draft: ClientDraft) => void
+  saveClient: (id: number, draft: ClientDraft) => void
+  resetAdd: () => void
+  resetEdit: () => void
 }
 
 export function useClients(): UseClients {
@@ -24,6 +39,16 @@ export function useClients(): UseClients {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [clients, setClients] = useState<AdminClient[]>([])
   const [owners, setOwners] = useState<OwnerOption[]>([])
+  const [addState, setAddState] = useState<WriteState>({ kind: 'idle' })
+  const [editState, setEditState] = useState<WriteState>({ kind: 'idle' })
+
+  // Read at the top of each write to refuse a second concurrent one. A state
+  // update is not visible until the next render, so two presses in the same tick
+  // would both see 'idle' and both send a request. The buttons are disabled
+  // during a save, which stops the ordinary case; these stop its edges. Same
+  // shape as useCheckin's inFlight ref.
+  const addInFlight = useRef(false)
+  const editInFlight = useRef(false)
 
   // `isCancelled` is a parameter, and the flag it closes over belongs to the
   // effect below -- the same shape as useBoard, useCheckin and useProfile. It
@@ -108,6 +133,97 @@ export function useClients(): UseClients {
     }
   }, [load])
 
+  const addClient = useCallback((draft: ClientDraft) => {
+    if (addInFlight.current) return
+    addInFlight.current = true
+    setAddState({ kind: 'saving' })
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .insert(insertPayload(draft))
+          // .select().single() rather than a second read: the row that comes
+          // back carries the database's own updated_at, which is the time the
+          // confirmation names and the time the new list row shows. One round
+          // trip, and no window in which the screen shows a time the database
+          // does not hold.
+          .select(CLIENT_COLUMNS)
+          .single()
+
+        if (error) {
+          // writeFailureText, not describeError alone: the unique index on
+          // lower(name) answers a duplicate in Postgres's own words, and
+          // "duplicate key value violates unique constraint" is not a sentence
+          // to put in front of an account manager. describeError still runs
+          // first, because an empty message is falsy and would render as nothing.
+          setAddState({ kind: 'failed', message: writeFailureText(describeError(error), draft.name.trim()) })
+          return
+        }
+
+        setClients((current) => sortClients([...current, data]))
+        setAddState({ kind: 'saved', at: data.updated_at, what: 'Client added' })
+      } catch (thrown) {
+        setAddState({ kind: 'failed', message: writeFailureText(describeError(thrown), draft.name.trim()) })
+      } finally {
+        // finally, not a line after the await: if this ever rejects past the
+        // catch, a latched ref would refuse every future press for the life of
+        // the screen and nothing would say why.
+        addInFlight.current = false
+      }
+    })()
+  }, [])
+
+  const saveClient = useCallback((id: number, draft: ClientDraft) => {
+    if (editInFlight.current) return
+    editInFlight.current = true
+    setEditState({ kind: 'saving' })
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          // All six columns, every time -- see updatePayload's comment. The
+          // lifecycle constraint is bidirectional, so moving a client off
+          // `former` without nulling the three lifecycle columns in the SAME
+          // statement is refused by Postgres.
+          .update(updatePayload(draft))
+          .eq('id', id)
+          .select(CLIENT_COLUMNS)
+          .single()
+
+        if (error) {
+          setEditState({ kind: 'failed', message: writeFailureText(describeError(error), draft.name.trim()) })
+          return
+        }
+
+        setClients((current) =>
+          sortClients(current.map((client) => (client.id === id ? data : client))),
+        )
+        setEditState({ kind: 'saved', at: data.updated_at, what: 'Changes saved' })
+      } catch (thrown) {
+        setEditState({ kind: 'failed', message: writeFailureText(describeError(thrown), draft.name.trim()) })
+      } finally {
+        editInFlight.current = false
+      }
+    })()
+  }, [])
+
+  const resetAdd = useCallback(() => setAddState({ kind: 'idle' }), [])
+  const resetEdit = useCallback(() => setEditState({ kind: 'idle' }), [])
+
   // A manual reload has nothing to be cancelled by, so it uses the default.
-  return { status, loadError, clients, owners, reload: () => void load() }
+  return {
+    status,
+    loadError,
+    clients,
+    owners,
+    addState,
+    editState,
+    reload: () => void load(),
+    addClient,
+    saveClient,
+    resetAdd,
+    resetEdit,
+  }
 }

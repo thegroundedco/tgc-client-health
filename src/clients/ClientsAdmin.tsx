@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { formatSavedAt } from '../lib/month'
 import { isChurned, reasonLabel, statusLabel } from './clientForm'
 import type { AdminClient } from './clientForm'
+import { AddClientForm } from './AddClientForm'
+import { EditClientForm } from './EditClientForm'
 import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
@@ -23,6 +26,12 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
 
 export function ClientsAdmin({ onBack }: Props) {
   const admin = useClients()
+
+  // Which row's form is open, by id rather than by row object: the hook replaces
+  // the row object after a save (that is how the list shows the new name), and a
+  // held object would then be the pre-save copy.
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const editing = admin.clients.find((client) => client.id === editingId) ?? null
 
   const back = (
     <nav className={styles.nav}>
@@ -77,6 +86,13 @@ export function ClientsAdmin({ onBack }: Props) {
       {back}
       {masthead}
 
+      <AddClientForm
+        onAdd={admin.addClient}
+        onEdited={admin.resetAdd}
+        owners={admin.owners}
+        state={admin.addState}
+      />
+
       {admin.clients.length === 0 ? (
         <p className="t-body prose">
           No clients yet. Add the first one above and it appears on the board straight
@@ -121,6 +137,41 @@ export function ClientsAdmin({ onBack }: Props) {
               <p className="t-caption" data-testid="client-updated">
                 Updated {formatSavedAt(client.updated_at)}
               </p>
+
+              {editing?.id === client.id ? (
+                // Keyed by id so opening a different row remounts the form with
+                // that row's values rather than keeping the first row's draft.
+                <EditClientForm
+                  client={editing}
+                  key={editing.id}
+                  onCancel={() => {
+                    setEditingId(null)
+                    admin.resetEdit()
+                  }}
+                  onEdited={admin.resetEdit}
+                  onSave={admin.saveClient}
+                  owners={admin.owners}
+                  state={admin.editState}
+                />
+              ) : (
+                <div className={styles.actions}>
+                  <button
+                    className="button button--quiet"
+                    onClick={() => {
+                      setEditingId(client.id)
+                      // A confirmation from the previous row must not appear
+                      // beside this one's fields.
+                      admin.resetEdit()
+                    }}
+                    type="button"
+                  >
+                    {/* The client's name is in the accessible name, not only in
+                        the row above it: "Edit" repeated twelve times is
+                        unusable in a screen reader's control list. */}
+                    Edit {client.name}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
