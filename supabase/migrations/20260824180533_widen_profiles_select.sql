@@ -1,0 +1,61 @@
+-- Lets any ACTIVE user read every profile row. Slice 2 design §8.
+--
+-- THIS IS A WIDENING, NOT A FIX, and this comment exists so that nobody reading
+-- the schema later mistakes it for one. Before this, profiles_select_own
+-- restricted SELECT to your own row. After it, every active user can read every
+-- profile's email, full_name, role and is_active -- which is the staff list,
+-- including who is an admin. That is the right trade for a five-person agency
+-- tool and it is a deliberate choice, made once, here.
+--
+-- WHAT DOES NOT MOVE: the write surface. `authenticated` still holds
+-- column-level UPDATE on full_name and nothing else -- see the grants in
+-- 20260820225355_create_profiles.sql and the repair in 20260820225903 -- so
+-- nobody can promote themselves to admin or activate their own account. Section
+-- 2 of scripts/verify-privileges.sql asserts exactly that, in five directions,
+-- and it is the regression guard for the vulnerability this project shipped
+-- with. Nothing in this migration touches it.
+--
+-- WHY IT IS NEEDED: the clients admin screen's owner picker (Slice 2 §7) lists
+-- active profiles by name, and Slice 1 spec §10 item 7 recorded that the board's
+-- card footer could not name who submitted a check-in for exactly this reason.
+-- The footer is NOT changed in this step -- Slice 2 §8 defers it to the first
+-- slice that touches the board again.
+--
+-- A SECOND POLICY, NOT A REPLACEMENT, and the distinction is load-bearing.
+-- Postgres OR-combines permissive policies for the same command, so a row is
+-- readable if EITHER policy allows it. profiles_select_own stays for two
+-- reasons, and neither is the one it looks like:
+--
+--   It is NOT keeping the inactive-account screen working. src/appState.ts:49 is
+--   `if (!profile || !profile.is_active)`, so a missing row and an inactive row
+--   already collapse into the same `pending` state. Measured, not assumed.
+--
+--   It stays because profiles_update_own needs a SELECT policy to make the row
+--   visible at all -- see the comment above it in 20260820225355, "An update
+--   needs a select policy too, or it silently affects zero rows" -- so dropping
+--   it would make an inactive user's rename silently no-op. And because reading
+--   your own profile should not become conditional on holding a capability,
+--   which is a different guarantee than the one being asked for here.
+--
+-- An INACTIVE user therefore still reads exactly ONE row: their own.
+-- scripts/verify-privileges.sql section 10g asserts that number. Slice 2 design
+-- §9 says an inactive account should read zero, which is wrong while
+-- profiles_select_own exists, and asserting it would have failed a correct
+-- schema.
+--
+-- Gated on view_scores rather than on "is the account active" because that is
+-- what every other read in this schema now asks, and the entire point of
+-- 20260824160306_has_capability.sql was to stop policies asking a question the
+-- permission model does not have. Every role preset includes view_scores, so
+-- today this admits every active user; the first role that should not read
+-- scores will also not read the staff list, which is the correct coupling.
+--
+-- No grants here. `grant select on public.profiles to authenticated` already
+-- exists from 20260820225355 and is table-level; what changes is which ROWS row
+-- level security returns, not whether SELECT is reachable. No index either:
+-- has_capability looks profiles up by primary key.
+create policy profiles_select_active_users
+  on public.profiles
+  for select
+  to authenticated
+  using ((select private.has_capability('view_scores')));
