@@ -4,6 +4,7 @@ import type { Profile } from '../auth/useProfile'
 import { CheckIn } from '../checkin/CheckIn'
 import { can } from '../lib/capabilities'
 import { ClientsAdmin } from '../clients/ClientsAdmin'
+import { UsersAdmin } from '../users/UsersAdmin'
 import { ClientCard } from './ClientCard'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
@@ -34,6 +35,9 @@ export function Board({ profile }: Props) {
   // admin URL needs the GitHub Pages 404.html redirect trick, which is not
   // worth buying until somebody wants to send a colleague a link to it.
   const [showingClients, setShowingClients] = useState(false)
+
+  // Same reasoning as showingClients, immediately above.
+  const [showingUsers, setShowingUsers] = useState(false)
 
   // Not persisted, deliberately. A reload returns to the working view, which is
   // the same choice §5.1 makes for the check-in screen: no router, no URL
@@ -76,6 +80,18 @@ export function Board({ profile }: Props) {
     )
   }
 
+  if (showingUsers) {
+    return (
+      <UsersAdmin
+        currentUserId={profile.id}
+        onBack={() => setShowingUsers(false)}
+        // No board.reload() here, unlike the ClientsAdmin branch above: nothing
+        // on this screen changes a client or a check-in, so re-reading the
+        // board on the way back would be a pointless extra round trip.
+      />
+    )
+  }
+
   // Drawn only for a role whose preset includes manage_clients. Convenience,
   // not security: spec §7.2, "UI hiding is convenience; the database refusing is
   // the security". A viewer who reached the screen would have every write
@@ -94,6 +110,21 @@ export function Board({ profile }: Props) {
         type="button"
       >
         Clients
+      </button>
+    </nav>
+  ) : null
+
+  // The second caller of can() in the application. Convenience, not security:
+  // a non-admin reaching this screen reads an empty invitation list and has
+  // every write refused by profiles_update_manage_users and the guard trigger.
+  //
+  // Defined here beside adminLink, above the same four early returns, and
+  // included in every one of them for the same reason: a failed read or an
+  // empty board must not strand an admin.
+  const usersLink = can(profile.role, 'manage_users') ? (
+    <nav className={styles.adminLink}>
+      <button className="button button--quiet" onClick={() => setShowingUsers(true)} type="button">
+        People
       </button>
     </nav>
   ) : null
@@ -132,6 +163,7 @@ export function Board({ profile }: Props) {
     return (
       <section className={styles.state}>
         {adminLink}
+        {usersLink}
         <h2 className="t-header">Cannot reach the database</h2>
         <p className="alert prose" role="alert">
           {board.loadError}
@@ -147,6 +179,7 @@ export function Board({ profile }: Props) {
     return (
       <section className={styles.state}>
         {adminLink}
+        {usersLink}
         <p className="t-body">Loading…</p>
       </section>
     )
@@ -156,6 +189,7 @@ export function Board({ profile }: Props) {
     return (
       <section className={styles.state}>
         {adminLink}
+        {usersLink}
         {/* The same sentence progressLine gives the populated board, so the two
             empty states cannot drift apart in wording. activeTotal, not
             visible.length: this line is about the roster, not about what the
@@ -179,6 +213,7 @@ export function Board({ profile }: Props) {
   return (
     <section className={styles.board}>
       {adminLink}
+      {usersLink}
       <div className={styles.periodBar}>
         <h2 className="t-header">{formatPeriod(period)}</h2>
         {/* §6's progress line. role="status" because this number changes on the
