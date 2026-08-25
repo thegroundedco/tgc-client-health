@@ -3,6 +3,15 @@
    verbatim for now, so the spacing matches on day one. Every colour and every
    face still comes from a token; this file is not allowed to name either. */
 
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* --measure-prose, matching ClientsAdmin: this screen carries two lists and
+     a form, not a single field. */
+  max-width: var(--measure-prose);
+}
+
 .nav {
   display: flex;
 }

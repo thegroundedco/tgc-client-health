@@ -29,26 +29,51 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
   )
 
   if (admin.status === 'loading') {
-    return <>{back}{masthead}<p className="t-body">Loading…</p></>
+    return (
+      <section className={styles.screen}>
+        {back}
+        {masthead}
+        <p className="t-body">Loading…</p>
+      </section>
+    )
   }
 
   if (admin.status === 'error') {
-    return <>{back}{masthead}<p className="t-body">{admin.loadError}</p></>
+    return (
+      <section className={styles.screen}>
+        {back}
+        {masthead}
+        <p className="t-body">{admin.loadError}</p>
+      </section>
+    )
   }
 
   return (
-    <>
+    <section className={styles.screen}>
       {back}
       {masthead}
 
       <section>
         <h3 className="t-subhead">People</h3>
-        <ul>
+        {/* role="list" because base.css removes markers globally, and WebKit
+            drops a list's semantics when its markers are removed -- so in
+            Safari with VoiceOver this would otherwise announce as a group of
+            paragraphs with no count and no position. Matches ClientsAdmin's
+            client list for the same reason. */}
+        <ul aria-label="People" role="list">
           {admin.profiles.map((row) => {
             const isSelf = row.id === currentUserId
+            // The same value the row displays as its heading, so a
+            // screen-reader user hears who a control acts on rather than a
+            // UUID -- the same fix ClientsAdmin makes for its Edit button
+            // ("Edit {client.name}"): a bare "Activate" or "Deactivate"
+            // repeated down the list is unusable in a screen reader's
+            // control list.
+            const rowName = row.full_name?.trim() || row.email
+
             return (
               <li key={row.id}>
-                <p className="t-body">{row.full_name?.trim() || row.email}</p>
+                <p className="t-body">{rowName}</p>
                 <p className="t-small">{row.email}</p>
 
                 <select
@@ -69,6 +94,7 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
                 </select>
 
                 <button
+                  aria-label={`${row.is_active ? 'Deactivate' : 'Activate'} ${rowName}`}
                   className="button button--quiet"
                   type="button"
                   disabled={isSelf || writing}
@@ -84,11 +110,16 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
                   </p>
                 )}
 
+                {/* role="status" so the confirmation or refusal is announced
+                    rather than only drawn -- the same fix AddClientForm makes
+                    for its own confirmation line, and the whole reason Slice 1
+                    was rewritten: a write that worked looked exactly like one
+                    that failed. */}
                 {admin.editStateFor === row.id && admin.editState.kind === 'failed' && (
-                  <p className="t-small">{admin.editState.message}</p>
+                  <p className="t-small" role="status">{admin.editState.message}</p>
                 )}
                 {admin.editStateFor === row.id && admin.editState.kind === 'saved' && (
-                  <p className="t-small">
+                  <p className="t-small" role="status">
                     {admin.editState.what} {formatSavedAt(admin.editState.at)}.
                   </p>
                 )}
@@ -109,7 +140,10 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
             first time they sign in.
           </p>
         ) : (
-          <ul>
+          // role="list" for the same reason as the People list above: base.css
+          // strips markers globally, and Safari/VoiceOver drops list semantics
+          // along with them.
+          <ul aria-label="Invitations" role="list">
             {admin.invitations.map((row) => (
               <li key={row.email}>
                 <p className="t-body">{row.email}</p>
@@ -117,6 +151,7 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
                   {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
                 </p>
                 <button
+                  aria-label={`Revoke invitation for ${row.email}`}
                   className="button button--quiet"
                   type="button"
                   disabled={writing}
@@ -136,14 +171,14 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
         />
 
         {admin.inviteState.kind === 'failed' && (
-          <p className="t-small">{admin.inviteState.message}</p>
+          <p className="t-small" role="status">{admin.inviteState.message}</p>
         )}
         {admin.inviteState.kind === 'saved' && (
-          <p className="t-small">
+          <p className="t-small" role="status">
             {admin.inviteState.what} {formatSavedAt(admin.inviteState.at)}.
           </p>
         )}
       </section>
-    </>
+    </section>
   )
 }
