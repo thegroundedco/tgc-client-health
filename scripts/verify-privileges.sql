@@ -244,27 +244,54 @@ begin
   end if;
 
   ----------------------------------------------------------------------------
-  -- 3. anon must hold nothing whatsoever on public.profiles, at table or
-  --    column level. An unauthenticated caller has no business here.
+  -- 3. anon must hold nothing whatsoever on the two tables that carry identity
+  --    and access, at table or column level. An unauthenticated caller has no
+  --    business in either.
+  --
+  --    WHY A COLUMN SWEEP AT ALL, when section 4 already sweeps every table in
+  --    `public` for both browser roles: section 4 reads table-level privileges
+  --    only, and says so. A column grant is invisible to it. That is not an
+  --    oversight there -- column grants are the intended mechanism for a narrow
+  --    write on profiles, so a table-level allowlist cannot describe them -- but
+  --    it does mean a stray `grant select (email) on public.allowed_emails to
+  --    anon` would pass the rest of this file untouched. This loop is the only
+  --    thing anywhere that catches it.
+  --
+  --    BOTH TABLES, since 2026-08-25. This swept public.profiles alone, which
+  --    was complete while profiles was the only table holding a person's
+  --    identity. public.allowed_emails holds a list of addresses that have been
+  --    pre-authorised and the role each is due -- an enumeration of who is about
+  --    to be able to sign in, and at what privilege -- so it belongs here for
+  --    exactly the reason profiles does.
   ----------------------------------------------------------------------------
   for r in
-    select p as priv
-    from unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+    select t.name as table_name, p as priv
+    from unnest(array['public.profiles', 'public.allowed_emails']) as t(name)
+    cross join unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+    -- to_regclass rather than a ::regclass cast: the cast RAISES on a missing
+    -- table, which would abort the whole DO block on a project that has not
+    -- applied 20260825201024. Absent yields no rows, which is the right answer:
+    -- a table that does not exist grants nothing to anybody.
+    where to_regclass(t.name) is not null
   loop
-    if has_table_privilege('anon', 'public.profiles', r.priv) then
-      problems := problems || format('anon holds %s on public.profiles', r.priv);
+    if has_table_privilege('anon', r.table_name, r.priv) then
+      problems := problems || format('anon holds %s on %s', r.priv, r.table_name);
     end if;
   end loop;
 
   for r in
-    select a.attname, p as priv
-    from pg_attribute a
+    select t.name as table_name, a.attname, p as priv
+    from unnest(array['public.profiles', 'public.allowed_emails']) as t(name)
+    cross join lateral (
+      select attname
+      from pg_attribute
+      where attrelid = to_regclass(t.name)
+        and attnum > 0 and not attisdropped
+    ) a
     cross join unnest(array['SELECT','INSERT','UPDATE','REFERENCES']) p
-    where a.attrelid = 'public.profiles'::regclass
-      and a.attnum > 0 and not a.attisdropped
   loop
-    if has_column_privilege('anon', 'public.profiles', r.attname, r.priv) then
-      problems := problems || format('anon holds column %s on public.profiles.%s', r.priv, r.attname);
+    if has_column_privilege('anon', r.table_name, r.attname, r.priv) then
+      problems := problems || format('anon holds column %s on %s.%s', r.priv, r.table_name, r.attname);
     end if;
   end loop;
 
@@ -319,12 +346,26 @@ begin
         ('checkins', 'authenticated', 'UPDATE'),
 
         -- public.allowed_emails: all four verbs, added by
-        -- 20260825201024_create_allowed_emails.sql. An invitation is created,
-        -- corrected and withdrawn from the users admin screen, so DELETE is a
-        -- deliberate entry here where it is refused on clients and checkins --
-        -- withdrawing an invitation must actually remove the row, because the
-        -- table means exactly one thing (invited, not yet arrived) and a
-        -- soft-deleted invitation would be a second meaning.
+        -- 20260825201024_create_allowed_emails.sql. An invitation is created and
+        -- withdrawn from the users admin screen -- those two, and no third. This
+        -- comment said "created, corrected and withdrawn" until 2026-08-25;
+        -- there is no correct-an-invitation control anywhere in the screen and
+        -- there never was. A wrong address or a wrong role is fixed by revoking
+        -- and re-inviting, which is one press more and leaves the table meaning
+        -- exactly one thing throughout.
+        --
+        -- DELETE is therefore a deliberate entry here where it is refused on
+        -- clients and checkins: withdrawing an invitation must actually remove
+        -- the row, because the table means exactly one thing (invited, not yet
+        -- arrived) and a soft-deleted invitation would be a second meaning.
+        --
+        -- UPDATE is granted with no caller, and that is a decision rather than
+        -- an oversight. It arrives with the table's own migration alongside
+        -- allowed_emails_update_manage_users, so grant and policy stay in one
+        -- file; both gate on manage_users, so the surface it opens is one an
+        -- admin already has by revoke-then-invite. Listing it here is what makes
+        -- that visible -- if the edit control is never built, this entry and its
+        -- policy are what a future reviewer removes together.
         --
         -- These four entries say only that the verbs EXIST for authenticated.
         -- Every one of the four policies gates on manage_users, which only
@@ -1268,32 +1309,60 @@ begin
   --      a SECOND, distinct sentinel rather than appending to `problems` before
   --      the rollback -- so no assertion here rests on how a plpgsql variable
   --      survives a caught exception.
-  select count(*) into n_allowed_total from public.allowed_emails;
-
-  select id into admin_uid
-  from public.profiles
-  where is_active and role = 'admin'
-  order by created_at
-  limit 1;
-
-  -- The cross-row subject and its target values, read as the TABLE OWNER before
-  -- anything impersonates anybody -- the same reason 10f reads probe_client_id
-  -- that way. Both targets are computed here so the probe writes a value it can
-  -- afterwards compare against exactly, and both are guaranteed to DIFFER from
-  -- what is stored: the guard returns early on `is not distinct from`, so
-  -- re-writing the value a row already holds would prove nothing at all.
   --
-  -- `is distinct from` rather than `<>` so that a project with no admin still
-  -- finds a second row, and the precondition below can say which of the two
-  -- things it needs is actually missing.
-  select id,
-         case when role = 'viewer' then 'account_manager' else 'viewer' end,
-         not is_active
-    into second_uid, second_role_target, second_active_target
-  from public.profiles
-  where id is distinct from admin_uid
-  order by created_at
-  limit 1;
+  --      THE SETUP READS ARE WRAPPED, and that is not decoration. Every probe
+  --      below sits inside a `begin ... exception` block of its own, but these
+  --      three reads did not, and the first of them names public.allowed_emails
+  --      -- a table that does not exist on a project without
+  --      20260825201024_create_allowed_emails.sql. An unhandled undefined_table
+  --      there aborts the whole DO block: the run dies with a raw Postgres error
+  --      and sections that had already passed report nothing, which reads as a
+  --      broken verifier rather than as an unapplied migration. Caught, it is
+  --      what it actually is -- a precondition -- and everything else in the
+  --      file still runs and still reports.
+  begin
+    select count(*) into n_allowed_total from public.allowed_emails;
+
+    select id into admin_uid
+    from public.profiles
+    where is_active and role = 'admin'
+    order by created_at
+    limit 1;
+
+    -- The cross-row subject and its target values, read as the TABLE OWNER
+    -- before anything impersonates anybody -- the same reason 10f reads
+    -- probe_client_id that way. Both targets are computed here so the probe
+    -- writes a value it can afterwards compare against exactly, and both are
+    -- guaranteed to DIFFER from what is stored: the guard returns early on
+    -- `is not distinct from`, so re-writing the value a row already holds would
+    -- prove nothing at all.
+    --
+    -- `is distinct from` rather than `<>` so that a project with no admin still
+    -- finds a second row, and the precondition below can say which of the two
+    -- things it needs is actually missing.
+    select id,
+           case when role = 'viewer' then 'account_manager' else 'viewer' end,
+           not is_active
+      into second_uid, second_role_target, second_active_target
+    from public.profiles
+    where id is distinct from admin_uid
+    order by created_at
+    limit 1;
+  exception
+    when undefined_table then
+      -- The three variables are left null on purpose, so the two precondition
+      -- messages below fire in their own words as well and the admin branch --
+      -- which is gated on admin_uid -- does not run. The viewer branch is gated
+      -- on viewer_uid rather than on the table, so on a project that somehow has
+      -- an active viewer and no allowed_emails it will still run and its own
+      -- `exception when others` will record the undefined_table as a problem.
+      -- That combination cannot occur here: the viewer would have had to sign in
+      -- through a handle_new_user that reads the table this handler just failed
+      -- to find.
+      preconditions := preconditions || format(
+        'section 10h could not read its subjects: %s. The likeliest cause is 20260825201024_create_allowed_emails.sql not being applied to this project -- run npm run db:push (after npm run db:which names STAGING). Nothing about the invitation list or the profiles guard trigger was checked',
+        sqlerrm)::text;
+  end;
 
   -- REPORTED, NEVER SKIPPED, and the wording says what is missing rather than
   -- naming a generic shortfall: this check starts asserting by itself the moment
@@ -1334,7 +1403,23 @@ begin
         raise exception 'probe rollback';
       exception
         when insufficient_privilege then
-          null;
+          -- WHICH 42501, not merely that one arrived. This was the only probe in
+          -- 10h that accepted any insufficient_privilege at all, and 42501 has
+          -- two very different causes here. The one being tested is
+          -- allowed_emails_insert_manage_users refusing the row: PostgreSQL
+          -- words that "new row violates row-level security policy for table
+          -- ...". The other is the TABLE GRANT having been lost, which answers
+          -- "permission denied for table allowed_emails" -- the refusal then
+          -- comes from the grant layer, the policy is never consulted, and this
+          -- probe would report the insert gate as verified while the gate itself
+          -- went unexercised. Worse, a lost grant is an outage in its own right:
+          -- section 4's allowlist reports it separately, but a green 10h beside
+          -- it invites the reader to conclude the policies are fine.
+          if sqlerrm not like '%row-level security%' then
+            problems := problems || format(
+              'an active VIEWER was refused the allowed_emails insert by %L rather than by allowed_emails_insert_manage_users -- the likeliest cause is the table-level INSERT grant on public.allowed_emails having been lost, which section 4 reports separately; either way the policy went UNEXERCISED and nothing here proves a viewer cannot invite themselves an admin account',
+              sqlerrm)::text;
+          end if;
         when others then
           if sqlerrm = 'probe rollback' then
             problems := problems || 'an active VIEWER was ALLOWED to insert into public.allowed_emails -- allowed_emails_insert_manage_users is not gating on manage_users, so anybody who can sign in can invite an address at role admin and then sign in as one (the row was rolled back by this check, not by the policy)'::text;

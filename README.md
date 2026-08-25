@@ -369,6 +369,8 @@ npm run db:which        # prints the linked project's name, ref and region,
 npm run db:push         # db:which, then db push --linked
 npm run verify:privileges   # db:which, then the assertions
 npm run verify:capability   # db:which, then the preset table, no rows needed
+npm run verify:invites      # db:which, then two real signups -- STAGING ONLY,
+                            #   this one WRITES to auth.users
 ```
 
 Switch target deliberately, one command at a time, and never leave production
@@ -677,6 +679,52 @@ granting the function before any policy names it, and dropping the old helper
 after the last one. The second pins `src/lib/capabilities.ts` against the
 migration's presets in both directions, because the UI keeps a second copy to
 decide what to draw.
+
+### `npm run verify:invites`
+
+**Staging only, and unlike every other verifier here it writes.** It inserts two
+rows into `auth.users` — real accounts on a real project — because the thing
+being proved is what the *deployed* `auth.users` signup trigger does, and no
+read-only probe can reach it. `npm run db:which` is wired into the script for
+that reason, exactly as it is for `db:push`. Never point this at production.
+
+It proves both directions of `private.handle_new_user` in one run, because "the
+invited path works" and "the uninvited path still defaults to inactive viewer"
+are separate claims and the second is the one that keeps a stranger out:
+
+- **The hit.** An address is inserted into `public.allowed_emails` at
+  `account_manager`, then signs up. Its profile must come out with
+  `role = 'account_manager'` and `is_active = true` — the admin is deliberately
+  *not* in the critical path — and the invitation row must be **gone**, consumed
+  by the trigger. That last one is what keeps `allowed_emails` meaning exactly
+  one thing (invited, not yet arrived) so the two lists on the users admin screen
+  cannot disagree about a person.
+- **The miss.** An uninvited address signs up and must still come out
+  `role = 'viewer'`, `is_active = false`. A failure here is worded as loudly as
+  it deserves: signing up would then grant access, which is the vulnerability
+  `profiles.is_active` exists to prevent.
+
+The two accounts are named
+`verify-invites-{hit,miss}-<uuid>@example.test` and are deleted before any
+`raise`, so a passing run commits the cleanup and a failing one is rolled back
+whole — nothing survives either way. A **`FAILED`** exit lists every disagreement
+at once rather than stopping at the first.
+
+A passing run prints **zero rows**, and that is the correct result rather than an
+empty one: a `NOTICE` is invisible through `supabase db query`, so the file ends
+in an echoing `SELECT` over `allowed_emails where email like 'verify-invites-%'`.
+Anything listed there is a cleanup bug worth seeing.
+
+**What it does not cover.** Whether a *browser* can reach the invitation table at
+all is `verify:privileges` section 10h, which becomes a viewer and an admin in
+turn; this file runs as the table owner throughout and never consults a policy.
+`tests/userFormDrift.test.ts` and `tests/capabilities.test.ts` are the cheap half
+and run in `npm test` — the first pins the guard trigger's two exception strings
+against the sentences `userForm.ts` matches on, the second pins the role
+vocabulary against the check constraints on **both** `allowed_emails.role` and
+`profiles.role`, which are the two ends of one copy: a role the first permits and
+the second does not means the invited person cannot create an account at all, and
+the failure would arrive as a broken login rather than as a red build.
 
 ## The board's show-archived toggle
 

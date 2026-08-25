@@ -84,9 +84,27 @@ begin
   end if;
 
   ----------------------------------------------------------------------------
-  -- Cleanup, before any raise, so a failure does not leave test accounts behind.
-  -- profiles first: profiles_id_fkey references auth.users and is not declared
-  -- cascading, so deleting the user first would fail on the dependent row.
+  -- Cleanup, before any raise. The ORDER of these three deletes is what the
+  -- comment here used to explain, and it explained it twice over with two
+  -- reasons that are both false:
+  --
+  --   (a) it said profiles_id_fkey is "not declared cascading". It is:
+  --       20260820225355_create_profiles.sql line 7 declares
+  --       `references auth.users (id) on delete cascade`. Deleting the auth.users
+  --       row first would take the profiles row with it, not fail on it.
+  --   (b) it implied the ordering is what stops a failure leaving accounts
+  --       behind. It is not. The raise below aborts the transaction, and every
+  --       delete above it rolls back with it -- cleanup included.
+  --
+  -- The OUTCOME is correct either way and the code is left exactly as it was:
+  -- nothing persists. On a pass, these three deletes commit. On a failure, the
+  -- raise rolls the whole DO block back, which un-inserts the two auth.users
+  -- rows and the invitation just as effectively. What the order actually buys is
+  -- explicitness -- the profiles rows are removed by a statement a reader can
+  -- see, rather than by a cascade they have to know about -- and that is worth
+  -- keeping, but it is not a correctness requirement and must not be recorded as
+  -- one. The echoing SELECT at the foot of this file is what proves the table is
+  -- clean afterwards, whichever path ran.
   ----------------------------------------------------------------------------
   delete from public.profiles      where id    in (hit_id, miss_id);
   delete from auth.users           where id    in (hit_id, miss_id);
