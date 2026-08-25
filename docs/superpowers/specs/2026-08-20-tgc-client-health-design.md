@@ -458,6 +458,36 @@ deployed and usable. Abandoning after any phase still leaves a working tool.
 
 ## 12. Open items
 
+0a. **The tool is filled out at the END OF EVERY MONTH — stated by Josh 2026-08-25.** Recorded
+   here because it is a design constraint, not a usage note, and several decisions should follow
+   from it rather than be rediscovered:
+
+   - It validates `checkins.period` being month-truncated with `unique (client_id, period)`:
+     there is exactly one row per client per month, and that row is the natural home for anything
+     else measured monthly.
+   - **It argues for one month-close flow rather than scattered screens.** Scores, hours, and
+     later revenue are one monthly ritual. Making each a separate screen means visiting all twelve
+     clients three times. Whatever is added monthly should be added where the person already is.
+   - It sets the cadence a consolidated report (item 0) would be generated on, and the interval a
+     trend view (Phase 3) would step by.
+
+0b. **Hours used per client per month — requested by Josh 2026-08-25.** Where it lives is the open
+   question, and it is a schema decision that is expensive to reverse.
+
+   Adding an `hours` column to `checkins` is technically trivial — that table is already keyed
+   `(client_id, period)`. **But §6.3 put revenue in separate tables for a structural reason that
+   applies here too: row-level security hides ROWS, NOT COLUMNS.** An `hours` column on `checkins`
+   means anyone who can read a score can read how much time a client consumes — and once Phase 2
+   lands, hours beside revenue is margin. If hours should ever be visible to fewer people than
+   scores are, they cannot share that table.
+
+   So the question to settle before building: are hours as sensitive as revenue, or as ordinary as
+   a score? Decide it deliberately; do not let a convenient column make the decision.
+
+   Related: hours likely already exist in Productive. Typing them in monthly is the obvious start;
+   pulling them in is a later question, not a reason to delay the manual path.
+
+
 0. **Consolidated client report — requested by Josh 2026-08-25.** A one-pager covering every
    active client at once, for a reader who will not click into twelve of them. Overlaps the
    Overview view this spec puts in Phase 3, but is narrower and, unlike trends and sparklines,
