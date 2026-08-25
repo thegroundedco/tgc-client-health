@@ -129,10 +129,64 @@ describe('submitLabel', () => {
 })
 
 describe('submitBlock', () => {
-  const ready = { state: DIRTY, readFailed: false, hasContent: true, storedSubmitted: false }
+  const ready = {
+    state: DIRTY,
+    readFailed: false,
+    canEdit: true,
+    hasContent: true,
+    storedSubmitted: false,
+  }
 
   it('lets an edited form with content through', () => {
     expect(submitBlock(ready)).toEqual({ blocked: false })
+  })
+
+  it('blocks every write for an account without edit_scores', () => {
+    // The defect this whole gate exists for: a viewer scored every pillar and
+    // only met the database's refusal after pressing submit. This is the
+    // reducer-level backstop -- CheckIn.tsx also disables the pillar rows and
+    // notes field themselves, so a viewer cannot normally reach a `dirty`
+    // state with `hasContent: true` at all, but this proves the write is
+    // refused even if something upstream of submitBlock ever failed to.
+    const blocked = submitBlock({ ...ready, canEdit: false })
+    expect(blocked.blocked).toBe(true)
+    if (blocked.blocked) {
+      expect(blocked.reason).toMatch(/view this check-in/i)
+      expect(blocked.reason).toMatch(/cannot save/i)
+      expect(blocked.reason).toMatch(/admin/i)
+    }
+  })
+
+  it('takes precedence over the failed-read reason', () => {
+    // Precedence, stated the same way the existing failed-read-vs-empty-form
+    // test below states it: both facts are true, and only the order of the
+    // checks decides which sentence a person sees. readFailed's reason implies
+    // saving would work once the read succeeds -- false for an account that
+    // can never save regardless -- so canEdit must win here.
+    const blocked = submitBlock({ ...ready, canEdit: false, readFailed: true })
+    expect(blocked.blocked).toBe(true)
+    if (blocked.blocked) {
+      expect(blocked.reason).toMatch(/cannot save/i)
+      expect(blocked.reason).not.toMatch(/could not be read/i)
+    }
+  })
+
+  it('takes precedence over the in-flight ("Saving…") reason', () => {
+    const blocked = submitBlock({ ...ready, canEdit: false, state: SAVING })
+    expect(blocked.blocked).toBe(true)
+    if (blocked.blocked) {
+      expect(blocked.reason).toMatch(/cannot save/i)
+      expect(blocked.reason).not.toBe('Saving…')
+    }
+  })
+
+  it('takes precedence over the nothing-to-save reason', () => {
+    const blocked = submitBlock({ ...ready, canEdit: false, hasContent: false })
+    expect(blocked.blocked).toBe(true)
+    if (blocked.blocked) {
+      expect(blocked.reason).toMatch(/cannot save/i)
+      expect(blocked.reason).not.toMatch(/at least one pillar/i)
+    }
   })
 
   it('blocks every write while the read has failed', () => {
@@ -187,6 +241,7 @@ describe('submitBlock', () => {
     // A dead button with no explanation is the same failure as a silent save,
     // in a smaller box. Every blocking path must carry a sentence.
     const cases = [
+      { ...ready, canEdit: false },
       { ...ready, readFailed: true },
       { ...ready, state: SAVING },
       { ...ready, hasContent: false },
@@ -207,6 +262,7 @@ describe('submitBlock', () => {
     const blocked = submitBlock({
       state: CLEAN,
       readFailed: true,
+      canEdit: true,
       hasContent: false,
       storedSubmitted: false,
     })

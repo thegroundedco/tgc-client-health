@@ -2,6 +2,7 @@ import { PILLARS, BAND_LABELS, MAX_TOTAL, bandFor } from '../lib/score'
 import { formatPeriod, formatSavedAt } from '../lib/month'
 import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
+import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
 import { PillarRow } from './PillarRow'
 import { displayedTotal, saveStatus, submitBlock, submitLabel } from './saveState'
@@ -46,9 +47,26 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
 
   const readFailed = status === 'error'
   const label = submitLabel(scored)
+
+  // The third caller of can() in the application, after the two in
+  // src/board/Board.tsx. Convenience, not security, same as those two: a
+  // viewer who somehow forced a write through anyway would still have it
+  // refused by checkins_insert_edit_scores and checkins_update_edit_scores,
+  // which is exactly what happened before this fix existed -- a viewer
+  // pressed submit and only then met the database's refusal. What is new
+  // here is not the check itself but what it is used for: Board.tsx's two
+  // calls only decide whether to draw a link to another screen. This one
+  // decides whether to draw working controls on THIS screen, which is the
+  // finding this fix exists for -- a control that is drawn and then fails
+  // when pressed is worse than one never drawn. A viewer still holds
+  // view_scores and is meant to see the scores; canEdit below only gates
+  // whether the controls that change them are offered.
+  const canEdit = can(profile.role, 'edit_scores')
+
   const block = submitBlock({
     state: saveState,
     readFailed,
+    canEdit,
     hasContent,
     storedSubmitted,
   })
@@ -182,6 +200,24 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </p>
       )}
 
+      {/* States the reason the controls below are disabled, near those
+          controls -- not only on the submit button, whose own disabled
+          state and status-region reason (from submitBlock, via block below)
+          a person would only meet after already trying to change a score.
+          A control that is dead for an unstated reason is this project's
+          recurring defect (see saveState.ts's own comment on this same
+          check), and that applies to a whole disabled section as much as to
+          one button. Written for whoever is reading it, not for a
+          developer: no mention of roles, presets, or how the check works --
+          just what they can do here and who to ask if it should be
+          different. */}
+      {!canEdit && (
+        <p className="t-body prose" id="checkin-readonly-notice">
+          You can view this client&rsquo;s scores, but you can&rsquo;t score them. An
+          admin can change that if this should be different.
+        </p>
+      )}
+
       <div className={styles.pillars}>
         {PILLARS.map((pillar) => (
           <PillarRow
@@ -189,7 +225,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
             pillar={pillar}
             value={draft.pillars[pillar]}
             lastValue={lastMonth?.[pillar] ?? null}
-            disabled={saving}
+            disabled={saving || !canEdit}
             onChange={(value) => checkin.setPillar(pillar, value)}
             onClear={() => checkin.setPillar(pillar, null)}
           />
@@ -205,7 +241,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
           id="checkin-notes"
           rows={4}
           value={draft.notes}
-          disabled={saving}
+          disabled={saving || !canEdit}
           onChange={(event) => checkin.setNotes(event.target.value)}
         />
       </div>
