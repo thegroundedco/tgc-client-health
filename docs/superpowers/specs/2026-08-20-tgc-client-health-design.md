@@ -481,11 +481,30 @@ deployed and usable. Abandoning after any phase still leaves a working tool.
    lands, hours beside revenue is margin. If hours should ever be visible to fewer people than
    scores are, they cannot share that table.
 
-   So the question to settle before building: are hours as sensitive as revenue, or as ordinary as
-   a score? Decide it deliberately; do not let a convenient column make the decision.
+   **CLARIFIED by Josh 2026-08-25: hours are TWO numbers, not one.** A set amount allotted every
+   month, and the amount actually used — which may be over or under. That is the same
+   **contracted-versus-actual variance** §11 already plans for revenue in Phase 2, and it changes
+   where this belongs:
 
-   Related: hours likely already exist in Productive. Typing them in monthly is the obvious start;
-   pulling them in is a later question, not a reason to delay the manual path.
+   - **Allotted** is a property of the CONTRACT, not of the month. It belongs on `sows`, stable
+     until the contract changes. It must never be re-typed monthly — a number typed twelve times a
+     year is a number that will disagree with the contract by March.
+   - **Actual** is the month-end entry, on the monthly row, and is the only thing typed monthly.
+   - **The variance is the number worth showing.** Neither figure alone says anything; over or
+     under against the allotment is the signal.
+
+   This largely settles the sensitivity question by itself: if allotted hours live on `sows`, they
+   sit behind `view_sows` already, so hours are entangled with contract data regardless. **Build
+   hours with SOWs in Phase 2, not as a column on `checkins` beforehand.**
+
+   **A connection worth testing when Phase 2 is specced:** persistent over-servicing is not only a
+   margin problem, it is plausibly a health signal — and this tool already scores a `financial`
+   pillar by hand. Hours variance may be evidence a scorer should see while scoring, rather than a
+   separate number read later. Worth deciding deliberately; it is the kind of link that is obvious
+   in hindsight and easy to miss while building two features separately.
+
+   Related: hours likely already exist in Productive. Typing the actual figure monthly is the
+   obvious start; pulling it in is a later question, not a reason to delay the manual path.
 
 
 0. **Consolidated client report — requested by Josh 2026-08-25.** A one-pager covering every
