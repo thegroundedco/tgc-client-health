@@ -458,6 +458,39 @@ deployed and usable. Abandoning after any phase still leaves a working tool.
 
 ## 12. Open items
 
+0. **Consolidated client report — requested by Josh 2026-08-25.** A one-pager covering every
+   active client at once, for a reader who will not click into twelve of them. Overlaps the
+   Overview view this spec puts in Phase 3, but is narrower and, unlike trends and sparklines,
+   **needs no history** — it is useful against a single month, so it can ship well ahead of the
+   rest of Phase 3.
+
+   **DECIDED 2026-08-25: a shareable link, readable without a login.** That is the most useful
+   option for the reader and the most demanding one to build, and it is the first requirement in
+   this project that the architecture does not already accommodate.
+
+   **The constraint:** the app is a static SPA on GitHub Pages. There is no server, so there is
+   nothing to authenticate a request. Two shapes are viable and both are new here:
+
+   - **A snapshot row readable by `anon` at an unguessable id.** The link carries a UUID and a
+     policy admits exactly that row. Needs no server, so it fits today's stack. The report is a
+     FROZEN COPY taken at generation — which is a feature, not a compromise: it says what it said
+     when it was sent, and it cannot leak numbers that did not exist yet.
+   - **A Supabase Edge Function serving it by token.** Real server-side checks, at the cost of the
+     first server-side code and the first `service_role` secret in the project.
+
+   **The link IS the credential**, whichever shape wins. Anyone holding it reads every client's
+   scores, and forwarding costs nothing. So the design must settle, at minimum: expiry;
+   revocation; whether a link covers all clients or a chosen subset; and what is recorded about
+   who generated it and when.
+
+   **Phase 2 makes this sharper.** Once `sows` and `client_month_revenue` exist, a careless report
+   carries money out through a link with no login. §6.3 keeps revenue in separate tables precisely
+   because RLS hides rows and not columns — a report generator that joins across both would
+   undo that. The snapshot shape helps: what goes in is chosen at generation time, explicitly.
+
+   Needs its own brainstorm and spec. Do not fold it into a slice as an extra.
+
+
 1. **Logo SVG export** — horizontal lockup plus the standalone kiwi icon for the
    favicon. Needed before final styling; nothing else blocks on it.
 2. **Private repo hosting** — GitHub Pages needs a paid plan for private repos;
