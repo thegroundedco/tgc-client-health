@@ -120,4 +120,24 @@ describe('the role presets', () => {
     const fromSql = [...arm![1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1])
     expect(fromSql.toSorted()).toEqual([...ROLES].toSorted())
   })
+
+  it('permits the same roles in the profiles.role check constraint', () => {
+    // The FOURTH source, and the one with the worst failure. private.
+    // handle_new_user reads allowed_emails.role and inserts it straight into
+    // public.profiles, so the two check constraints are not independent lists
+    // that happen to agree -- they are the two ends of one copy. A role the
+    // allowed_emails constraint permits and the profiles constraint does not
+    // means the invited person CANNOT CREATE AN ACCOUNT AT ALL: the trigger on
+    // auth.users raises, the sign-up is rolled back, and the failure surfaces at
+    // the moment somebody first tries to sign in -- to them, as a broken login,
+    // with nothing on this side of the build having gone red.
+    //
+    // Same three lines as the check above, deliberately: the point of the
+    // repetition is that each source is read from its own migration.
+    const constraintSql = migration('_create_profiles.sql')
+    const arm = constraintSql.match(/check \(role in \(([^)]*)\)\)/s)
+    expect(arm, 'the role check constraint in the profiles migration').not.toBeNull()
+    const fromSql = [...arm![1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1])
+    expect(fromSql.toSorted()).toEqual([...ROLES].toSorted())
+  })
 })
