@@ -726,6 +726,56 @@ vocabulary against the check constraints on **both** `allowed_emails.role` and
 the second does not means the invited person cannot create an account at all, and
 the failure would arrive as a broken login rather than as a red build.
 
+### `npm run seed:verifier-subjects`
+
+**Staging only, and like `verify:invites` it writes** — but where that script
+writes and then deletes its own rows in the same run, this one writes rows meant
+to **stay**. `npm run verify:privileges` needs a variety of accounts staging does
+not otherwise hold, and without them three of its section 10 checks report
+*unmet preconditions* rather than a pass or a fail — not a security finding, but
+not evidence either, which is its own problem on a project with no other source
+of that variety. This script is the fixture.
+
+It creates three things, none of which touch staging's two pre-existing profiles
+(`josh@thegroundedcompany.com`, `beckman689@gmail.com`):
+
+- **An active `account_manager`**, built by walking the real invitation path —
+  an `allowed_emails` row, then a signup — rather than writing the `profiles`
+  row directly. That means it breaks loudly if `private.handle_new_user` ever
+  regresses, the same guarantee `verify:invites` exists for. Fills the section
+  10f precondition for the direction that "takes the app away from everybody" if
+  it is ever wrong.
+- **An inactive account** — a signup with no matching invitation, so the miss
+  path leaves it `viewer` / `is_active = false`. Fills the section 10g
+  precondition: nothing else in this file's tables produces an inactive row on
+  demand.
+- **One invitation left unconsumed**, so `allowed_emails` is non-empty and
+  section 10h's "a viewer sees zero invitations" is checked for the right
+  reason instead of `0 = 0`.
+
+Every address it creates lives under `@seed-verifier-subjects.invalid` — the
+`.invalid` TLD is reserved by RFC 2606 to never resolve, and each prefix
+(`seed-verifier-account-manager`, `seed-verifier-inactive`,
+`seed-verifier-unconsumed-invite`) says in the address itself what the row is
+for, so nobody mistakes a fixture for a colleague.
+
+**Idempotent, unlike `verify:invites`.** The two `auth.users` rows use fixed
+uuids rather than `gen_random_uuid()`, so a second run recognises what the first
+run already built (`profiles.id` cascades from `auth.users.id` —
+`profiles_id_fkey ... on delete cascade`) and changes nothing; the unconsumed
+invitation is inserted with `on conflict (email) do nothing`. Safe to run
+repeatedly.
+
+A passing run echoes three rows — the two profiles and the one invitation —
+because a `NOTICE` is invisible through `supabase db query --linked` just as it
+is for `verify:invites`, so that `SELECT` is the only visible evidence of
+success.
+
+**Removing the fixtures** is deliberately not part of this script — a delete
+path living beside the create path is a footgun waiting for a stray uncommented
+line — so the two statements to run by hand, once staging needs to be clean
+again, are commented at the foot of `scripts/seed-verifier-subjects.sql`.
+
 ## The board's show-archived toggle
 
 The board is the month's check-in grid, so by default it shows only `active`
