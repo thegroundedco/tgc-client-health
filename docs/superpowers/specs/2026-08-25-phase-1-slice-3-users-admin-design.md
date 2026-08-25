@@ -49,22 +49,35 @@ not need for the problem actually being solved. Recorded in §9.
 still signs in the ordinary way, at a time of their choosing, with a magic link they
 request themselves.
 
-## 3. Precondition, and it is unverified
+## 3. Email delivery — measured, and weaker than it first appeared
 
-**Magic-link delivery to a non-owner address must work.** It demonstrably did once:
-`adam@thegroundedcompany.com` was created and signed in seven seconds later on 2026-08-24,
-so the link arrived. **Why it arrived is not established.** Supabase's built-in mailer
-refuses addresses that are not part of the project team unless custom SMTP is configured.
-Either custom SMTP was configured, or that address counts as team.
+**Custom SMTP is not configured, and invitations work anyway.** Both halves were verified
+on 2026-08-25.
 
-This matters because the entire slice assumes an invited person can sign in. If delivery
-works only for addresses already attached to the project, an invitation is a row that
-never gets consumed, and the failure is silent — an email that never arrives, not an error.
+Supabase documents that without custom SMTP, "Auth will refuse to deliver messages to
+addresses that are not part of the project's team." That restriction is the reason this
+section was originally written as a blocking precondition. It does not currently hold on
+this project. Organisation `Josh's Base` has **exactly one member** — the owner — so
+`adam@thegroundedcompany.com` was never team, and his magic link arrived regardless on
+2026-08-24. The documented restriction and the observed behaviour disagree.
 
-**Confirm before building:** check whether custom SMTP is configured on the production
-project. If it is not, configuring it is a prerequisite of this slice, not a follow-up.
-The built-in mailer is also capped at two messages per hour, which is a testing constraint
-regardless.
+**So this slice is buildable and testable today.** SMTP is not a blocker and is removed
+from §4's order of work.
+
+**It is still required before the first real invitation**, for three reasons that survive
+the measurement:
+
+1. **The working path is undocumented.** Relying on a vendor behaving contrary to its own
+   documentation is a bet that it never starts matching it. If it does, every invitation
+   silently stops arriving — no error, just nothing.
+2. **The built-in mailer is capped at two messages per hour** and documented as
+   best-effort and not for production.
+3. **The failure is invisible from inside the tool.** An unconsumed invitation looks
+   identical whether the person hasn't got round to it or never received anything.
+
+Custom SMTP (Google Workspace: `smtp.gmail.com:465`, app password, then raise the
+default 30/hour limit at Authentication → Rate Limits) therefore moves from *prerequisite*
+to *required before this is relied on by anyone*. Carried forward in §10.
 
 ## 4. Order of work
 
@@ -76,7 +89,7 @@ regardless.
 5. Production: `db:push`, then `verify:privileges`, then sign in.
 
 `db:push` precedes every verifier. `npm run build` runs separately from `npm test`, which
-does not typecheck.
+does not typecheck. No SMTP step gates any of this — see §3.
 
 ## 5. The migration
 
@@ -333,7 +346,9 @@ unconsumed, and by the admin telling them out of band — which they were going 
 
 ## 10. Open items carried forward
 
-1. **Custom SMTP is unconfirmed** (§3). Blocks the slice if absent.
+1. **Custom SMTP is not configured** (§3). Does not block the build, but is required
+   before anyone outside the two existing accounts is invited — the path that works today
+   is one the vendor documents as not working.
 2. **`Test Client` and the seeded fixture rows** are unrelated to this slice but still in
    production, skewing counts on the board.
 3. **No backup exists.** `db:dump` remains designed and unbuilt. This slice writes no
