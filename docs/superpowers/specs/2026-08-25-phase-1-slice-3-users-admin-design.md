@@ -351,8 +351,11 @@ unconsumed, and by the admin telling them out of band — which they were going 
    is one the vendor documents as not working.
 2. **`Test Client` and the seeded fixture rows** are unrelated to this slice but still in
    production, skewing counts on the board.
-3. **No backup exists.** `db:dump` remains designed and unbuilt. This slice writes no
-   client data, but it is the first to make it possible for a second person to.
+3. **Ownership resolved, backups probably.** Both projects moved to the agency's team
+   organisation on 2026-08-25, on the Pro plan — closing the governance question about a
+   personal account owning client data, and bringing automated daily backups. A fresh Pro
+   upgrade does not backfill them, so **confirm a backup actually exists** before treating
+   the gap as closed. `db:dump` remains designed and unbuilt; it matters less now.
 4. **Per-person permission overrides** keep the Slice 3 name in `has_capability.sql` and
    are deferred (§2).
 5. **The pillar-floor question** — a client scoring 2 on relationship sitting invisibly in
