@@ -1625,6 +1625,22 @@ Open **People**. Confirm: your own row's controls are disabled with the reason s
 
 Invite a second address you control, sign in as it in a private window, and confirm it lands **straight on the board** rather than the pending screen — and that the invitation has disappeared from the invited list. That single test is the entire feature.
 
+- [ ] **Step 5b: Re-run `verify:privileges` now that a second account exists**
+
+```bash
+npm run verify:privileges
+```
+
+Expected: **zero violations AND zero unmet preconditions.** Until Step 5, staging held a single
+profile row, so the viewer-facing guard probes and the "an admin can change ANOTHER person's role
+and is_active" assertion (spec §8) could not run non-vacuously — the verifier reported them as
+unmet preconditions rather than passes, which is the tool working correctly. The account created in
+Step 5 is what makes them real. **If preconditions remain, say which and why; do not treat a run
+with unmet preconditions as a pass.**
+
+If the second account came in as an `account_manager` or `admin`, set it to `viewer` from the People
+screen first — several probes need a role whose preset lacks `edit_scores` and `manage_clients`.
+
 - [ ] **Step 6: Commit anything the exercise changed, and stop**
 
 Do not proceed to Task 9 without Josh's explicit go-ahead. Production is his call.
