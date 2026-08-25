@@ -688,7 +688,7 @@ exists alongside the grant."
 - Create: `tests/userForm.test.ts`
 
 **Interfaces:**
-- Produces: `AdminProfile`, `Invitation`, `InviteDraft`, `PROFILE_COLUMNS`, `INVITATION_COLUMNS`, `ASSIGNABLE_ROLES`, `ROLE_LABELS`, `roleLabel()`, `normalizeEmail()`, `invitePayload()`, `inviteProblems()`, `writeFailureText()`, `sortProfiles()`, `sortInvitations()`, `SELF_EDIT_TEXT`, `UPDATE_MATCHED_NOTHING_TEXT`, and re-uses `WriteState`/`StatusLine` shapes from `clients/clientForm.ts` by importing the types.
+- Produces: `AdminProfile`, `Invitation`, `InviteDraft`, `InviteProblem`, `PROFILE_COLUMNS`, `INVITATION_COLUMNS`, `ASSIGNABLE_ROLES`, `ROLE_LABELS`, `ROLE_HINTS`, `roleLabel()`, `normalizeEmail()`, `invitePayload()`, `inviteProblems()`, `writeFailureText()`, `sortProfiles()`, `sortInvitations()`, `SELF_EDIT_TEXT`, `SELF_EDIT_MESSAGE`, `NOT_ADMIN_MESSAGE`, `UPDATE_MATCHED_NOTHING_TEXT`, `DELETE_MATCHED_NOTHING_TEXT`, and re-uses the `WriteState` shape from `clients/clientForm.ts` by importing the type. (Amended 2026-08-25 to match what shipped: `DELETE_MATCHED_NOTHING_TEXT` arrived with the zero-row-revoke fix in `c6d9877`, `SELF_EDIT_MESSAGE`/`NOT_ADMIN_MESSAGE` were exported so `tests/userFormDrift.test.ts` can pin them against the migration, `ROLE_HINTS`/`InviteProblem` were always there, and no `StatusLine` is imported — this file builds its own sentences rather than reusing `writeStatusLine`.)
 
 This file must not import `../lib/supabase` — that module reads `VITE_` config at module scope and throws when it is absent, and CI runs vitest with no `VITE_` env. Same constraint as `clientForm.ts`.
 

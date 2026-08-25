@@ -220,8 +220,10 @@ directions and only one of them is intuitive:
 | a row-security **policy** | every query | the querying role | `EXECUTE` **must** be granted, or total outage |
 | a **trigger** | `CREATE TRIGGER` | the trigger's creator (`postgres`) | none — do **not** grant it |
 
-Phase 1 adds triggers (`has_capability` overrides, the last-admin guard,
-`updated_at` on every new table). An author who has just internalised the policy
+Phase 1 adds triggers (`has_capability` overrides, the self-edit guard on
+`profiles` — see §7.3 and Slice 3 §6; this parenthetical said "the last-admin
+guard" until 2026-08-25 and no such guard was ever built — `updated_at` on every
+new table). An author who has just internalised the policy
 rule will reasonably conclude that trigger functions need the same grant and will
 hand `authenticated` `EXECUTE` on a `security definer` trigger function — which
 is not a broken deploy, it is a callable definer function, i.e. exactly the
@@ -280,9 +282,28 @@ negative case there, alongside the SQL tests §10 of this spec calls for.
 
 ### 7.3 Three holes closed by design
 
-**No self-promotion.** Only admins may change `role` or `is_active`. Regular users
-receive column-level `update` on their own display name and nothing else, so this
-holds at the grant level rather than depending on the UI omitting a control.
+> **Superseded by Slice 3 §6, 2026-08-25**, for the first and third holes below.
+> The mechanism changed; the guarantees did not. Read
+> `docs/superpowers/specs/2026-08-25-phase-1-slice-3-users-admin-design.md` §6
+> before reasoning about either one. This paragraph is corrected in place rather
+> than left standing, because a stale mechanism named in the parent spec is the
+> sentence an auditor reads first.
+
+**No self-promotion.** Only admins may change `role` or `is_active`. **This holds
+at the TRIGGER level, not at the grant level.** Until Slice 3 that sentence read
+the other way round, and it was true then: `authenticated` received column-level
+`update` on `full_name` alone, so the two privileged columns were structurally
+unwritable from the browser. Slice 3 had to give an admin a way to write them, and
+Postgres has no per-column row level security — a column grant belongs to the
+*role*, not to the policy that admitted the row, so granting
+`update (role, is_active)` to `authenticated` hands it to every signed-in user via
+the OR-combined `profiles_update_own`. The grant is therefore now open and a
+`BEFORE UPDATE` trigger, `private.guard_profile_privileges`
+(`20260825202320_profiles_admin_write_path.sql`), supplies the column-level
+enforcement Postgres lacks: it raises `42501` whenever `role` or `is_active`
+actually changed unless the caller holds `manage_users` **and** is not the subject
+of the row. Do not read the grant as the protection — it no longer is, and Slice 3
+§6 exists to stop exactly that misreading.
 
 **Signing up is not getting in.** Magic-link login means anyone knowing the URL can
 request a link to their own address. New accounts are therefore created *inactive
@@ -290,8 +311,21 @@ with no capabilities*, and every policy requires the active flag. An unapproved
 person logs in successfully and sees an "access pending" screen with no data. An
 admin approves them in the users panel.
 
-**No self-lockout.** A trigger refuses to demote or deactivate the last remaining
-admin.
+**No self-lockout.** A trigger refuses to demote or deactivate **yourself**,
+unconditionally — not "the last remaining admin", which is what this line claimed
+until 2026-08-25 and which was never built. The rule that shipped is a different
+rule with a different cost, and it is both stronger and simpler than the one
+described: there is no counting logic anywhere, so there is no count to get wrong,
+no race between two concurrent demotions, and no state in which the tool has no
+administrator. Nobody can demote or deactivate themselves, and only an admin holds
+`manage_users`, so admin A may demote admin B but B — now without the capability —
+cannot demote A. At least one active admin always survives, as a consequence of
+the one clause `new.id <> (select auth.uid())` rather than as a check.
+
+The cost is real and belongs beside the guarantee: with exactly one admin, that
+admin's own row cannot be changed by anybody, themselves included. Promoting a
+second admin is the only way to make your own row editable. Slice 3 §6.3 records
+this as an accepted trade.
 
 ## 8. Screens (Phase 1)
 
