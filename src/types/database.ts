@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      allowed_emails: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          email: string
+          role: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          email: string
+          role?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allowed_emails_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checkins: {
         Row: {
           client_id: number

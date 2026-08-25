@@ -107,4 +107,17 @@ describe('the role presets', () => {
       expect(can('', capability)).toBe(false)
     }
   })
+
+  it('permits the same roles in the allowed_emails check constraint', () => {
+    // The third source. Role names now live in ROLE_CAPABILITIES, in the
+    // has_capability CASE, and in the check constraint on allowed_emails.role.
+    // A role added to two of the three would let an admin invite somebody to a
+    // role the permission model does not know, and the failure would arrive as
+    // a constraint violation at invite time rather than at build time.
+    const constraintSql = migration('_create_allowed_emails.sql')
+    const arm = constraintSql.match(/check \(role in \(([^)]*)\)\)/s)
+    expect(arm, "the role check constraint in the allowed_emails migration").not.toBeNull()
+    const fromSql = [...arm![1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1])
+    expect(fromSql.toSorted()).toEqual([...ROLES].toSorted())
+  })
 })
