@@ -122,6 +122,20 @@ export const SELF_EDIT_TEXT =
 export const UPDATE_MATCHED_NOTHING_TEXT =
   'That change was not applied, and nothing was changed. The database matched no account to update, which is what happens when the account signed in here is no longer allowed to manage users. Ask another admin.'
 
+// A DELETE that matched no row. allowed_emails_delete_manage_users is
+// USING-only, structurally identical to profiles_update_manage_users above: a
+// caller without manage_users has the row filtered out rather than raising, so
+// this is zero rows and no error, not PGRST116 and not an exception. Unlike the
+// update case, though, there is a second, equally real explanation this code
+// cannot distinguish from the first: another admin may have already revoked the
+// same invitation between this screen's last load and this press. Both leave
+// the row gone from the database and neither is a bug, so the text says both
+// rather than guessing, and it does not claim a retry is pointless -- reloading
+// the list, not "ask another admin", is the honest next step when the cause
+// might just be a stale screen.
+export const DELETE_MATCHED_NOTHING_TEXT =
+  'That invitation was not revoked, and nothing was changed. The database matched no invitation to delete -- either this account is no longer allowed to manage users, or someone else already revoked this same invitation. The list on screen may be out of date; reload it to see which.'
+
 export function writeFailureText(message: string, subject: string): string {
   const tail = ' Nothing was changed.'
 

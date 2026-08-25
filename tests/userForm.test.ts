@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   ASSIGNABLE_ROLES,
+  DELETE_MATCHED_NOTHING_TEXT,
+  UPDATE_MATCHED_NOTHING_TEXT,
   inviteProblems,
   invitePayload,
   normalizeEmail,
@@ -90,6 +92,36 @@ describe('sortProfiles', () => {
     const before = [...rows]
     sortProfiles(rows)
     expect(rows).toEqual(before)
+  })
+})
+
+describe('the two zero-row refusals Postgres never raises', () => {
+  // Neither reaches writeFailureText, because neither arrives as an error: a
+  // profiles UPDATE filtered away by profiles_update_manage_users, and an
+  // allowed_emails DELETE filtered away by allowed_emails_delete_manage_users,
+  // both return zero rows with no error at all -- see useUsers.ts.
+  it('both say nothing was changed', () => {
+    for (const text of [UPDATE_MATCHED_NOTHING_TEXT, DELETE_MATCHED_NOTHING_TEXT]) {
+      expect(text).toContain('othing was changed')
+    }
+  })
+
+  it('the delete case names both causes it cannot tell apart, unlike the update case', () => {
+    // The update's zero rows has exactly one honest explanation: the caller no
+    // longer holds manage_users. The delete's zero rows has two -- that, or
+    // another admin already revoked the same invitation -- and the copy has to
+    // say both rather than picking one and guessing.
+    expect(DELETE_MATCHED_NOTHING_TEXT).toContain('no longer allowed to manage users')
+    expect(DELETE_MATCHED_NOTHING_TEXT).toContain('someone else already revoked')
+  })
+
+  it('tells the reader the list may be stale, since a retry is not obviously futile here', () => {
+    // Unlike UPDATE_MATCHED_NOTHING_TEXT -- which correctly says every retry is
+    // refused identically, because the one cause is a permission that will not
+    // change -- the delete case does not know that. It points at reloading
+    // instead of asserting a certainty the code does not have.
+    expect(DELETE_MATCHED_NOTHING_TEXT).toContain('reload')
+    expect(DELETE_MATCHED_NOTHING_TEXT).not.toContain('Ask another admin')
   })
 })
 

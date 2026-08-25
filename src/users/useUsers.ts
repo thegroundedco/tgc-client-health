@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { CONCURRENT_SAVE_TEXT } from '../clients/clientForm'
 import {
+  DELETE_MATCHED_NOTHING_TEXT,
   INVITATION_COLUMNS,
   PROFILE_COLUMNS,
   UPDATE_MATCHED_NOTHING_TEXT,
@@ -134,11 +135,35 @@ export function useUsers(): UseUsers {
 
     void (async () => {
       try {
-        const { error } = await supabase.from('allowed_emails').delete().eq('email', email)
+        const { data, error } = await supabase
+          .from('allowed_emails')
+          .delete()
+          .eq('email', email)
+          // .select(), not a bare delete. allowed_emails_delete_manage_users is
+          // USING-only, the same shape as profiles_update_manage_users: a caller
+          // who has since lost manage_users has the row filtered out rather than
+          // raising, so this deletes zero rows and returns no error at all. A
+          // bare delete cannot tell that apart from an actual delete, and would
+          // report "revoked" -- and remove it from the list on screen -- for a
+          // write that never happened.
+          .select('email')
+
         if (error) {
           setInviteState({ kind: 'failed', message: writeFailureText(describeError(error), email) })
           return
         }
+
+        // No error and no row: the delete matched nothing. Could be a caller
+        // who no longer holds manage_users, or another admin who already
+        // revoked this same invitation -- this code cannot tell which, and
+        // DELETE_MATCHED_NOTHING_TEXT says so rather than guessing. The
+        // invitation stays in local state either way: the list must keep
+        // saying what the database holds, not what this press was hoping for.
+        if (data === null || data.length === 0) {
+          setInviteState({ kind: 'failed', message: DELETE_MATCHED_NOTHING_TEXT })
+          return
+        }
+
         setInvitations((current) => current.filter((row) => row.email !== email))
         setInviteState({ kind: 'saved', at: new Date().toISOString(), what: `Invitation for ${email} revoked` })
       } catch (thrown) {
