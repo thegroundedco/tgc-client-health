@@ -73,6 +73,22 @@ declare
   -- against an empty table.
   n_allowed_total bigint;
 
+  -- Section 10h only: the CROSS-ROW subject -- a profile row that is not the
+  -- admin doing the writing. It is the only subject in this file that
+  -- profiles_update_own does not admit, and therefore the only one that
+  -- evaluates profiles_update_manage_users at all. Null means this project has
+  -- one profile row, which is reported rather than skipped.
+  second_uid           uuid;
+  second_role_target   text;
+  second_active_target boolean;
+
+  -- Read back after the cross-row write, because a `using` clause narrowed to
+  -- false FILTERS the row silently rather than raising: the statement reports
+  -- success and changes nothing. "No exception" is not evidence that a write
+  -- landed.
+  got_role             text;
+  got_active           boolean;
+
   -- A real client id, read as the table owner before any impersonation, so 10f
   -- can attempt a check-in insert at all: checkins.client_id is NOT NULL and
   -- references public.clients, and referential integrity is checked with the
@@ -906,8 +922,10 @@ begin
         ('profiles', 'profiles_update_own'),
         -- The admin write path, 20260825202320. Dropping it takes the users
         -- admin screen away entirely, since an admin then reaches no profile row
-        -- but their own, and NOTHING ELSE HERE WOULD NOTICE: every 10h probe
-        -- below edits its own subject, which profiles_update_own reaches anyway.
+        -- but their own. 10h drives the policy for real -- the cross-row write
+        -- probe is the only thing in this file that evaluates it -- but that
+        -- probe needs a second profile row and reports a precondition without
+        -- one, so on a one-account project this entry is the only cover it has.
         ('profiles', 'profiles_update_manage_users'),
         -- The invitation list, 20260825201024. Listed for exactly the reason
         -- 10e exists:
@@ -1258,6 +1276,34 @@ begin
   order by created_at
   limit 1;
 
+  -- The cross-row subject and its target values, read as the TABLE OWNER before
+  -- anything impersonates anybody -- the same reason 10f reads probe_client_id
+  -- that way. Both targets are computed here so the probe writes a value it can
+  -- afterwards compare against exactly, and both are guaranteed to DIFFER from
+  -- what is stored: the guard returns early on `is not distinct from`, so
+  -- re-writing the value a row already holds would prove nothing at all.
+  --
+  -- `is distinct from` rather than `<>` so that a project with no admin still
+  -- finds a second row, and the precondition below can say which of the two
+  -- things it needs is actually missing.
+  select id,
+         case when role = 'viewer' then 'account_manager' else 'viewer' end,
+         not is_active
+    into second_uid, second_role_target, second_active_target
+  from public.profiles
+  where id is distinct from admin_uid
+  order by created_at
+  limit 1;
+
+  -- REPORTED, NEVER SKIPPED, and the wording says what is missing rather than
+  -- naming a generic shortfall: this check starts asserting by itself the moment
+  -- a second account signs in, with no code change and nobody remembering.
+  if admin_uid is null or second_uid is null then
+    preconditions := preconditions || format(
+      'the check that an ADMIN can change ANOTHER profile role and is_active went UNEXERCISED -- it needs an active admin AND one other profile row, and this project has admin=%L, other=%L. profiles_update_manage_users is the ONLY policy that admits a row belonging to somebody else, so until this runs, NOTHING anywhere evaluates it -- 10e asserts only that it exists. It becomes checkable the moment a second account signs in (README: "Activating the first admin")',
+      admin_uid, second_uid)::text;
+  end if;
+
   -- The viewer: reads no invitations, writes none, cannot touch either
   -- privileged column on their own row -- and can still rename themselves.
   if viewer_uid is null then
@@ -1425,6 +1471,70 @@ begin
               sqlstate, sqlerrm)::text;
           end if;
       end;
+
+      -- THE CROSS-ROW WRITE. Slice 3 design §8 requires the simulated admin to
+      -- prove it can change another user role and is_active, and this is the
+      -- only probe in the file that evaluates profiles_update_manage_users.
+      --
+      -- Every other probe in 10h edits its OWN subject, which
+      -- profiles_update_own admits anyway. So without this one, the new policy
+      -- could be dropped and nothing here would notice: 10e would report it
+      -- missing, but its using and with check clauses would never once be run.
+      -- This is the OUTAGE direction -- a policy narrowed to `using (false)`
+      -- kills the users admin screen without opening a hole -- and 9c and 10f
+      -- exist because that is the failure nobody writes a test for.
+      --
+      -- THE WRITE IS PROVED TO LAND, not merely to raise nothing, and the
+      -- distinction is the whole reason this probe is longer than its
+      -- neighbours. A `using` clause narrowed to false FILTERS the row: the
+      -- UPDATE succeeds, touches zero rows, and raises nothing at all. So the
+      -- row count AND the stored values are both checked, each behind its own
+      -- sentinel so the finding is recorded from the handler and never before
+      -- the rollback.
+      if second_uid is not null then
+        begin
+          update public.profiles
+             set role      = second_role_target,
+                 is_active = second_active_target
+           where id = second_uid;
+
+          if not found then
+            raise exception 'probe rollback -- no rows';
+          end if;
+
+          -- Read back through RLS as the same admin. profiles_select_active_users
+          -- gates on the CALLER capability rather than on the row is_active, so
+          -- switching the subject off above does not hide it from this select.
+          select role, is_active
+            into got_role, got_active
+            from public.profiles
+           where id = second_uid;
+
+          if got_role is distinct from second_role_target
+             or got_active is distinct from second_active_target then
+            raise exception 'probe rollback -- not stored';
+          end if;
+
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            problems := problems || format(
+              'an active ADMIN was REFUSED a write to ANOTHER profile row (%L) -- either profiles_update_manage_users with check is denying manage_users, or private.guard_profile_privileges is raising on a caller who holds it; the users admin screen can then neither change a role nor activate an account, which is every job it exists to do',
+              sqlerrm)::text;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              null;
+            elsif sqlerrm = 'probe rollback -- no rows' then
+              problems := problems || 'an active ADMIN updating ANOTHER profile row changed ZERO rows and raised nothing -- the using clause of profiles_update_manage_users is not admitting the row, so the users admin screen reports success and changes nothing. A SILENT no-op is exactly why this probe checks the row count instead of trusting that no exception was raised'::text;
+            elsif sqlerrm = 'probe rollback -- not stored' then
+              problems := problems || 'an active ADMIN updated ANOTHER profile row, but role and is_active did not read back as the values written -- the write was admitted and then altered, so what the users admin screen shows after a save is not what the database holds'::text;
+            else
+              problems := problems || format(
+                'the admin cross-row write probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+      end if;
 
       -- The self-edit clause, reached only by a caller who holds manage_users.
       -- This is the clause that makes lockout impossible: nobody demotes or
