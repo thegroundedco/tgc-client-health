@@ -62,6 +62,17 @@ declare
   -- activated. Null means nobody on this project is inactive.
   inactive_uid    uuid;
 
+  -- Section 10h only: the users admin write path. An ADMIN needs its own
+  -- subject there because it is refused by a DIFFERENT clause of the guard than
+  -- a viewer is -- the capability check comes first, so only a caller who holds
+  -- manage_users ever reaches the self-edit clause at all.
+  admin_uid       uuid;
+
+  -- Read as the table owner before 10h impersonates anybody, for the reason
+  -- 10a2 exists: "a viewer sees zero invitations" is true for the wrong reason
+  -- against an empty table.
+  n_allowed_total bigint;
+
   -- A real client id, read as the table owner before any impersonation, so 10f
   -- can attempt a check-in insert at all: checkins.client_id is NOT NULL and
   -- references public.clients, and referential integrity is checked with the
@@ -130,16 +141,58 @@ begin
 
   ----------------------------------------------------------------------------
   -- 2. The regression guard for the original bug: the authenticated write
-  --    surface on public.profiles is exactly {full_name} and nothing else.
+  --    surface on public.profiles is exactly {full_name, role, is_active}, and
+  --    the last two are writable ONLY because a trigger conditions them.
   --    `role` and `is_active` are the two that turn a deliberately inactive
   --    viewer into an active admin.
+  --
+  --    RE-AIMED, NOT RELAXED, by
+  --    20260825202320_profiles_admin_write_path.sql. Until that migration this
+  --    section asserted that `role` and `is_active` were NOT grantable to
+  --    `authenticated`, and that was the correct claim, because the narrow
+  --    column grant WAS the entire mechanism: Postgres has no per-column row
+  --    level security, so withholding the columns was the only way to stop a
+  --    signed-in user promoting themselves.
+  --
+  --    Slice 3 needs an admin to write those two columns from the browser, and
+  --    a column grant belongs to the ROLE, not to the policy that admitted the
+  --    row -- so granting them hands the same write to every signed-in user
+  --    through profiles_update_own. The enforcement therefore MOVED into a
+  --    BEFORE UPDATE trigger, private.guard_profile_privileges, which raises
+  --    42501 unless the caller holds manage_users AND is not editing their own
+  --    row. Slice 3 design §6.
+  --
+  --    So the claim this section makes about those two columns is inverted: the
+  --    old assertions would now report a violation against a schema working
+  --    exactly as designed. Every other assertion below -- full_name, email, id,
+  --    and the table-level sweep that is the shape of the original bug -- is
+  --    unchanged, and the grant assertions immediately below are paired with an
+  --    assertion that the guard itself still exists. The write surface got
+  --    wider; the number of things claimed about it went up, not down.
   ----------------------------------------------------------------------------
-  if has_column_privilege('authenticated', 'public.profiles', 'role', 'UPDATE') then
-    problems := problems || 'authenticated can UPDATE public.profiles.role -- a signed-in user could promote themselves to admin'::text;
+
+  -- The two columns the users admin screen writes. Asserted PRESENT now. Their
+  -- absence is an outage on that screen rather than a safety property: with the
+  -- guard in place, holding the grant is not what makes self-promotion possible.
+  if not has_column_privilege('authenticated', 'public.profiles', 'role', 'UPDATE') then
+    problems := problems || 'authenticated CANNOT UPDATE public.profiles.role -- the admin write path is gone, so an admin cannot change the role of anybody else from the browser (20260825202320_profiles_admin_write_path.sql)'::text;
   end if;
 
-  if has_column_privilege('authenticated', 'public.profiles', 'is_active', 'UPDATE') then
-    problems := problems || 'authenticated can UPDATE public.profiles.is_active -- a signed-in user could activate their own account'::text;
+  if not has_column_privilege('authenticated', 'public.profiles', 'is_active', 'UPDATE') then
+    problems := problems || 'authenticated CANNOT UPDATE public.profiles.is_active -- the admin write path is gone, so no admin can activate or deactivate an account from the browser (20260825202320_profiles_admin_write_path.sql)'::text;
+  end if;
+
+  -- The grant on role and is_active is only safe because the guard exists.
+  -- Asserting the grant without asserting the guard would turn this section from
+  -- a regression guard into a rubber stamp for the vulnerability it was written
+  -- to catch. Slice 3 design §6.
+  if not exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.profiles'::regclass
+       and tgname  = 'profiles_guard_privileges'
+       and not tgisinternal
+  ) then
+    problems := problems || 'public.profiles has column-level UPDATE granted on role and is_active but NO profiles_guard_privileges trigger -- every signed-in user can promote themselves to admin through profiles_update_own. This is the 20260820225903 vulnerability, reopened.'::text;
   end if;
 
   if not has_column_privilege('authenticated', 'public.profiles', 'full_name', 'UPDATE') then
@@ -218,9 +271,12 @@ begin
         -- Slice 2 step 3 widening -- every other profile too, when active. Which
         -- rows are reachable is RLS's job (profiles_select_own OR
         -- profiles_select_active_users, permissive policies being OR-combined);
-        -- this entry only says SELECT exists at all. The narrow WRITE surface is
-        -- asserted in section 2 and has NOT moved: full_name only, by a
-        -- column-level grant that needs no table-level entry here.
+        -- this entry only says SELECT exists at all. The WRITE surface is
+        -- asserted in section 2, and since
+        -- 20260825202320_profiles_admin_write_path.sql it is full_name, role and
+        -- is_active -- all three by COLUMN-level grants, which need no
+        -- table-level entry here, and the last two conditioned by the
+        -- profiles_guard_privileges trigger that section 2 also asserts.
         ('profiles', 'authenticated', 'SELECT'),
 
         -- public.clients: the board reads every active client, creates one, and
@@ -244,7 +300,24 @@ begin
         -- this UPDATE grant -- Postgres rejects any attempt with 428C9.
         ('checkins', 'authenticated', 'SELECT'),
         ('checkins', 'authenticated', 'INSERT'),
-        ('checkins', 'authenticated', 'UPDATE')
+        ('checkins', 'authenticated', 'UPDATE'),
+
+        -- public.allowed_emails: all four verbs, added by
+        -- 20260825201024_create_allowed_emails.sql. An invitation is created,
+        -- corrected and withdrawn from the users admin screen, so DELETE is a
+        -- deliberate entry here where it is refused on clients and checkins --
+        -- withdrawing an invitation must actually remove the row, because the
+        -- table means exactly one thing (invited, not yet arrived) and a
+        -- soft-deleted invitation would be a second meaning.
+        --
+        -- These four entries say only that the verbs EXIST for authenticated.
+        -- Every one of the four policies gates on manage_users, which only
+        -- `admin` holds; that a viewer can neither read nor write the
+        -- invitation list is section 10h's business, not this allowlist's.
+        ('allowed_emails', 'authenticated', 'SELECT'),
+        ('allowed_emails', 'authenticated', 'INSERT'),
+        ('allowed_emails', 'authenticated', 'UPDATE'),
+        ('allowed_emails', 'authenticated', 'DELETE')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
@@ -831,6 +904,19 @@ begin
         ('profiles', 'profiles_select_own'),
         ('profiles', 'profiles_select_active_users'),
         ('profiles', 'profiles_update_own'),
+        -- The admin write path, 20260825202320. Dropping it takes the users
+        -- admin screen away entirely, since an admin then reaches no profile row
+        -- but their own, and NOTHING ELSE HERE WOULD NOTICE: every 10h probe
+        -- below edits its own subject, which profiles_update_own reaches anyway.
+        ('profiles', 'profiles_update_manage_users'),
+        -- The invitation list, 20260825201024. Listed for exactly the reason
+        -- 10e exists:
+        -- 10h asserts that a viewer sees zero invitations and cannot insert one,
+        -- and dropping these policies would make both pass for the wrong reason.
+        ('allowed_emails', 'allowed_emails_select_manage_users'),
+        ('allowed_emails', 'allowed_emails_insert_manage_users'),
+        ('allowed_emails', 'allowed_emails_update_manage_users'),
+        ('allowed_emails', 'allowed_emails_delete_manage_users'),
         ('clients',  'clients_select_view_scores'),
         ('clients',  'clients_insert_manage_clients'),
         ('clients',  'clients_update_manage_clients'),
@@ -1115,6 +1201,311 @@ begin
     end;
   end if;
 
+  -- 10h. THE USERS ADMIN WRITE PATH -- the checks that would have failed on
+  --      every schema this project has had before
+  --      20260825202320_profiles_admin_write_path.sql, and the only automated
+  --      evidence that widening the column grant on public.profiles did not
+  --      hand every signed-in user the promotion the 20260820225903 repair took
+  --      away.
+  --
+  --      Section 2 asserts that the GRANT exists and that the TRIGGER exists.
+  --      Neither says the trigger DOES anything -- a guard whose body returned
+  --      `new` unconditionally satisfies both. This is where it is made to fire.
+  --
+  --      THE MESSAGE TEXT IS ASSERTED, not merely the SQLSTATE, and that is
+  --      deliberate in two directions. The users admin screen matches on these
+  --      strings as substrings to tell the two refusals apart, so they are an
+  --      INTERFACE and a silent rewording would break a screen with nothing
+  --      failing. And 42501 on its own would ALSO be raised if the column grant
+  --      had simply been lost -- "permission denied for table profiles" -- so a
+  --      probe that accepted any 42501 would report a pass on a schema where the
+  --      admin screen is dead and the guard never ran once.
+  --
+  --      WHICH REFUSAL EACH SUBJECT GETS follows from the order of the two
+  --      raises in the guard. The capability check comes first, so a viewer is
+  --      told 'insufficient privilege to change role or is_active' and never
+  --      reaches the self-edit clause; an admin holds manage_users, passes it,
+  --      and is told 'cannot change your own role or active status'. One subject
+  --      per branch, and both branches are exercised.
+  --
+  --      EVERY PRIVILEGED UPDATE BELOW CHANGES THE VALUE, never re-writes it.
+  --      `new.role is not distinct from old.role` makes the guard return early
+  --      by design, so `set role = <the role it already has>` would succeed
+  --      while changing nothing -- and the probe would report the guard as
+  --      ALLOWING self-promotion. is_active is flipped with `not is_active` for
+  --      the same reason, whichever way it currently sits.
+  --
+  --      THE FULL_NAME PROBE IS THE REGRESSION GUARD, and is why this subsection
+  --      is not only negative assertions. A guard that raised on EVERY update --
+  --      the obvious way to write it wrong -- passes every other check here
+  --      while making the profile screen read-only for everybody. It runs for
+  --      both subjects rather than only the viewer, because the viewer half goes
+  --      unexercised on a project with no viewer yet, and on this one that is
+  --      the expected state.
+  --
+  --      ZERO WRITES SURVIVE, by 10f's rule: anything the schema ALLOWS is
+  --      rolled back by raising inside its own subtransaction. Nothing here
+  --      touches an identity sequence, so unlike 10f it leaves no trace at all.
+  --      Where a probe has to check FOUND as well as catch a refusal, it raises
+  --      a SECOND, distinct sentinel rather than appending to `problems` before
+  --      the rollback -- so no assertion here rests on how a plpgsql variable
+  --      survives a caught exception.
+  select count(*) into n_allowed_total from public.allowed_emails;
+
+  select id into admin_uid
+  from public.profiles
+  where is_active and role = 'admin'
+  order by created_at
+  limit 1;
+
+  -- The viewer: reads no invitations, writes none, cannot touch either
+  -- privileged column on their own row -- and can still rename themselves.
+  if viewer_uid is null then
+    preconditions := preconditions || 'public.profiles contains no ACTIVE row with role = viewer, so the checks that a viewer cannot read the invitation list and cannot promote themselves went UNEXERCISED -- this is the expected state on a project with one admin, and it is the direction in which a mistake reopens the 20260820225903 vulnerability'::text;
+  else
+    begin
+      perform set_config(
+        'request.jwt.claims',
+        json_build_object('sub', viewer_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+        true);
+      set local role authenticated;
+
+      select count(*) into n_seen from public.allowed_emails;
+      if n_seen <> 0 then
+        problems := problems || format(
+          'an active VIEWER sees %s row(s) in public.allowed_emails -- allowed_emails_select_manage_users is not gating on manage_users, so anybody who can sign in reads the invitation list',
+          n_seen)::text;
+      elsif n_allowed_total = 0 then
+        preconditions := preconditions || 'public.allowed_emails is empty, so "a viewer sees zero invitations" is true for the wrong reason (0 = 0) and the invitation READ gate went UNEXERCISED -- invite somebody from the users admin screen and re-run; the insert gate below is checked either way'::text;
+      end if;
+
+      -- The write half. `with check` is a separate predicate from `using`, and
+      -- an invitation carries a ROLE, so this is not a lesser write than
+      -- self-promotion: it is self-promotion with one extra sign-in in the way.
+      begin
+        insert into public.allowed_emails (email, role)
+        values ('verify-privileges-viewer-probe@example.invalid', 'admin');
+        raise exception 'probe rollback';
+      exception
+        when insufficient_privilege then
+          null;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            problems := problems || 'an active VIEWER was ALLOWED to insert into public.allowed_emails -- allowed_emails_insert_manage_users is not gating on manage_users, so anybody who can sign in can invite an address at role admin and then sign in as one (the row was rolled back by this check, not by the policy)'::text;
+          else
+            problems := problems || format(
+              'the viewer invitation insert probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      -- SELF-PROMOTION. The vulnerability itself, attempted.
+      begin
+        update public.profiles set role = 'admin' where id = viewer_uid;
+        raise exception 'probe rollback';
+      exception
+        when insufficient_privilege then
+          if sqlerrm <> 'insufficient privilege to change role or is_active' then
+            problems := problems || format(
+              'an active VIEWER was refused their own role change by %L rather than by private.guard_profile_privileges -- the likeliest cause is the column-level UPDATE grant on public.profiles.role having been lost, which section 2 reports separately; either way the guard went UNEXERCISED and the message the users admin screen matches on has changed',
+              sqlerrm)::text;
+          end if;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            problems := problems || 'an active VIEWER was ALLOWED to set their own role to admin -- private.guard_profile_privileges is not firing, and the 20260820225903 vulnerability is open again (the change was rolled back by this check, not by the guard)'::text;
+          else
+            problems := problems || format(
+              'the viewer self-promotion probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      -- SELF-ACTIVATION. The other half of the same vulnerability: a deliberately
+      -- inactive account switching itself on.
+      begin
+        update public.profiles set is_active = not is_active where id = viewer_uid;
+        raise exception 'probe rollback';
+      exception
+        when insufficient_privilege then
+          if sqlerrm <> 'insufficient privilege to change role or is_active' then
+            problems := problems || format(
+              'an active VIEWER was refused their own is_active change by %L rather than by private.guard_profile_privileges -- the guard went UNEXERCISED for is_active, and the message the users admin screen matches on has changed',
+              sqlerrm)::text;
+          end if;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            problems := problems || 'an active VIEWER was ALLOWED to change their own is_active -- private.guard_profile_privileges is not firing on is_active, so an unapproved signup can activate itself (the change was rolled back by this check, not by the guard)'::text;
+          else
+            problems := problems || format(
+              'the viewer self-activation probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      -- THE REGRESSION GUARD. This update changes neither privileged column, so
+      -- the guard must return early and profiles_update_own must work exactly as
+      -- it did before the trigger existed. Both failure directions are findings:
+      -- a refusal means the guard raises on everything, and zero rows updated
+      -- means the row is no longer visible to the statement that writes it,
+      -- which is the silent-no-op failure 20260824180533 was careful about.
+      begin
+        update public.profiles
+           set full_name = 'verify-privileges probe -- must never persist'
+         where id = viewer_uid;
+        if found then
+          raise exception 'probe rollback';
+        else
+          raise exception 'probe rollback -- no rows';
+        end if;
+      exception
+        when insufficient_privilege then
+          problems := problems || format(
+            'an active VIEWER was REFUSED an update to their own full_name (%L) -- this update changes neither role nor is_active, so private.guard_profile_privileges must let it straight through; as it stands the profile screen is read-only for everybody',
+            sqlerrm)::text;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            null;
+          elsif sqlerrm = 'probe rollback -- no rows' then
+            problems := problems || 'an active VIEWER renaming themselves updated ZERO rows -- profiles_update_own can no longer see the row it updates, so a profile edit silently affects nothing and reports success'::text;
+          else
+            problems := problems || format(
+              'the viewer full_name probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      reset role;
+    exception when others then
+      problems := problems || format(
+        'the viewer users-admin check could not run: %s %s -- whether a viewer can promote themselves is UNVERIFIED',
+        sqlstate, sqlerrm)::text;
+    end;
+  end if;
+
+  -- The admin: the direction in which a mistake takes the users admin screen
+  -- away from the only person who could put it back.
+  if admin_uid is null then
+    preconditions := preconditions || 'public.profiles contains no ACTIVE row with role = admin, so the checks that an admin CAN manage invitations and CANNOT edit their own role went UNEXERCISED -- and one of those is the direction that takes the users admin screen away from everybody'::text;
+  else
+    begin
+      perform set_config(
+        'request.jwt.claims',
+        json_build_object('sub', admin_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+        true);
+      set local role authenticated;
+
+      -- manage_users IS in the admin preset, and it is the only preset that has
+      -- it. Insert and delete in one block, because withdrawing an invitation
+      -- matters as much as issuing one: the table means exactly one thing --
+      -- invited, not yet arrived -- and a delete that finds nothing leaves an
+      -- invitation the screen has already reported as withdrawn.
+      begin
+        insert into public.allowed_emails (email, role)
+        values ('verify-privileges-admin-probe@example.invalid', 'viewer');
+
+        delete from public.allowed_emails
+         where email = 'verify-privileges-admin-probe@example.invalid';
+
+        if found then
+          raise exception 'probe rollback';
+        else
+          raise exception 'probe rollback -- delete found nothing';
+        end if;
+      exception
+        when insufficient_privilege then
+          problems := problems || 'an active ADMIN was REFUSED a write to public.allowed_emails -- the allowed_emails policies are denying manage_users, which only admin holds, so nobody can invite anybody and the users admin screen is unusable for the one role it exists for'::text;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            null;
+          elsif sqlerrm = 'probe rollback -- delete found nothing' then
+            problems := problems || 'an active ADMIN inserted an invitation and then DELETED ZERO ROWS -- allowed_emails_delete_manage_users is missing or its using clause is wrong, so withdrawing an invitation silently does nothing and the invited address can still sign in and be activated'::text;
+          else
+            problems := problems || format(
+              'the admin invitation probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      -- The self-edit clause, reached only by a caller who holds manage_users.
+      -- This is the clause that makes lockout impossible: nobody demotes or
+      -- deactivates themselves, and only an admin can demote an admin, so at
+      -- least one active admin always survives with no counting logic anywhere.
+      begin
+        update public.profiles set role = 'viewer' where id = admin_uid;
+        raise exception 'probe rollback';
+      exception
+        when insufficient_privilege then
+          if sqlerrm <> 'cannot change your own role or active status' then
+            problems := problems || format(
+              'an active ADMIN was refused their own role change by %L rather than by the self-edit clause of private.guard_profile_privileges -- the refusal came from somewhere else, so the clause that guarantees at least one active admin survives went UNEXERCISED, and the message the users admin screen matches on has changed',
+              sqlerrm)::text;
+          end if;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            problems := problems || 'an active ADMIN was ALLOWED to demote themselves -- the self-edit clause of private.guard_profile_privileges is not firing, so the last admin can remove the last admin and there is no way back into the users admin screen (the change was rolled back by this check, not by the guard)'::text;
+          else
+            problems := problems || format(
+              'the admin self-demotion probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      begin
+        update public.profiles set is_active = not is_active where id = admin_uid;
+        raise exception 'probe rollback';
+      exception
+        when insufficient_privilege then
+          if sqlerrm <> 'cannot change your own role or active status' then
+            problems := problems || format(
+              'an active ADMIN was refused their own is_active change by %L rather than by the self-edit clause of private.guard_profile_privileges -- the clause went UNEXERCISED for is_active, and the message the users admin screen matches on has changed',
+              sqlerrm)::text;
+          end if;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            problems := problems || 'an active ADMIN was ALLOWED to deactivate themselves -- the self-edit clause of private.guard_profile_privileges is not firing on is_active, so the last admin can switch off the last admin account (the change was rolled back by this check, not by the guard)'::text;
+          else
+            problems := problems || format(
+              'the admin self-deactivation probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      -- The regression guard again, for the subject that exists on every
+      -- project. See the viewer copy above for why both directions are findings.
+      begin
+        update public.profiles
+           set full_name = 'verify-privileges probe -- must never persist'
+         where id = admin_uid;
+        if found then
+          raise exception 'probe rollback';
+        else
+          raise exception 'probe rollback -- no rows';
+        end if;
+      exception
+        when insufficient_privilege then
+          problems := problems || format(
+            'an active ADMIN was REFUSED an update to their own full_name (%L) -- this update changes neither role nor is_active, so private.guard_profile_privileges must let it straight through; as it stands the profile screen is read-only for everybody',
+            sqlerrm)::text;
+        when others then
+          if sqlerrm = 'probe rollback' then
+            null;
+          elsif sqlerrm = 'probe rollback -- no rows' then
+            problems := problems || 'an active ADMIN renaming themselves updated ZERO rows -- profiles_update_own can no longer see the row it updates, so a profile edit silently affects nothing and reports success'::text;
+          else
+            problems := problems || format(
+              'the admin full_name probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+          end if;
+      end;
+
+      reset role;
+    exception when others then
+      problems := problems || format(
+        'the admin users-admin check could not run: %s %s -- whether an admin can manage invitations, and whether the self-edit clause fires, are both UNVERIFIED',
+        sqlstate, sqlerrm)::text;
+    end;
+  end if;
+
   ----------------------------------------------------------------------------
   -- 11. service_role must keep reaching every table in `public`.
   --
@@ -1203,10 +1594,22 @@ begin
 end $$;
 
 -- Echoed so a passing run shows the matrix it just asserted, not merely "ok".
+--
+-- auth_update_role and auth_update_is_active read TRUE since
+-- 20260825202320_profiles_admin_write_path.sql, which is alarming at a glance
+-- and is exactly why guard_trigger is echoed beside them: those two columns are
+-- writable by `authenticated` only while private.guard_profile_privileges is
+-- there to condition them. Read the three together or none of them.
 select
   has_column_privilege('authenticated','public.profiles','full_name','UPDATE') as auth_update_full_name,
   has_column_privilege('authenticated','public.profiles','role','UPDATE')      as auth_update_role,
   has_column_privilege('authenticated','public.profiles','is_active','UPDATE') as auth_update_is_active,
+  exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.profiles'::regclass
+       and tgname  = 'profiles_guard_privileges'
+       and not tgisinternal
+  )                                                                            as guard_trigger,
   has_table_privilege('authenticated','public.profiles','SELECT')              as auth_select,
   has_table_privilege('anon','public.profiles','SELECT')                       as anon_select,
   (select relrowsecurity from pg_class where oid='public.profiles'::regclass)   as rls_enabled,
