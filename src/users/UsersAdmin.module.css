@@ -1,0 +1,8 @@
+/* The users admin screen's own layout. Copied from src/clients/ClientsAdmin.module.css
+   rather than shared, so the two screens can drift independently -- but copied
+   verbatim for now, so the spacing matches on day one. Every colour and every
+   face still comes from a token; this file is not allowed to name either. */
+
+.nav {
+  display: flex;
+}
