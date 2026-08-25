@@ -756,12 +756,12 @@ describe('writeFailureText', () => {
   it('translates the guard trigger self-edit refusal', () => {
     const text = writeFailureText('cannot change your own role or active status', 'you')
     expect(text).toContain('own access')
-    expect(text).toContain('another admin')
+    expect(text).toContain('Another admin')
   })
 
   it('translates a duplicate invitation', () => {
     expect(writeFailureText('duplicate key value violates unique constraint "allowed_emails_pkey"', 'a@b.com'))
-      .toContain('already invited')
+      .toContain('already been invited')
   })
 
   it('translates an RLS refusal into a sentence about permission', () => {
