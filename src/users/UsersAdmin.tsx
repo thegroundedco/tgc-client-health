@@ -114,7 +114,21 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
                     rather than only drawn -- the same fix AddClientForm makes
                     for its own confirmation line, and the whole reason Slice 1
                     was rewritten: a write that worked looked exactly like one
-                    that failed. */}
+                    that failed.
+
+                    `admin.editStateFor === row.id` is this list's whole
+                    staleness defence, and it is sufficient here where
+                    ClientsAdmin needed resetEdit as well. The difference is that
+                    ClientsAdmin holds a DRAFT: its edit form keeps fields the
+                    person can change after a save, so its confirmation can come
+                    to describe something the form no longer says. These rows
+                    hold no draft -- the select and the button read straight off
+                    `row`, every interaction with them IS a write, and each write
+                    re-points editStateFor at the row it belongs to before it
+                    reports anything. So there is no sequence in which this line
+                    outlives the change it describes; that is why
+                    `admin.resetEdit` has no caller on this screen, and it is
+                    deliberate rather than an omission. */}
                 {admin.editStateFor === row.id && admin.editState.kind === 'failed' && (
                   <p className="t-small" role="status">{admin.editState.message}</p>
                 )}
@@ -164,10 +178,20 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
           </ul>
         )}
 
+        {/* onEdited is what keeps the confirmation below honest. Without it the
+            sequence is: invite A, read "a@x invited", the form clears, type B,
+            and the screen still says A was invited beside a form that now holds
+            B. ClientsAdmin wires resetAdd/resetEdit for exactly this, and
+            AddClientForm states the rule: a confirmation left standing beside a
+            form somebody has since changed is the same class of lie as no
+            confirmation at all. It clears the REVOKE confirmation too -- both
+            share inviteState, and "invitation for c@x revoked" is just as stale
+            once the admin is typing a fresh address. */}
         <InviteForm
           profiles={admin.profiles}
           state={admin.inviteState}
           onInvite={admin.invite}
+          onEdited={admin.resetInvite}
         />
 
         {admin.inviteState.kind === 'failed' && (

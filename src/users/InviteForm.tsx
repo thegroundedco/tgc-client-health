@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ASSIGNABLE_ROLES, ROLE_HINTS, ROLE_LABELS, inviteProblems } from './userForm'
 import type { AdminProfile, InviteDraft, WriteState } from './userForm'
 
@@ -6,14 +6,44 @@ type Props = {
   profiles: readonly AdminProfile[]
   state: WriteState
   onInvite: (draft: InviteDraft) => void
+  // Called whenever the draft changes while a confirmation or refusal is on
+  // screen. The parent uses it to clear that line -- see edit() below.
+  onEdited: () => void
 }
 
 const EMPTY: InviteDraft = { email: '', role: 'viewer' }
 
-export function InviteForm({ profiles, state, onInvite }: Props) {
+export function InviteForm({ profiles, state, onInvite, onEdited }: Props) {
   const [draft, setDraft] = useState<InviteDraft>(EMPTY)
   const problems = inviteProblems(draft, profiles)
   const saving = state.kind === 'saving'
+
+  // One place that both updates the form and clears a stale confirmation, so no
+  // edit path can forget the second half. AddClientForm.tsx says why, and it is
+  // worth repeating here rather than pointing at it: a confirmation left
+  // standing beside a form somebody has since changed is the same class of lie
+  // as no confirmation at all. The sequence this closes is ordinary -- invite A,
+  // read "a@x invited", type B, and the screen still says A was invited beside
+  // an address that is now B's.
+  function edit(next: InviteDraft) {
+    setDraft(next)
+    if (state.kind !== 'idle') onEdited()
+  }
+
+  // Cleared on a CONFIRMED invite, never on the press. This used to run inside
+  // onSubmit, which loses the typed address the instant the write is refused --
+  // and the likeliest refusal this form will ever see is allowed_emails_pkey
+  // (the address is already invited) or a dropped connection, which are
+  // precisely the cases where somebody wants to look at what they typed and
+  // change one word of it. Same reasoning, and the same fix, as
+  // AddClientForm.tsx: a failed write keeps the form populated.
+  //
+  // Safe against re-firing: once this runs, `state` is unchanged, so the effect
+  // does not re-run. The next keystroke calls edit(), which resets the state to
+  // idle and moves the dependency off 'saved' for good.
+  useEffect(() => {
+    if (state.kind === 'saved') setDraft(EMPTY)
+  }, [state])
 
   return (
     <form
@@ -23,7 +53,6 @@ export function InviteForm({ profiles, state, onInvite }: Props) {
         // Enter in a text field, which does not consult the button.
         if (saving || problems.length > 0) return
         onInvite(draft)
-        setDraft(EMPTY)
       }}
     >
       <label htmlFor="invite-email" className="t-label">Email address</label>
@@ -32,7 +61,7 @@ export function InviteForm({ profiles, state, onInvite }: Props) {
         type="email"
         value={draft.email}
         disabled={saving}
-        onChange={(event) => setDraft({ ...draft, email: event.target.value })}
+        onChange={(event) => edit({ ...draft, email: event.target.value })}
       />
 
       <label htmlFor="invite-role" className="t-label">Role</label>
@@ -40,7 +69,7 @@ export function InviteForm({ profiles, state, onInvite }: Props) {
         id="invite-role"
         value={draft.role}
         disabled={saving}
-        onChange={(event) => setDraft({ ...draft, role: event.target.value })}
+        onChange={(event) => edit({ ...draft, role: event.target.value })}
       >
         {ASSIGNABLE_ROLES.map((role) => (
           <option key={role} value={role}>{ROLE_LABELS[role] ?? role}</option>

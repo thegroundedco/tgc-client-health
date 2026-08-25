@@ -165,6 +165,15 @@ export function useUsers(): UseUsers {
         }
 
         setInvitations((current) => current.filter((row) => row.email !== email))
+        // A CLIENT clock, and the only one in this file. Every other
+        // confirmation reports data.created_at or data.updated_at -- a value the
+        // database wrote -- because a timestamp the browser invented can be
+        // minutes out and still look authoritative. A DELETE has no such value
+        // to return: the row it would have come from no longer exists, and
+        // .select('email') above hands back only what was deleted. So this is
+        // unavoidable rather than an oversight, and it is left here to stop the
+        // next reader "fixing" it into a claim about the server that the server
+        // never made.
         setInviteState({ kind: 'saved', at: new Date().toISOString(), what: `Invitation for ${email} revoked` })
       } catch (thrown) {
         setInviteState({ kind: 'failed', message: writeFailureText(describeError(thrown), email) })
@@ -239,12 +248,22 @@ export function useUsers(): UseUsers {
     [writeProfile],
   )
 
+  // useCallback, matching useClients' resetAdd/resetEdit. These were bare
+  // arrows while nothing consumed them, which was harmless; InviteForm now takes
+  // resetInvite as its onEdited prop, and a fresh identity on every render would
+  // make that prop change on every render too -- so any future memo on the form
+  // would be defeated, and the effect dependency lists in it would churn.
+  const resetInvite = useCallback(() => setInviteState({ kind: 'idle' }), [])
+  const resetEdit = useCallback(() => setEditState({ kind: 'idle' }), [])
+
+  // A manual reload has nothing to be cancelled by, so it uses the default.
+  const reload = useCallback(() => void load(), [load])
+
   return {
     status, loadError, profiles, invitations,
     inviteState, editState, editStateFor,
-    reload: () => void load(),
+    reload,
     invite, revokeInvite, setRole, setActive,
-    resetInvite: () => setInviteState({ kind: 'idle' }),
-    resetEdit: () => setEditState({ kind: 'idle' }),
+    resetInvite, resetEdit,
   }
 }

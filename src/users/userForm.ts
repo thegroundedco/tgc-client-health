@@ -108,8 +108,17 @@ export function invitePayload(draft: InviteDraft) {
 // <generated>_profiles_admin_write_path.sql. Matched as substrings because
 // Postgres prefixes nothing to a `raise exception ... using errcode` message,
 // but supabase-js may wrap it.
-const SELF_EDIT_MESSAGE = 'cannot change your own role or active status'
-const NOT_ADMIN_MESSAGE = 'insufficient privilege to change role or is_active'
+//
+// EXPORTED so tests/userFormDrift.test.ts can read the migration off disk and
+// assert both strings are still in it. Without that, the only thing checking
+// this pair against the deployed trigger is verify-privileges 10h, which needs
+// staging AND an active viewer AND an active admin -- preconditions this project
+// does not meet yet. So a reword of either raise would go unnoticed, and the
+// failure is silent rather than loud: writeFailureText falls through to its
+// final branch and puts raw Postgres text on screen where SELF_EDIT_TEXT
+// belongs. The drift test costs nothing and does not wait on a second account.
+export const SELF_EDIT_MESSAGE = 'cannot change your own role or active status'
+export const NOT_ADMIN_MESSAGE = 'insufficient privilege to change role or is_active'
 
 export const SELF_EDIT_TEXT =
   'You cannot change your own access. That is deliberate: it is what makes it impossible to lock every admin out of the tool. Another admin can change it for you.'
