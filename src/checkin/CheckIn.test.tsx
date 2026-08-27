@@ -61,6 +61,39 @@ function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
     submitted_by: null,
     created_at: '2026-08-01T00:00:00.000Z',
     updated_at: '2026-08-21T15:42:00.000Z',
+    // The 22 answer columns and 6 generated bucket scores added by the
+    // six-bucket migration (20260827192720_six_bucket_scoring.sql). Verified
+    // on staging: the sole existing checkins row has null in every one of
+    // these columns (production was not queried), so null is the true value
+    // here, not a placeholder.
+    comm_constructive: null,
+    comm_timely: null,
+    comm_consistent: null,
+    growth_goals_defined: null,
+    growth_progress_trackable: null,
+    growth_hitting_goals: null,
+    fin_rack_rate: null,
+    fin_pays_on_time: null,
+    fin_rate_increased: null,
+    fin_on_terms: null,
+    rel_collaborative: null,
+    rel_respectful: null,
+    rel_fun: null,
+    rel_multi_threaded: null,
+    del_on_time: null,
+    del_quantity: null,
+    del_client_likes: null,
+    del_we_are_proud: null,
+    adv_left_review: null,
+    adv_case_study: null,
+    adv_would_refer: null,
+    adv_reference_check: null,
+    comm_score: null,
+    growth_score: null,
+    fin_score: null,
+    rel_score: null,
+    del_score: null,
+    adv_score: null,
     ...overrides,
   }
 }

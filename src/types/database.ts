@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -45,14 +45,42 @@ export type Database = {
       }
       checkins: {
         Row: {
+          adv_case_study: number | null
+          adv_left_review: number | null
+          adv_reference_check: number | null
+          adv_score: number | null
+          adv_would_refer: number | null
           client_id: number
+          comm_consistent: number | null
+          comm_constructive: number | null
+          comm_score: number | null
+          comm_timely: number | null
           created_at: string
+          del_client_likes: number | null
+          del_on_time: number | null
+          del_quantity: number | null
+          del_score: number | null
+          del_we_are_proud: number | null
           delivery: number | null
+          fin_on_terms: number | null
+          fin_pays_on_time: number | null
+          fin_rack_rate: number | null
+          fin_rate_increased: number | null
+          fin_score: number | null
           financial: number | null
           growth: number | null
+          growth_goals_defined: number | null
+          growth_hitting_goals: number | null
+          growth_progress_trackable: number | null
+          growth_score: number | null
           id: number
           notes: string | null
           period: string
+          rel_collaborative: number | null
+          rel_fun: number | null
+          rel_multi_threaded: number | null
+          rel_respectful: number | null
+          rel_score: number | null
           relationship: number | null
           sentiment: number | null
           submitted_at: string | null
@@ -61,14 +89,42 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          adv_case_study?: number | null
+          adv_left_review?: number | null
+          adv_reference_check?: number | null
+          adv_score?: number | null
+          adv_would_refer?: number | null
           client_id: number
+          comm_consistent?: number | null
+          comm_constructive?: number | null
+          comm_score?: number | null
+          comm_timely?: number | null
           created_at?: string
+          del_client_likes?: number | null
+          del_on_time?: number | null
+          del_quantity?: number | null
+          del_score?: number | null
+          del_we_are_proud?: number | null
           delivery?: number | null
+          fin_on_terms?: number | null
+          fin_pays_on_time?: number | null
+          fin_rack_rate?: number | null
+          fin_rate_increased?: number | null
+          fin_score?: number | null
           financial?: number | null
           growth?: number | null
+          growth_goals_defined?: number | null
+          growth_hitting_goals?: number | null
+          growth_progress_trackable?: number | null
+          growth_score?: number | null
           id?: never
           notes?: string | null
           period: string
+          rel_collaborative?: number | null
+          rel_fun?: number | null
+          rel_multi_threaded?: number | null
+          rel_respectful?: number | null
+          rel_score?: number | null
           relationship?: number | null
           sentiment?: number | null
           submitted_at?: string | null
@@ -77,14 +133,42 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          adv_case_study?: number | null
+          adv_left_review?: number | null
+          adv_reference_check?: number | null
+          adv_score?: number | null
+          adv_would_refer?: number | null
           client_id?: number
+          comm_consistent?: number | null
+          comm_constructive?: number | null
+          comm_score?: number | null
+          comm_timely?: number | null
           created_at?: string
+          del_client_likes?: number | null
+          del_on_time?: number | null
+          del_quantity?: number | null
+          del_score?: number | null
+          del_we_are_proud?: number | null
           delivery?: number | null
+          fin_on_terms?: number | null
+          fin_pays_on_time?: number | null
+          fin_rack_rate?: number | null
+          fin_rate_increased?: number | null
+          fin_score?: number | null
           financial?: number | null
           growth?: number | null
+          growth_goals_defined?: number | null
+          growth_hitting_goals?: number | null
+          growth_progress_trackable?: number | null
+          growth_score?: number | null
           id?: never
           notes?: string | null
           period?: string
+          rel_collaborative?: number | null
+          rel_fun?: number | null
+          rel_multi_threaded?: number | null
+          rel_respectful?: number | null
+          rel_score?: number | null
           relationship?: number | null
           sentiment?: number | null
           submitted_at?: string | null
@@ -118,6 +202,7 @@ export type Database = {
           id: number
           name: string
           owner_id: string | null
+          started_on: string | null
           status: string
           updated_at: string
         }
@@ -129,6 +214,7 @@ export type Database = {
           id?: never
           name: string
           owner_id?: string | null
+          started_on?: string | null
           status?: string
           updated_at?: string
         }
@@ -140,6 +226,7 @@ export type Database = {
           id?: never
           name?: string
           owner_id?: string | null
+          started_on?: string | null
           status?: string
           updated_at?: string
         }
@@ -185,7 +272,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      checkin_scores: {
+        Row: {
+          adv_score: number | null
+          advocacy_applies: boolean | null
+          client_id: number | null
+          comm_score: number | null
+          del_score: number | null
+          fin_score: number | null
+          growth_score: number | null
+          id: number | null
+          overall_score: number | null
+          period: string | null
+          rel_score: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checkins_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never
