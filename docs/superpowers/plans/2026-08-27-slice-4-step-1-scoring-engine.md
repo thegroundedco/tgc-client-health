@@ -944,7 +944,11 @@ exit 0 plus the echoed row.
 
 - [ ] **Step 5: Regenerate the types**
 
-Run: `npm run types:generate` (check `package.json` for the exact script name if it differs).
+Run: `npx --yes supabase@latest gen types typescript --linked > src/types/database.ts`
+
+**There is no `npm run types:generate` script** — an earlier draft of this plan named one and it does
+not exist. The command above is the one documented at `README.md:411`. It is NOT guarded by
+`db:which`, so confirm the link is staging before running it.
 
 **Never hand-edit `src/types/database.ts`.** Confirm the diff contains `started_on`, the 22 answer
 columns, the six `_score` columns, and a `checkin_scores` entry under `Views`.
