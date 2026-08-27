@@ -956,7 +956,20 @@ columns, the six `_score` columns, and a `checkin_scores` entry under `Views`.
 - [ ] **Step 6: Run the suite, build and lint**
 
 Run: `npm test -- --run && npm run build && npm run lint`
-Expected: all green. The regenerated types are additive, so nothing that compiled before stops.
+Expected: **the build FAILS**, and that is not a surprise to route around.
+
+An earlier draft of this plan asserted "the regenerated types are additive, so nothing that compiled
+before stops." **That is false, and it was measured false on 2026-08-27.** The columns are additive in
+the database, but `gen types` widens the `Row` type, and `Row` requires every column. Any object
+literal typed as a full `Row` therefore stops compiling the moment the new columns exist.
+
+Exactly one place does this today: `storedRow()` in `src/checkin/CheckIn.test.tsx:48`, which builds a
+complete `CheckinRow`. It fails with `TS2322`, missing the 22 answer columns and the six `*_score`
+columns.
+
+Fix it by adding all 28 keys set to `null` — which is not a workaround but the truth about the data:
+every existing check-in row has these columns unpopulated. Do not widen the fixture's return type,
+and never hand-edit `src/types/database.ts`.
 
 - [ ] **Step 7: Commit**
 
