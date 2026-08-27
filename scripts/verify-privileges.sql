@@ -43,6 +43,7 @@ declare
 
   r         record;
   n_tables  int;
+  n_views   int;
 
   -- Section 10 (policy behaviour) only.
   active_uid      uuid;
@@ -296,8 +297,19 @@ begin
   end loop;
 
   ----------------------------------------------------------------------------
-  -- 4. Generic sweep over EVERY table in `public`, so a re-widening from any
-  --    source is caught -- not just on the one table we happen to remember.
+  -- 4. Generic sweep over EVERY table AND VIEW in `public`, so a re-widening
+  --    from any source is caught -- not just on the one relation we happen to
+  --    remember.
+  --
+  --    VIEWS included since Slice 4 added public.checkin_scores
+  --    (20260827192720_six_bucket_scoring.sql). Before that, this sweep's
+  --    `relkind in ('r', 'p')` filter meant an ACL check for a view was simply
+  --    never run -- a future migration, a restore, or an inherited default
+  --    privilege could grant anon SELECT on a view of client health data and
+  --    nothing in CI would notice. That is the same failure class as the
+  --    public.profiles defect this file exists to catch, so the filter below
+  --    now also matches 'v' (ordinary view; checkin_scores has no matview,
+  --    foreign table, or partitioned view to worry about today).
   --
   --    The intended matrix is encoded as an explicit allowlist. Anything a
   --    browser-reachable role holds that is not on it is a violation. Widening
@@ -374,7 +386,24 @@ begin
         ('allowed_emails', 'authenticated', 'SELECT'),
         ('allowed_emails', 'authenticated', 'INSERT'),
         ('allowed_emails', 'authenticated', 'UPDATE'),
-        ('allowed_emails', 'authenticated', 'DELETE')
+        ('allowed_emails', 'authenticated', 'DELETE'),
+
+        -- public.checkin_scores: a security_invoker VIEW added by
+        -- 20260827192720_six_bucket_scoring.sql (Slice 4). Measured directly on
+        -- staging 2026-08-27: relacl is
+        --   postgres=arwdDxtm/postgres | service_role=arwdDxtm/postgres |
+        --   authenticated=r/postgres
+        -- -- i.e. authenticated holds SELECT and nothing else, anon holds
+        -- nothing. Being security_invoker, the view carries no row security of
+        -- its own (relrowsecurity/relforcerowsecurity both read false, and
+        -- there is no ALTER VIEW ... ENABLE ROW LEVEL SECURITY in Postgres to
+        -- set them true) -- every read runs under the CALLING role's own
+        -- privileges against the underlying checkins/clients rows, so the real
+        -- boundary is those two tables' RLS, already asserted elsewhere in
+        -- this file. This entry says only that the view's own SELECT grant to
+        -- authenticated is the intended, measured state now that the sweep
+        -- below sees views at all.
+        ('checkin_scores', 'authenticated', 'SELECT')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
@@ -388,7 +417,10 @@ begin
       cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) acl
       left join pg_roles g on g.oid = acl.grantee
       where n.nspname = 'public'
-        and c.relkind in ('r', 'p')
+        -- 'v' added for Slice 4's public.checkin_scores -- see the section
+        -- header above. A view's ACL is exactly as reachable by anon/
+        -- authenticated/PUBLIC as a table's, so it belongs in the same sweep.
+        and c.relkind in ('r', 'p', 'v')
         and coalesce(g.rolname, 'PUBLIC') in ('anon', 'authenticated', 'PUBLIC')
     )
     select h.table_name, h.grantee, h.privilege_type
@@ -409,6 +441,19 @@ begin
   ----------------------------------------------------------------------------
   -- 5. Every grant must be paired with RLS. A table in `public` reachable by a
   --    browser role with RLS off is an unconditional data leak.
+  --
+  --    DELIBERATELY NOT WIDENED to include views ('v'), unlike section 4 above.
+  --    relrowsecurity/relforcerowsecurity are enabled and disabled by `ALTER
+  --    TABLE ... {ENABLE|DISABLE|FORCE|NO FORCE} ROW LEVEL SECURITY`, which
+  --    Postgres accepts only against a table (relkind 'r'/'p'); there is no
+  --    `ALTER VIEW` form, so a view's relrowsecurity reads false permanently
+  --    and cannot be set true by anyone. Measured on staging 2026-08-27:
+  --    public.checkin_scores (relkind 'v') has relrowsecurity = false. Adding
+  --    'v' here would not catch a leak -- it would raise a problem on every
+  --    run, forever, about a flag the view can never carry. The boundary that
+  --    actually protects checkin_scores is the RLS on the checkins/clients
+  --    rows it reads, under security_invoker=true, and this section already
+  --    covers those two tables.
   ----------------------------------------------------------------------------
   for r in
     select c.relname::text as table_name
@@ -465,6 +510,16 @@ begin
   --    from policies, so a FORCE appearing on clients or checkins would change
   --    what those assertions mean. It is also what keeps the trigger function
   --    private.touch_updated_at() firing on clients and checkins.
+  --
+  --    DELIBERATELY NOT WIDENED to include views ('v'). FORCE ROW LEVEL
+  --    SECURITY is a property of a table's own row security, and a view has
+  --    none of its own to force: relforcerowsecurity is meaningless on a view
+  --    (there is no ALTER VIEW form of the clause, matching section 5's
+  --    reasoning above), and security_invoker=true instead makes the view run
+  --    its query AS the calling role, so it is the underlying table's own
+  --    force-RLS setting -- already covered here for checkins and clients --
+  --    that determines what the view can see. Widening this filter would
+  --    assert a property views cannot meaningfully have.
   ----------------------------------------------------------------------------
   for r in
     select c.relname::text as table_name
@@ -1717,6 +1772,17 @@ begin
   --     pg_default_acl row inherited from this project's vintage happened to
   --     supply it. This assertion is what stops that migration being deleted as
   --     redundant without the loss being noticed.
+  --
+  --     WIDENED to include views ('v'). Safe to widen because this sweep only
+  --     ever checks that the ACL grant exists (has_table_privilege), never that
+  --     the write verbs are functionally usable against a view with no INSTEAD
+  --     OF trigger -- and measured on staging 2026-08-27, service_role's relacl
+  --     on checkin_scores is arwdDxtm, i.e. it already holds all four
+  --     privileges checked below, so widening adds coverage at zero cost and no
+  --     new precondition. Worth having for the same reason
+  --     20260821040500_declare_service_role_grants.sql gives above: an access
+  --     path this project relies on but never declares is one the next
+  --     database is not guaranteed to inherit.
   ----------------------------------------------------------------------------
   for r in
     select c.relname::text as table_name, priv
@@ -1724,7 +1790,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     cross join unnest(array['SELECT','INSERT','UPDATE','DELETE']) priv
     where n.nspname = 'public'
-      and c.relkind in ('r', 'p')
+      and c.relkind in ('r', 'p', 'v')
       and not has_table_privilege('service_role', c.oid, priv)
     order by 1, 2
   loop
@@ -1735,10 +1801,21 @@ begin
 
   ----------------------------------------------------------------------------
   -- Report.
+  --
+  -- Counted separately from views rather than folding 'v' into n_tables: the
+  -- closing notice below names its unit ("table(s)"), and public.checkin_scores
+  -- is not one -- silently inflating n_tables with a view would make the
+  -- closing line assert something false about what it counted. This is purely
+  -- a summary of what the run just swept, not a security assertion; nothing
+  -- upstream depends on either count.
   ----------------------------------------------------------------------------
   select count(*) into n_tables
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind in ('r','p');
+
+  select count(*) into n_views
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v';
 
   -- Two outcomes, two headings, and the difference matters more than it looks.
   --
@@ -1785,7 +1862,7 @@ begin
       array_length(preconditions, 1), array_to_string(preconditions, E'\n  - ');
   end if;
 
-  raise notice 'verify:privileges OK -- % table(s) in public, boundary intact', n_tables;
+  raise notice 'verify:privileges OK -- % table(s) and % view(s) in public, boundary intact', n_tables, n_views;
 end $$;
 
 -- Echoed so a passing run shows the matrix it just asserted, not merely "ok".
