@@ -373,10 +373,15 @@ fill in.
    this tool, and the project runs on no paid API by design. What is achievable is a copy-paste
    bridge — the tool assembles a client's scores and history into a prompt he pastes into Claude.
    That should be offered as what it is rather than allowed to look like a missing feature.
-3. **Does the report need past clients?** Slice 6 can only group clients the tool holds. If the
-   owner wants churn history in it, those clients need rows with `started_on`, `ended_on` and a
-   reason code. Worth settling before Slice 6 is planned, because it changes that slice from a
-   read-only report into a backfill exercise.
+3. **RESOLVED 2026-08-27: no backfill.** The owner ruled that the tenure logic applies to current
+   and future clients only; historical clients are not being entered. Slice 6 stays a read-only
+   report and never becomes a data-entry project.
+
+   **What that costs, and it is visible to the person who asked for the feature:** the 0-3 / 3-6 /
+   6+ grouping of *active* clients works from day one, but the churn reasons — the part the boss's
+   sketch is mostly about — stay empty until a client actually churns and someone records why
+   through the clients admin screen. The report will look half-finished for a while, and that is the
+   decision working as intended rather than a defect. Worth saying to him in advance.
 4. **The seven end-reason codes may not cover the real vocabulary.** `price`, `scope_fit`,
    `in_housed`, `went_quiet`, `project_completed`, `agency_initiated`, `other` — the boss's sketch
    reaches for "lack of funding" and "unclear expectations", and only the second maps cleanly
