@@ -39,6 +39,9 @@ declare
   v_applies boolean;
   v_overall numeric;
   v_count bigint;
+  v_total bigint;
+  v_inactive uuid;
+  v_active uuid;
   v_set text;
 begin
   -- Fixture. The name is deliberately unusable as a real client.
@@ -123,11 +126,19 @@ begin
     execute format('update public.checkins set %I = 3 where id = $1', v_col) using v_closed;
   end loop;
 
+  -- An Advocacy answer nulled while the gate is shut must leave the score
+  -- UNCHANGED at 3.00, not merely non-null. A view that folded a nulled
+  -- Advocacy answer into the 22-question denominator with coalesce(.., 0)
+  -- would still return a non-null number here (e.g. 2.86) and pass a
+  -- not-null-only check; asserting the exact value catches that.
   foreach v_col in array c_adv loop
     execute format('update public.checkins set %I = null where id = $1', v_col) using v_closed;
     select overall_score into v_overall from public.checkin_scores where id = v_closed;
-    if v_overall is null then
-      raise exception '§2 FAILED: gate closed, Advocacy % nulled the overall', v_col;
+    if v_overall is distinct from 3.00 then
+      raise exception
+        '§2 FAILED: gate closed, Advocacy % nulled, overall moved to % (expected '
+        'unchanged 3.00). An Advocacy answer must not affect the score at all '
+        'while the gate is shut, not merely avoid nulling it.', v_col, v_overall;
     end if;
     execute format('update public.checkins set %I = 3 where id = $1', v_col) using v_closed;
   end loop;
@@ -173,28 +184,79 @@ begin
   -- and any signed-in account reads every client's scores. From the application
   -- the two are indistinguishable. This is the db:which failure class -- a
   -- guard whose absence looks exactly like its presence.
-  if not exists (select 1 from public.profiles where is_active = false) then
-    raise notice '§4 COULD NOT VERIFY: no inactive profile on this project. NOT A PASS.';
-  else
-    declare
-      v_inactive uuid;
-    begin
-      select id into v_inactive from public.profiles where is_active = false limit 1;
-      set local role authenticated;
-      perform set_config('request.jwt.claims',
-        json_build_object('sub', v_inactive, 'role', 'authenticated')::text, true);
-
-      select count(*) into v_count from public.checkin_scores;
-
-      reset role;
-      if v_count <> 0 then
-        raise exception
-          '§4 FAILED: an inactive account read % rows through checkin_scores. '
-          'The view is almost certainly missing security_invoker.', v_count;
-      end if;
-      raise notice '§4 ok: an inactive account reads zero rows through the view';
-    end;
+  --
+  -- Read as the OWNER first, before switching role, and RAISE (not notice) on
+  -- every COULD NOT VERIFY branch below: a `raise notice` here is invisible
+  -- through `supabase db query` (measured -- see the closing comment of this
+  -- file), so it would exit 0 and echo the same row as a real pass. Against an
+  -- empty project v_total = 0 and "an inactive account read 0 rows" would pass
+  -- no matter what the policy says -- the same empty-table trap
+  -- verify-privileges.sql guards against.
+  select count(*) into v_total from public.checkin_scores;
+  if v_total = 0 then
+    raise exception
+      '§4 COULD NOT VERIFY: public.checkin_scores has zero rows visible to the '
+      'owner, so neither the inactive- nor the active-account assertion below '
+      'can prove anything. This should not happen mid-run -- the fixtures '
+      'inserted above are still live at this point -- so something upstream is '
+      'wrong. NOT A PASS.';
   end if;
+
+  if not exists (select 1 from public.profiles where is_active = false) then
+    raise exception
+      '§4 COULD NOT VERIFY: no inactive profile on this project, so the '
+      'negative-arm assertion could not run. NOT A PASS. Create an inactive '
+      'profile and re-run.';
+  end if;
+
+  if not exists (select 1 from public.profiles where is_active = true) then
+    raise exception
+      '§4 COULD NOT VERIFY: no active profile on this project, so the '
+      'positive-arm assertion could not run. NOT A PASS. Create an active '
+      'profile and re-run.';
+  end if;
+
+  -- Negative arm: an INACTIVE account must read zero rows.
+  select id into v_inactive from public.profiles where is_active = false limit 1;
+  set local role authenticated;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_inactive, 'role', 'authenticated')::text, true);
+
+  select count(*) into v_count from public.checkin_scores;
+
+  reset role;
+  if v_count <> 0 then
+    raise exception
+      '§4 FAILED: an inactive account read % of % row(s) through '
+      'checkin_scores. The view is almost certainly missing security_invoker.',
+      v_count, v_total;
+  end if;
+
+  -- Positive arm: an ACTIVE account must read every row the owner does. Without
+  -- this arm the section above would pass identically if a later migration
+  -- revoked authenticated's grant on the view entirely -- every reader, active
+  -- or not, would read zero rows, and only the negative assertion would be
+  -- checked, vacuously.
+  select id into v_active from public.profiles where is_active = true limit 1;
+  set local role authenticated;
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_active, 'role', 'authenticated')::text, true);
+
+  select count(*) into v_count from public.checkin_scores;
+
+  reset role;
+  if v_count is distinct from v_total then
+    raise exception
+      '§4 FAILED: an active account read % of % row(s) through checkin_scores '
+      '(expected all of them -- the active-user policy carries no ownership '
+      'restriction). Either the view''s grant to authenticated or the RLS '
+      'policy on clients/checkins is broken for every reader.',
+      v_count, v_total;
+  end if;
+
+  raise notice
+    '§4 ok: owner sees % row(s); an inactive account reads zero; an active '
+    'account reads all %', v_total, v_total;
 
   -- Fixtures go, including the check-ins, which cascade from the client.
   delete from public.clients where id = v_client;
