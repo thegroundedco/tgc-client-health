@@ -74,7 +74,13 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
             return (
               <li key={row.id}>
                 <p className="t-body">{rowName}</p>
-                <p className="t-small">{row.email}</p>
+                {/* Only when the heading is not ALREADY the address. rowName
+                    falls back to row.email for an account with no name, and
+                    printing both unconditionally showed the same address twice
+                    -- which is every account that signed in by magic link and
+                    never set a name, so it was the common case, not the edge
+                    one. Pinned by UsersAdmin.dom.test.tsx in both directions. */}
+                {rowName !== row.email && <p className="t-small">{row.email}</p>}
 
                 <select
                   aria-label={`Role for ${row.email}`}
