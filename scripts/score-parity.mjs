@@ -1,114 +1,142 @@
-// Generates the SQL that proves score.ts and the total_score generated column
-// agree. Slice 1 spec §5.3.
+// Generates the SQL that proves scoreV2.ts's bucketScore() and the six
+// per-bucket generated columns agree. Slice 4 step 1.
 //
-// The expected totals come from the real totalScore(), imported straight from
-// the TypeScript source -- Node strips the types on import, so there is no
-// second copy of the arithmetic here to drift out of step with the first.
+// Extended naively from five pillars to 22 questions, an exhaustive check
+// would need 6^22 states -- dead on arrival. It survives because each
+// bucket's generated expression references only its own questions, so the
+// space decomposes per bucket: 6^3 = 216 states for each of the two
+// three-question buckets, and 6^4 = 1,296 for each of the four
+// four-question buckets. 2*216 + 4*1296 = 5,616 states, fewer than the
+// 7,776 the five-pillar version checked, and still exhaustive -- every
+// reachable input to every deployed bucket expression.
 //
-// The SQL side does not hard-code the expression either: it reads the live one
-// out of pg_attrdef and evaluates it with dynamic SQL. So this checks what is
-// deployed, not a copy of what was intended. Nothing is inserted and no
-// sequence advances -- the expression is evaluated over a VALUES list.
-//
-// buildRows() and buildSql() are exported so tests/scoreParity.test.ts can
-// check them without writing a file. The write happens only when this module is
-// the entry point.
+// The SQL side does not hard-code any expression: it reads the live one out
+// of pg_attrdef, per bucket, and evaluates it with dynamic SQL. So this
+// checks what is deployed, not a copy of what was intended. Nothing is
+// inserted and no sequence advances -- each expression is evaluated over a
+// VALUES list.
 import { writeFileSync } from 'node:fs'
 
-const { PILLARS, MAX_PILLAR_SCORE, totalScore } = await import('../src/lib/score.ts')
+// Both imports are LEAF modules -- neither has a relative import of its own
+// -- because plain Node cannot resolve this codebase's extensionless
+// imports. See Global Constraints. Importing scoreV2.ts here would fail
+// ERR_MODULE_NOT_FOUND, because scoreV2.ts imports './buckets'.
+import { BUCKETS, questionsFor } from '../src/lib/buckets.ts'
+import { meanOrNull } from '../src/lib/scoreMath.ts'
 
 export const OUT = 'scripts/.score-parity.generated.sql'
-export const CHUNK = 1000
 
-// null as well as 1..5, because null propagation is the rule under test:
-// "incomplete has no score" is enforced by the database through `+` returning
-// null, and by totalScore() through an early return. Those are two different
-// mechanisms reaching the same answer, which is exactly the kind of agreement
-// worth checking rather than assuming.
-const VALUES = [null, ...Array.from({ length: MAX_PILLAR_SCORE }, (_, i) => i + 1)]
-
-function* combinations(depth = 0, partial = {}) {
-  if (depth === PILLARS.length) {
-    yield { ...partial }
-    return
-  }
-  for (const value of VALUES) {
-    yield* combinations(depth + 1, { ...partial, [PILLARS[depth]]: value })
-  }
+// The expected bucket mean, composed here from the same meanOrNull the
+// application uses. Not a reimplementation: the arithmetic under test is the
+// shipped one.
+function expectedBucketScore(state, bucket) {
+  return meanOrNull(questionsFor(bucket).map((question) => state[question.key]))
 }
 
-export function buildRows() {
-  const rows = []
-  for (const combination of combinations()) {
-    const cells = PILLARS.map((pillar) =>
-      combination[pillar] === null ? 'null::smallint' : `${combination[pillar]}::smallint`,
+// The six values a question can hold: unanswered, or 1 through 5.
+const VALUES = [null, 1, 2, 3, 4, 5]
+
+// Every combination of values across one bucket's own questions. This is the
+// whole reason the check survives 22 questions: a bucket's generated
+// expression references only its own columns, so the space is 6^n per
+// bucket rather than 6^22 across the table.
+export function enumerateBucketStates(bucket) {
+  const keys = questionsFor(bucket).map((question) => question.key)
+  let states = [{}]
+  for (const key of keys) {
+    states = states.flatMap((state) =>
+      VALUES.map((value) => ({ ...state, [key]: value })),
     )
-    const expected = totalScore(combination)
-    cells.push(expected === null ? 'null::smallint' : `${expected}::smallint`)
-    rows.push(`(${cells.join(',')})`)
   }
-  return rows
+  return states
 }
 
-export function buildSql(rows = buildRows()) {
-  const columns = [...PILLARS, 'expected'].join(', ')
+const BUCKET_SCORE_COLUMN = {
+  communication: 'comm_score',
+  growth: 'growth_score',
+  finances: 'fin_score',
+  relationship: 'rel_score',
+  delivery: 'del_score',
+  advocacy: 'adv_score',
+}
 
-  const chunks = []
-  for (let start = 0; start < rows.length; start += CHUNK) {
-    chunks.push(rows.slice(start, start + CHUNK))
-  }
+function bucketCheckSql(bucket) {
+  const column = BUCKET_SCORE_COLUMN[bucket]
+  const keys = questionsFor(bucket).map((question) => question.key)
+  const states = enumerateBucketStates(bucket)
 
-  const body = chunks
-    .map(
-      (chunk, index) => `
-do $$
+  const rows = states
+    .map((state) => {
+      const expected = expectedBucketScore(state, bucket)
+      const values = keys.map((key) =>
+        state[key] === null ? 'null::smallint' : `${state[key]}::smallint`,
+      )
+      values.push(expected === null ? 'null::numeric' : `${expected}::numeric`)
+      return `(${values.join(', ')})`
+    })
+    .join(',\n    ')
+
+  const columnList = [...keys, 'expected'].join(', ')
+
+  return `
+do $parity$
 declare
-  expression text;
-  mismatches bigint;
+  v_expr text;
+  v_bad bigint;
 begin
-  -- The live expression, not a copy of it. If somebody alters the column, this
-  -- picks up the alteration rather than checking yesterday's definition.
   select pg_get_expr(d.adbin, d.adrelid)
-    into strict expression
+    into v_expr
     from pg_attrdef d
-    join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+    join pg_attribute a
+      on a.attrelid = d.adrelid and a.attnum = d.adnum
    where d.adrelid = 'public.checkins'::regclass
-     and a.attname = 'total_score';
+     and a.attname = '${column}';
 
-  execute format($fmt$
-    select count(*) from (values %s) as v(${columns})
-     where (%s) is distinct from expected
-  $fmt$, $values$${chunk.join(',')}$values$, expression)
-    into mismatches;
-
-  if mismatches <> 0 then
-    raise exception
-      'score parity FAILED in chunk ${index + 1}: % of ${chunk.length} combinations disagree between score.ts and total_score',
-      mismatches;
+  if v_expr is null then
+    raise exception 'score parity COULD NOT VERIFY: no generated expression on ${column}';
   end if;
 
-  raise notice 'chunk ${index + 1}: ${chunk.length} combinations agree';
-end $$;`,
-    )
-    .join('\n')
+  execute format(
+    'select count(*) from (values %s) as t(${columnList}) where round((%s)::numeric, 2) is distinct from t.expected',
+    $rows$${rows}$rows$,
+    v_expr
+  ) into v_bad;
+
+  if v_bad > 0 then
+    raise exception 'score parity FAILED for ${column}: % of ${states.length} states disagree between scoreV2.ts and the deployed expression', v_bad;
+  end if;
+
+  raise notice 'score parity ok for ${column}: ${states.length} states';
+end
+$parity$;
+`
+}
+
+export function buildSql() {
+  const blocks = BUCKETS.map((bucket) => bucketCheckSql(bucket))
+  const total = BUCKETS.reduce(
+    (sum, bucket) => sum + enumerateBucketStates(bucket).length,
+    0,
+  )
 
   const sql = `-- GENERATED by scripts/score-parity.mjs. Do not edit, and do not commit.
--- ${rows.length} pillar combinations, in ${chunks.length} chunks.
--- Every chunk raises an exception on the first disagreement, so a green run
--- means every combination agreed -- not that the file was empty.
-${body}
-
+-- ${total} states across ${BUCKETS.length} buckets, decomposed per bucket -- each
+-- bucket's generated expression references only its own questions, so this is
+-- exhaustive without enumerating the full 6^22 state space.
+-- Each block below raises an exception on the first disagreement and names
+-- the bucket, so a green run means every state agreed for every bucket -- not
+-- that the file was empty.
+${blocks.join('\n')}
 do $$
 begin
-  raise notice 'score parity PASSED: all ${rows.length} combinations agree';
+  raise notice 'score parity PASSED: all ${total} states agree, across ${BUCKETS.length} buckets';
 end $$;
 `
-  return { sql, chunkCount: chunks.length }
+  return { sql, total }
 }
 
 if (import.meta.main) {
-  const rows = buildRows()
-  const { sql, chunkCount } = buildSql(rows)
+  const { sql, total } = buildSql()
   writeFileSync(OUT, sql)
-  console.log(`wrote ${OUT}: ${rows.length} combinations in ${chunkCount} chunks`)
+  console.log(`wrote ${OUT}: ${total} states across ${BUCKETS.length} buckets`)
 }
