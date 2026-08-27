@@ -1,17 +1,122 @@
-/* The users admin screen's own layout. Copied from src/clients/ClientsAdmin.module.css
-   rather than shared, so the two screens can drift independently -- but copied
-   verbatim for now, so the spacing matches on day one. Every colour and every
-   face still comes from a token; this file is not allowed to name either. */
+/* The users admin screen's own layout. Deliberately a copy of
+   src/clients/ClientsAdmin.module.css rather than a shared file, so the two
+   screens can drift independently -- but it must actually BE a copy to start
+   with, and until this pass it was not: the file held only .screen and .nav,
+   the sibling's .list/.row/.rowHead/.fieldBlock/.actions were never carried
+   across, and the rows in UsersAdmin.tsx carried no class at all. Every person
+   sat at browser defaults with no gap and no card, which is exactly how the
+   screen came to read as congested.
+
+   Every colour and every face still comes from a token; this file is not
+   allowed to name either. */
 
 .screen {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  /* --measure-prose, matching ClientsAdmin: this screen carries two lists and
-     a form, not a single field. */
-  max-width: var(--measure-prose);
+  /* --measure-admin, not --measure-prose: this screen is rows of name, role and
+     control read ACROSS, not running text read down. See tokens.css. */
+  max-width: var(--measure-admin);
 }
 
 .nav {
   display: flex;
+}
+
+/* A titled region: heading, then its list or its empty state. Without this the
+   h3 sat flush against the first row -- base.css zeroes heading margins on
+   purpose, so a section that wants space has to ask for it. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* One person, one card. The border is what tells you which email, which role
+   and which button belong together -- with four stacked paragraphs and no
+   grouping, a reader has to count to work out where one person ends. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Name on the left, controls on the right, baseline-aligned. Wraps to a stack
+   on a narrow viewport rather than squeezing, which is why it is flex-wrap and
+   not a two-column grid. */
+.rowHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* The identity half of .rowHead: name over address, tight, so the pair reads as
+   one person rather than as two unrelated lines. */
+.rowWho {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Holds the row's role select. base.css's .field is width:100%, which is right
+   in a stacked form -- it is the only place the sibling screen uses it -- but
+   inside this flex row an unbounded .field fills the line and pushes the
+   Activate button onto the next one. A wrapper with an explicit width fixes
+   that deterministically. The alternative, a second single-class rule setting
+   width, would tie at specificity with .field and leave stylesheet order to
+   decide the winner -- the latent bug this project already paid for once, when
+   .scoreValue silently beat .t-display. */
+.rolePicker {
+  flex: 0 0 auto;
+  width: 12rem;
+}
+
+/* A form block: the invite form. Bordered rather than floated, matching
+   ClientsAdmin -- spec §7 asks for a list and a form on one screen, explicitly
+   not a modal. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Label above its control with a real gap. Its absence is why "EMAIL ADDRESS"
+   sat welded to the input: InviteForm rendered a bare <label> followed by a
+   bare <input>, where AddClientForm wraps each pair in this. */
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The invite form's two fields sit side by side once there is room for them,
+   and stack below it. minmax(0,...) rather than auto so a long address
+   shrinks the column instead of overflowing the panel. */
+.fieldRow {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 }

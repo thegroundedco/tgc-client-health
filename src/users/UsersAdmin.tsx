@@ -23,8 +23,8 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
 
   const masthead = (
     <div className="masthead">
-      <p className="t-eyebrow">People</p>
-      <h2 className="t-header">Access</h2>
+      <p className="t-eyebrow">Admin</p>
+      <h2 className="t-header">People</h2>
     </div>
   )
 
@@ -53,14 +53,14 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
       {back}
       {masthead}
 
-      <section>
-        <h3 className="t-subhead">People</h3>
+      <section className={styles.block}>
+        <h3 className="t-subhead">With access</h3>
         {/* role="list" because base.css removes markers globally, and WebKit
             drops a list's semantics when its markers are removed -- so in
             Safari with VoiceOver this would otherwise announce as a group of
             paragraphs with no count and no position. Matches ClientsAdmin's
             client list for the same reason. */}
-        <ul aria-label="People" role="list">
+        <ul aria-label="People" className={styles.list} role="list">
           {admin.profiles.map((row) => {
             const isSelf = row.id === currentUserId
             // The same value the row displays as its heading, so a
@@ -72,42 +72,54 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
             const rowName = row.full_name?.trim() || row.email
 
             return (
-              <li key={row.id}>
-                <p className="t-body">{rowName}</p>
-                {/* Only when the heading is not ALREADY the address. rowName
-                    falls back to row.email for an account with no name, and
-                    printing both unconditionally showed the same address twice
-                    -- which is every account that signed in by magic link and
-                    never set a name, so it was the common case, not the edge
-                    one. Pinned by UsersAdmin.dom.test.tsx in both directions. */}
-                {rowName !== row.email && <p className="t-small">{row.email}</p>}
+              <li className={styles.row} key={row.id}>
+                <div className={styles.rowHead}>
+                  <div className={styles.rowWho}>
+                    <p className="t-body">{rowName}</p>
+                    {/* Only when the heading is not ALREADY the address. rowName
+                        falls back to row.email for an account with no name, and
+                        printing both unconditionally showed the same address
+                        twice -- which is every account that signed in by magic
+                        link and never set a name, so it was the common case,
+                        not the edge one. Pinned by UsersAdmin.dom.test.tsx in
+                        both directions. */}
+                    {rowName !== row.email && <p className="t-small">{row.email}</p>}
+                  </div>
 
-                <select
-                  aria-label={`Role for ${row.email}`}
-                  value={row.role}
-                  disabled={isSelf || writing}
-                  onChange={(event) => admin.setRole(row.id, event.target.value)}
-                >
-                  {/* The stored role is offered even when it is not one of the
-                      three, so a row written outside this screen still shows
-                      what it holds instead of silently reading as a viewer. */}
-                  {(ASSIGNABLE_ROLES.includes(row.role)
-                    ? ASSIGNABLE_ROLES
-                    : [...ASSIGNABLE_ROLES, row.role]
-                  ).map((role) => (
-                    <option key={role} value={role}>{ROLE_LABELS[role] ?? role}</option>
-                  ))}
-                </select>
+                  <div className={styles.actions}>
+                    {/* Wrapped so .field's width:100% resolves against a bounded
+                        box rather than the flex line -- see .rolePicker. */}
+                    <div className={styles.rolePicker}>
+                      <select
+                        aria-label={`Role for ${row.email}`}
+                        className="field"
+                        value={row.role}
+                        disabled={isSelf || writing}
+                        onChange={(event) => admin.setRole(row.id, event.target.value)}
+                      >
+                        {/* The stored role is offered even when it is not one of
+                            the three, so a row written outside this screen still
+                            shows what it holds instead of reading as a viewer. */}
+                        {(ASSIGNABLE_ROLES.includes(row.role)
+                          ? ASSIGNABLE_ROLES
+                          : [...ASSIGNABLE_ROLES, row.role]
+                        ).map((role) => (
+                          <option key={role} value={role}>{ROLE_LABELS[role] ?? role}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <button
-                  aria-label={`${row.is_active ? 'Deactivate' : 'Activate'} ${rowName}`}
-                  className="button button--quiet"
-                  type="button"
-                  disabled={isSelf || writing}
-                  onClick={() => admin.setActive(row.id, !row.is_active)}
-                >
-                  {row.is_active ? 'Deactivate' : 'Activate'}
-                </button>
+                    <button
+                      aria-label={`${row.is_active ? 'Deactivate' : 'Activate'} ${rowName}`}
+                      className="button button--quiet"
+                      type="button"
+                      disabled={isSelf || writing}
+                      onClick={() => admin.setActive(row.id, !row.is_active)}
+                    >
+                      {row.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
 
                 {isSelf && (
                   <p className="t-small">
@@ -149,7 +161,7 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
         </ul>
       </section>
 
-      <section>
+      <section className={styles.block}>
         <h3 className="t-subhead">Invited — not yet signed in</h3>
 
         {/* An explicit empty state. A blank region reads as a failed load, which
@@ -163,22 +175,29 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
           // role="list" for the same reason as the People list above: base.css
           // strips markers globally, and Safari/VoiceOver drops list semantics
           // along with them.
-          <ul aria-label="Invitations" role="list">
+          <ul aria-label="Invitations" className={styles.list} role="list">
             {admin.invitations.map((row) => (
-              <li key={row.email}>
-                <p className="t-body">{row.email}</p>
-                <p className="t-small">
-                  {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
-                </p>
-                <button
-                  aria-label={`Revoke invitation for ${row.email}`}
-                  className="button button--quiet"
-                  type="button"
-                  disabled={writing}
-                  onClick={() => admin.revokeInvite(row.email)}
-                >
-                  Revoke
-                </button>
+              <li className={styles.row} key={row.email}>
+                <div className={styles.rowHead}>
+                  <div className={styles.rowWho}>
+                    <p className="t-body">{row.email}</p>
+                    <p className="t-small">
+                      {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
+                    </p>
+                  </div>
+
+                  <div className={styles.actions}>
+                    <button
+                      aria-label={`Revoke invitation for ${row.email}`}
+                      className="button button--quiet"
+                      type="button"
+                      disabled={writing}
+                      onClick={() => admin.revokeInvite(row.email)}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import styles from './UsersAdmin.module.css'
 import { ASSIGNABLE_ROLES, ROLE_HINTS, ROLE_LABELS, inviteProblems } from './userForm'
 import type { AdminProfile, InviteDraft, WriteState } from './userForm'
 
@@ -65,6 +66,7 @@ export function InviteForm({ profiles, state, onInvite, onEdited }: Props) {
 
   return (
     <form
+      className={styles.panel}
       onSubmit={(event) => {
         event.preventDefault()
         // Checked here as well as on the disabled button: a form submits on
@@ -74,27 +76,40 @@ export function InviteForm({ profiles, state, onInvite, onEdited }: Props) {
         onInvite(draft)
       }}
     >
-      <label htmlFor="invite-email" className="t-label">Email address</label>
-      <input
-        id="invite-email"
-        type="email"
-        value={draft.email}
-        disabled={saving}
-        onChange={(event) => edit({ ...draft, email: event.target.value })}
-      />
+      <h3 className="t-subhead">Invite someone</h3>
 
-      <label htmlFor="invite-role" className="t-label">Role</label>
-      <select
-        id="invite-role"
-        value={draft.role}
-        disabled={saving}
-        onChange={(event) => edit({ ...draft, role: event.target.value })}
-      >
-        {ASSIGNABLE_ROLES.map((role) => (
-          <option key={role} value={role}>{ROLE_LABELS[role] ?? role}</option>
-        ))}
-      </select>
-      <p className="t-small">{ROLE_HINTS[draft.role] ?? ''}</p>
+      {/* Each label/control pair wrapped, matching AddClientForm. Without the
+          wrapper the label sat hard against its input with no gap at all, and
+          the two fields ran together into one undifferentiated column. */}
+      <div className={styles.fieldRow}>
+        <div className={styles.fieldBlock}>
+          <label htmlFor="invite-email" className="t-label">Email address</label>
+          <input
+            id="invite-email"
+            className="field"
+            type="email"
+            value={draft.email}
+            disabled={saving}
+            onChange={(event) => edit({ ...draft, email: event.target.value })}
+          />
+        </div>
+
+        <div className={styles.fieldBlock}>
+          <label htmlFor="invite-role" className="t-label">Role</label>
+          <select
+            id="invite-role"
+            className="field"
+            value={draft.role}
+            disabled={saving}
+            onChange={(event) => edit({ ...draft, role: event.target.value })}
+          >
+            {ASSIGNABLE_ROLES.map((role) => (
+              <option key={role} value={role}>{ROLE_LABELS[role] ?? role}</option>
+            ))}
+          </select>
+          <p className="t-small">{ROLE_HINTS[draft.role] ?? ''}</p>
+        </div>
+      </div>
 
       {/* Shown, not merely used to disable the button. A control that is dead
           for a reason nobody states is the defect this project keeps finding. */}

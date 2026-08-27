@@ -216,4 +216,15 @@
      column is sized by the controls standing in it, which are themselves sized
      in rem, not by a count of characters. */
   --measure-column: 30rem;
+
+  /* The admin screens — clients and people — are lists of ROWS, not running
+     text: a name, a role, a control, read across rather than down. Held at
+     --measure-prose they wrapped each row into a stack and left half of a wide
+     monitor empty, which is what made the people screen read as congested.
+     Wider than prose and still bounded, because a row spanning a full 27-inch
+     display is no easier to scan than one crushed into 62ch — the eye loses
+     which name a far-right control belongs to.
+     In ch to stay consistent with --measure-prose, which it is a deliberate
+     step up from rather than an unrelated value. */
+  --measure-admin: 90ch;
 }

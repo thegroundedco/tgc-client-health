@@ -6,10 +6,13 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  /* --measure-prose, matching the check-in screen and App.module.css's
-     .centred, rather than --measure-column, which is sized for the
-     single-field sign-in form. This screen carries a form and a list. */
-  max-width: var(--measure-prose);
+  /* --measure-admin, shared with the people screen. This was --measure-prose,
+     matching the check-in screen and App.module.css's .centred; that was too
+     narrow for a screen of rows read across rather than paragraphs read down,
+     and left half of a wide monitor empty. The two admin screens are siblings
+     and take the same width deliberately -- widening only one is a difference
+     you notice the moment you move between them. */
+  max-width: var(--measure-admin);
 }
 
 .nav {
