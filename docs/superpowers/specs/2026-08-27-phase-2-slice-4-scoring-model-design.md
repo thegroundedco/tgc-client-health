@@ -85,7 +85,8 @@ Three plus three plus four plus four plus four plus four is 22.
 ### 3.2 The arithmetic, and the property that makes it work
 
 Every question is scored 1-5. A bucket's score is the mean of its own questions. A client's overall
-score is the mean of their buckets.
+score is the mean of **every question they were required to answer** — not the mean of the six
+bucket scores. The owner ruled this 2026-08-27; §10 records what it costs.
 
 The consequence worth stating plainly, because the whole design leans on it: **a bucket score and an
 overall score are both on the same 1.00-5.00 scale as a single question**, and they stay there
@@ -95,11 +96,19 @@ buckets and a two-year client scored on six produce numbers that can sit in the 
 same table and mean the same thing. Under the old raw-total model — 25 points across five pillars —
 adding a sixth would have moved the ceiling to 30 and silently rebased every threshold.
 
-**Buckets weigh equally; questions do not.** Each of Communication's three questions carries a third
-of that bucket, while each of Delivery's four carries a quarter, so a single Communication answer
-moves the overall score more than a single Delivery answer does. This is deliberate — the bucket is
-the unit of meaning — but it is invisible on screen, so §10 records it as a decision rather than
-letting it read as an accident.
+**Every question weighs the same; buckets therefore do not.** A four-question bucket moves the
+overall score by a third more than a three-question bucket, because it owns four twenty-seconds of
+it against three. Communication and Growth are consequently the two quietest buckets in the model,
+purely because they hold one question fewer.
+
+The alternative — averaging the six bucket means, so each bucket owns exactly a sixth — was the
+first draft of this design and was overruled. The difference is real but modest: a Communication
+answer is worth 1/18 of the score under bucket-equal and 1/22 under question-equal, about 22% more
+influence; a Delivery answer is 1/24 against 1/22, about 8% less.
+
+**The six bucket columns survive this decision unchanged.** They are what the matrix averages down
+its columns and what the board draws as bars, so §5.3 stands exactly as written. Only the view's
+overall expression differs, which is why this choice binds late and costs one line to reverse.
 
 ### 3.3 Incompleteness
 
@@ -250,14 +259,21 @@ select
   (c.started_on is not null and ch.period >= c.started_on + 90) as advocacy_applies,
   case
     when c.started_on is not null and ch.period >= c.started_on + 90
-      then (ch.comm_score + ch.growth_score + ch.fin_score
-            + ch.rel_score + ch.del_score + ch.adv_score) / 6
-    else (ch.comm_score + ch.growth_score + ch.fin_score
-          + ch.rel_score + ch.del_score) / 5
+      then (ch.comm_constructive + ch.comm_timely + ... + ch.adv_reference_check)::numeric / 22
+    else (ch.comm_constructive + ch.comm_timely + ... + ch.del_we_are_proud)::numeric / 18
   end as overall_score
 from public.checkins ch
 join public.clients c on c.id = ch.client_id;
 ```
+
+Both branches are elided above for length; the migration writes all 22 and all 18 column names out
+in full. The `::numeric` cast is required for the same reason as §5.3 — without it Postgres divides
+smallint sums with integer division and every overall score truncates to a whole number.
+
+Note that the overall reads the **answer** columns, not the six generated bucket columns. That falls
+out of §3.2's ruling, and it has a useful side effect: the view does not depend on the generated
+columns at all, so a future change to how a bucket is derived cannot silently move the headline
+number.
 
 Null propagation carries through both branches of the `case`, so §3.3's rule holds for the overall
 score without a line of code asserting it.
@@ -331,10 +347,14 @@ have replaced an exhaustive proof with a sample.
 
 ### 9.2 The view is verified separately
 
-`overall_score` takes six nullable bucket scores and a boolean, so its behaviour is pinned by
-enumerating the 2 x 2^6 = 128 shapes of (gate, which buckets are null) and asserting null propagates
-in exactly the cases §3.3 requires, plus arithmetic spot checks on known values. The gate predicate
-itself is checked at its boundaries: 89, 90 and 91 days, and a null `started_on`.
+`overall_score` sums 22 or 18 nullable answers, so it cannot be enumerated exhaustively and is not
+pinned that way. Instead: for each of the 22 answers, and for both gate states, assert that nulling
+that one answer nulls the overall exactly when §3.3 requires it — 44 cases, which is complete
+coverage of the null behaviour that matters. Add arithmetic spot checks on known vectors, including
+the all-3s case (overall exactly 3.00 in both gate states) and a vector where the two readings of
+§3.2 disagree, so a silent reversion to bucket-averaging fails loudly rather than drifting.
+
+The gate predicate is checked at its boundaries: 89, 90 and 91 days, and a null `started_on`.
 
 ### 9.3 What only a person can check
 
@@ -350,9 +370,13 @@ fill in.
    time would make it impossible to tell whether a client's band moved because the client changed or
    because we did. Cost if wrong: a cycle of bands that feel miscalibrated on the new questions.
    Cheap to change — two numbers in `bandFor`, no migration. Revisit after one real scoring round.
-2. **Buckets weigh equally, questions do not** (§3.2). If the boss expects all 22 questions to carry
-   equal weight, the overall becomes a mean of 22 rather than a mean of six, and the gate stops
-   being free — the denominator would move from 22 to 18. Worth confirming with him before build.
+2. **Every question weighs the same** (§3.2), ruled by the owner 2026-08-27 as the provisional
+   answer — "for now" — while his boss has not been asked. The consequence he accepted is that
+   Communication and Growth are structurally quieter than the other four buckets purely because they
+   hold three questions instead of four. If the boss turns out to mean the buckets should be equal,
+   the fix is one expression in the view and one function in `score.ts`; no migration, no data
+   change, because the bucket columns exist either way. **Cheap to reverse — do not let anyone
+   rebuild the schema over it.**
 3. **One agreement legend instead of 66 written anchors** (§7). Costs calibration: written anchors
    are what stop two scorers meaning different things by "4", and this model has more scorers coming.
    Revisit if two people scoring the same client diverge.
