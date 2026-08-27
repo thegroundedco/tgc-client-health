@@ -14,6 +14,7 @@
     "verify:privileges": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-privileges.sql",
     "verify:score": "node scripts/score-parity.mjs && npm run db:which && npx --yes supabase@latest db query --linked -f scripts/.score-parity.generated.sql",
     "verify:lifecycle": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-lifecycle.sql",
+    "verify:scoring-view": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-scoring-view.sql",
     "verify:invites": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-invites.sql",
     "seed:verifier-subjects": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/seed-verifier-subjects.sql",
     "db:which": "node scripts/db-which.mjs",
