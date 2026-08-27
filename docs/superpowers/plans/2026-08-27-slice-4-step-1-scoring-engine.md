@@ -691,7 +691,12 @@ would pass `npm test` and fail `npm run build`, because `tsconfig.app.json` has 
 
 ```ts
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+// Same convention as tests/tokens.test.ts: resolve from the file, not the
+// process CWD, so the guard holds however vitest is invoked.
+const ROOT = join(import.meta.dirname, '..')
 
 // scripts/score-parity.mjs is run by plain `node`, which cannot resolve this
 // codebase's extensionless relative imports. Any module it reaches must
@@ -703,7 +708,7 @@ const LEAVES = ['src/lib/scoreMath.ts', 'src/lib/buckets.ts']
 describe('the modules scripts/score-parity.mjs loads under plain node', () => {
   for (const path of LEAVES) {
     it(`${path} has no runtime imports`, () => {
-      const source = readFileSync(path, 'utf8')
+      const source = readFileSync(join(ROOT, path), 'utf8')
       const runtimeImports = source
         .split('\n')
         .filter((line) => /^\s*import\s/.test(line))
@@ -1223,7 +1228,10 @@ a section needs does not exist.
 -- Safe to re-run. Every fixture it creates is deleted in the same transaction.
 -- Aim it at STAGING -- it inserts real rows and advances clients_id_seq.
 
-\set ON_ERROR_STOP on
+-- No psql meta-commands: `supabase db query` sends SQL over a connection, not
+-- through psql, and no other script in scripts/*.sql uses one. The `do` block
+-- raises on any violation, which aborts the transaction and rolls back the
+-- fixtures below -- so a failed run leaves nothing behind either.
 
 do $verify$
 declare
@@ -1238,10 +1246,19 @@ declare
     'adv_left_review','adv_case_study','adv_would_refer','adv_reference_check'];
   c_all text[] := c_core || c_adv;
 
-  v_start date := date '2026-01-01';
+  -- The period is FIXED and started_on is what varies. period is always the
+  -- first of a month, so moving the period cannot express a one-day boundary:
+  -- date_trunc('month', start + 89) collapses to 59 days after the start, and
+  -- an assertion on it would pass while proving nothing about 89 vs 90.
+  c_period date := date '2026-04-01';
+  c_at_89 date := date '2026-01-02';  -- + 90 = 2026-04-02, a day past period
+  c_at_90 date := date '2026-01-01';  -- + 90 = 2026-04-01, exactly period
+  c_at_91 date := date '2025-12-31';  -- + 90 = 2026-03-31, a day before
+
+  v_start date := c_at_90;
   v_client bigint;
-  v_open bigint;      -- a check-in whose period opens the gate
-  v_closed bigint;    -- a check-in whose period leaves it closed
+  v_open bigint;      -- the check-in under test once the gate is open
+  v_closed bigint;    -- a second check-in kept gated shut, for the §2 loop
   v_col text;
   v_applies boolean;
   v_overall numeric;
@@ -1256,26 +1273,30 @@ begin
   v_set := (select string_agg(format('%I = 3', col), ', ') from unnest(c_all) as col);
 
   -- ============================================================ §1 the gate
-  -- 89 days after the start the gate is shut; at 90 and 91 it is open.
-  -- period is the first of a month, so these are exact dates, not months.
+  -- One check-in at a fixed period; started_on moves across the boundary.
   insert into public.checkins (client_id, period)
-  values (v_client, date_trunc('month', (v_start + 89)::timestamp)::date)
-  returning id into v_closed;
+  values (v_client, c_period)
+  returning id into v_open;
 
+  update public.clients set started_on = c_at_89 where id = v_client;
   select advocacy_applies into v_applies
-    from public.checkin_scores where id = v_closed;
+    from public.checkin_scores where id = v_open;
   if v_applies is not false then
     raise exception '§1 FAILED: gate open at 89 days (got %)', v_applies;
   end if;
 
-  insert into public.checkins (client_id, period)
-  values (v_client, date_trunc('month', (v_start + 120)::timestamp)::date)
-  returning id into v_open;
-
+  update public.clients set started_on = c_at_90 where id = v_client;
   select advocacy_applies into v_applies
     from public.checkin_scores where id = v_open;
   if v_applies is not true then
-    raise exception '§1 FAILED: gate shut past 90 days (got %)', v_applies;
+    raise exception '§1 FAILED: gate shut at exactly 90 days (got %)', v_applies;
+  end if;
+
+  update public.clients set started_on = c_at_91 where id = v_client;
+  select advocacy_applies into v_applies
+    from public.checkin_scores where id = v_open;
+  if v_applies is not true then
+    raise exception '§1 FAILED: gate shut at 91 days (got %)', v_applies;
   end if;
 
   -- A null start date must never open the gate.
@@ -1285,9 +1306,21 @@ begin
   if v_applies is not false then
     raise exception '§1 FAILED: null started_on opened the gate (got %)', v_applies;
   end if;
-  update public.clients set started_on = v_start where id = v_client;
 
-  raise notice '§1 ok: gate shut at 89 days, open past 90, shut on a null start date';
+  -- Settle on the open state for §2 and §3, and add the gated-shut check-in the
+  -- §2 loop needs. Its period is well before the start date, so it stays shut.
+  update public.clients set started_on = c_at_90 where id = v_client;
+  insert into public.checkins (client_id, period)
+  values (v_client, date '2025-06-01')
+  returning id into v_closed;
+
+  select advocacy_applies into v_applies
+    from public.checkin_scores where id = v_closed;
+  if v_applies is not false then
+    raise exception '§1 FAILED: the gated-shut fixture is open (got %)', v_applies;
+  end if;
+
+  raise notice '§1 ok: shut at 89d, open at exactly 90d and at 91d, shut on a null start date';
 
   -- ================================================ §2 null propagation, 44
   -- Fill both check-ins completely, then null one answer at a time.
