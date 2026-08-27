@@ -62,11 +62,23 @@ turns them into a migration and §9 verifies them by name.
   Provides constructive feedback / timely feedback / consistent feedback.
 
 **Growth** — `growth_goals_defined`, `growth_progress_trackable`, `growth_hitting_goals`
-  Short and long term goals are clearly defined / we can track progress towards goals / we are
-  hitting our goals.
+  Short and long term goals are clearly defined / we can track progress towards their goals / we are
+  hitting their goals.
+
+  **Whose goals: the CLIENT's.** Ruled by the owner 2026-08-27. The source doc reads "we are hitting
+  our goals", which this spec first transcribed literally, and it is ambiguous — it could mean the
+  agency's targets for the account. It does not. Growth measures whether the client's own short and
+  long term goals are defined, trackable and being met. Every prompt in this bucket therefore says
+  "their goals", and the implementation was already correct where this spec was not.
 
 **Finances** — `fin_rack_rate`, `fin_pays_on_time`, `fin_rate_increased`, `fin_on_terms`
   Paying rack rate / pays on time / increased rate over the last 90 days / is on terms.
+
+  **"On terms" is deliberately undefined.** The source doc reads "On they on terms (3-month
+  commitment?)" — the boss's own question mark. An earlier implementation resolved that into "a
+  three-month commitment or longer", which is a definite claim about the agency's commercial terms
+  that nothing here supports. The owner ruled 2026-08-27 to drop it, so the prompt is bare "On
+  terms." and the scorer applies their own judgement until someone defines it.
 
 **Relationship** — `rel_collaborative`, `rel_respectful`, `rel_fun`, `rel_multi_threaded`
   Collaborative / respectful / do they have fun / are we and they multi-threaded (are we working
