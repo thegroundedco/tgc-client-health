@@ -45,8 +45,8 @@ export const BAND_LABELS: Record<Band, string> = {
 // 22): reaching one requires `sum * 100 / divisor` to be an odd half-integer,
 // which for each of those divisors requires `sum` to be a multiple of the
 // divisor -- and every such multiple yields an even numerator. So the rounding
-// direction on a tie is never exercised, and Postgres rounding half away from
-// zero against Math.round rounding half up cannot disagree here.
+// direction on a tie is never exercised, and the two implementations cannot
+// disagree here regardless of which tie-breaking rule Postgres uses.
 export function meanTo2dp(sum: number, divisor: number): number {
   return Math.round((sum * 100) / divisor) / 100
 }
