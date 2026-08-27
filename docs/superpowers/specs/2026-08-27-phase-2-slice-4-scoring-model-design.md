@@ -34,11 +34,18 @@ bars; new bands; the rebuilt score verifier.
 - **The client x bucket matrix** (his third ask) is Slice 5. It reads bucket scores, which do not
   exist until this slice ships, and the sketch in the source doc is an image this design could not
   read.
-- **The tenure and churn-reason report** (his fourth ask) is Slice 6 and is blocked on data, not on
-  code: seven of the ten clients he names — NuKava, Neon Banjo, Bin Blasters, Coral, Naboso, Toms
-  Key Company, Dixxon — have no row in `clients`. Two more, York and Gait Happens, are `active` in
-  the roster while he describes them as three-to-six-month churns. That contradiction is a question
-  for the owner before it is a schema.
+- **The tenure and churn-reason report** (his fourth ask) is Slice 6. **The client names in his
+  notes are illustrative, not real** — confirmed by the owner 2026-08-27 — so the cohorts and
+  reasons he wrote are a sketch of the format he wants, not data to reconcile against the roster.
+  Structurally the schema is nearly ready: `ended_on`, `end_reason_code` and `end_reason_note`
+  already exist from Slice 2 step 1, and the missing piece is `started_on`, which this slice adds.
+  So Slice 6 is unblocked by Slice 4 rather than blocked on anything else.
+
+  Its one real dependency is that **the report can only show churn the tool has rows for.** Whether
+  any client currently carries `cancelled` or `former` was not confirmed here — raw SQL against
+  production is refused by the MCP safety classifier — but the roster was seeded entirely active,
+  so the churn cohorts likely render empty until past clients are entered. That is a data-entry
+  decision for the owner, not a design problem.
 - **Reading each client's notes to explain why they churned** (his fifth ask) is not a build at all.
   No client notes live in this tool, and the parent spec's settled position is that there is no paid
   API, so AI help is a copy-paste bridge. §11 carries the answer he should be given.
@@ -366,7 +373,14 @@ fill in.
    this tool, and the project runs on no paid API by design. What is achievable is a copy-paste
    bridge — the tool assembles a client's scores and history into a prompt he pastes into Claude.
    That should be offered as what it is rather than allowed to look like a missing feature.
-3. **York and Gait Happens are `active` here and churned in his notes.** Resolve before Slice 6.
-4. **The seven clients with no row.** Slice 6 is blocked on them, and on their start and end dates.
+3. **Does the report need past clients?** Slice 6 can only group clients the tool holds. If the
+   owner wants churn history in it, those clients need rows with `started_on`, `ended_on` and a
+   reason code. Worth settling before Slice 6 is planned, because it changes that slice from a
+   read-only report into a backfill exercise.
+4. **The seven end-reason codes may not cover the real vocabulary.** `price`, `scope_fit`,
+   `in_housed`, `went_quiet`, `project_completed`, `agency_initiated`, `other` — the boss's sketch
+   reaches for "lack of funding" and "unclear expectations", and only the second maps cleanly
+   (`scope_fit`). His examples were illustrative, so this is a prompt to check the list against real
+   churns rather than a confirmed gap. Adding a code is a one-line constraint change.
 5. **`Test Client` (production id 2)** is still `active` and will render a twelfth card with six
    empty bars. Offered to the owner three times, still unanswered.
