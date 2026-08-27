@@ -54,6 +54,76 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
       {masthead}
 
       <section className={styles.block}>
+        {/* onEdited is what keeps the confirmation below honest. Without it the
+            sequence is: invite A, read "a@x invited", the form clears, type B,
+            and the screen still says A was invited beside a form that now holds
+            B. ClientsAdmin wires resetAdd/resetEdit for exactly this, and
+            AddClientForm states the rule: a confirmation left standing beside a
+            form somebody has since changed is the same class of lie as no
+            confirmation at all. It clears the REVOKE confirmation too -- both
+            share inviteState, and "invitation for c@x revoked" is just as stale
+            once the admin is typing a fresh address. */}
+        <InviteForm
+          profiles={admin.profiles}
+          state={admin.inviteState}
+          onInvite={admin.invite}
+          onEdited={admin.resetInvite}
+        />
+
+        {admin.inviteState.kind === 'failed' && (
+          <p className="t-small" role="status">{admin.inviteState.message}</p>
+        )}
+        {admin.inviteState.kind === 'saved' && (
+          <p className="t-small" role="status">
+            {admin.inviteState.what} {formatSavedAt(admin.inviteState.at)}.
+          </p>
+        )}
+      </section>
+
+      <section className={styles.block}>
+        <h3 className="t-subhead">Invited — not yet signed in</h3>
+
+        {/* An explicit empty state. A blank region reads as a failed load, which
+            is this project's signature defect wearing a new mask. */}
+        {admin.invitations.length === 0 ? (
+          <p className="t-body prose">
+            Nobody is waiting. Invite someone above and they will have access the
+            first time they sign in.
+          </p>
+        ) : (
+          // role="list" for the same reason as the People list above: base.css
+          // strips markers globally, and Safari/VoiceOver drops list semantics
+          // along with them.
+          <ul aria-label="Invitations" className={styles.list} role="list">
+            {admin.invitations.map((row) => (
+              <li className={styles.row} key={row.email}>
+                <div className={styles.rowHead}>
+                  <div className={styles.rowWho}>
+                    <p className="t-body">{row.email}</p>
+                    <p className="t-small">
+                      {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
+                    </p>
+                  </div>
+
+                  <div className={styles.actions}>
+                    <button
+                      aria-label={`Revoke invitation for ${row.email}`}
+                      className="button button--quiet"
+                      type="button"
+                      disabled={writing}
+                      onClick={() => admin.revokeInvite(row.email)}
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={styles.block}>
         <h3 className="t-subhead">With access</h3>
         {/* role="list" because base.css removes markers globally, and WebKit
             drops a list's semantics when its markers are removed -- so in
@@ -159,74 +229,6 @@ export function UsersAdmin({ onBack, currentUserId }: Props) {
             )
           })}
         </ul>
-      </section>
-
-      <section className={styles.block}>
-        <h3 className="t-subhead">Invited — not yet signed in</h3>
-
-        {/* An explicit empty state. A blank region reads as a failed load, which
-            is this project's signature defect wearing a new mask. */}
-        {admin.invitations.length === 0 ? (
-          <p className="t-body prose">
-            Nobody is waiting. Invite someone below and they will have access the
-            first time they sign in.
-          </p>
-        ) : (
-          // role="list" for the same reason as the People list above: base.css
-          // strips markers globally, and Safari/VoiceOver drops list semantics
-          // along with them.
-          <ul aria-label="Invitations" className={styles.list} role="list">
-            {admin.invitations.map((row) => (
-              <li className={styles.row} key={row.email}>
-                <div className={styles.rowHead}>
-                  <div className={styles.rowWho}>
-                    <p className="t-body">{row.email}</p>
-                    <p className="t-small">
-                      {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
-                    </p>
-                  </div>
-
-                  <div className={styles.actions}>
-                    <button
-                      aria-label={`Revoke invitation for ${row.email}`}
-                      className="button button--quiet"
-                      type="button"
-                      disabled={writing}
-                      onClick={() => admin.revokeInvite(row.email)}
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* onEdited is what keeps the confirmation below honest. Without it the
-            sequence is: invite A, read "a@x invited", the form clears, type B,
-            and the screen still says A was invited beside a form that now holds
-            B. ClientsAdmin wires resetAdd/resetEdit for exactly this, and
-            AddClientForm states the rule: a confirmation left standing beside a
-            form somebody has since changed is the same class of lie as no
-            confirmation at all. It clears the REVOKE confirmation too -- both
-            share inviteState, and "invitation for c@x revoked" is just as stale
-            once the admin is typing a fresh address. */}
-        <InviteForm
-          profiles={admin.profiles}
-          state={admin.inviteState}
-          onInvite={admin.invite}
-          onEdited={admin.resetInvite}
-        />
-
-        {admin.inviteState.kind === 'failed' && (
-          <p className="t-small" role="status">{admin.inviteState.message}</p>
-        )}
-        {admin.inviteState.kind === 'saved' && (
-          <p className="t-small" role="status">
-            {admin.inviteState.what} {formatSavedAt(admin.inviteState.at)}.
-          </p>
-        )}
       </section>
     </section>
   )
