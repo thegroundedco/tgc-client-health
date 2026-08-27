@@ -21,9 +21,10 @@ import { enumerateBucketStates } from '../scripts/score-parity.mjs'
 // mistake for more than it is. It pins the text of the generated column's
 // expression, so an edit to the migration has to change this line too and
 // think about it. It does NOT prove that Postgres evaluates that expression
-// the same way score.ts does -- nothing without a database can. That is
-// `npm run verify:score`, which reads the live expression out of the
-// catalogue and checks all 7,776 combinations against totalScore().
+// the same way meanOrNull() does -- nothing without a database can. That is
+// `npm run verify:score`, which reads the six live *_score expressions out of
+// the catalogue and checks them against meanOrNull(), across 5,616 states
+// decomposed per bucket (see the next describe block below).
 const MIGRATION = 'supabase/migrations/20260821021840_create_clients_and_checkins.sql'
 
 const EXPECTED = `total_score smallint generated always as (

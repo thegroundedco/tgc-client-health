@@ -65,7 +65,7 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
       { key: 'fin_rack_rate', prompt: 'Paying rack rate.' },
       { key: 'fin_pays_on_time', prompt: 'Pays on time.' },
       { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.' },
-      { key: 'fin_on_terms', prompt: 'On terms -- a three-month commitment or longer.' },
+      { key: 'fin_on_terms', prompt: 'On terms.' },
     ],
   },
   relationship: {
@@ -78,7 +78,7 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
       {
         key: 'rel_multi_threaded',
         prompt:
-          'We are multi-threaded -- we work with their partners, and they work with ours.',
+          'We are multi-threaded, we work with their partners, and they work with ours.',
       },
     ],
   },

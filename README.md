@@ -371,6 +371,9 @@ npm run verify:privileges   # db:which, then the assertions
 npm run verify:capability   # db:which, then the preset table, no rows needed
 npm run verify:invites      # db:which, then two real signups -- STAGING ONLY,
                             #   this one WRITES to auth.users
+npm run verify:scoring-view # db:which, then a client and two check-ins --
+                            #   STAGING ONLY, this one WRITES to public.clients
+                            #   and public.checkins and advances clients_id_seq
 ```
 
 Switch target deliberately, one command at a time, and never leave production
@@ -424,6 +427,12 @@ next run. One known inaccuracy to be aware of rather than patch:
   attempt to write it with `428C9 cannot insert a non-DEFAULT value into column
   "total_score"`. Never include it in an `insert` or `upsert` payload; write the
   five pillar columns and read the total back.
+- The same trap now covers **six more columns**: `comm_score`, `growth_score`,
+  `fin_score`, `rel_score`, `del_score` and `adv_score` are typed writable in
+  `Insert`/`Update` identically, and are generated columns identically, so the
+  same `428C9` rejects a write to any of them. Step 2's check-in upsert is the
+  code that will hit this — write the 22 question columns and read the six
+  bucket scores back.
 
 ### The client lifecycle columns, and the constraint that governs them
 
@@ -573,31 +582,48 @@ before every deploy that touches a migration.
 
 ### `npm run verify:score`
 
-Proves the total on screen and the total in the database are the same number.
-Generates every one of the 7,776 pillar combinations (1–5 and unscored, five
-pillars), computes each expected total with the real `totalScore()` from
-`src/lib/score.ts`, then reads the **live** `total_score` expression out of
-Postgres's catalogue and evaluates it against all of them. Any disagreement
-raises an exception naming the chunk.
+Proves the six bucket scores on screen and the six bucket scores in the
+database are the same numbers. Generates every state across all six buckets —
+2 × 6³ for the two three-question buckets plus 4 × 6⁴ for the four
+four-question buckets, **5,616 states** in total — computes each expected
+bucket mean with `meanOrNull()` from `src/lib/scoreMath.ts` and the bucket's own
+question keys from `questionsFor()` in `src/lib/buckets.ts`, then reads the
+**six live `*_score` expressions** (`comm_score`, `growth_score`, `fin_score`,
+`rel_score`, `del_score`, `adv_score`) out of Postgres's catalogue via
+`pg_attrdef` and evaluates each against its own state space. `score.ts` is
+never loaded — see `scripts/score-parity.mjs` for why the generator can only
+import leaf modules. Any disagreement raises an exception naming the **bucket**.
 
-Nothing is inserted and no sequence advances: the expression is evaluated over
+`total_score` is no longer covered by `verify:score`. That column retires —
+renamed to `legacy_total_score` alongside the five old pillar columns — in a
+later step (spec §5.4), so checking it here would be checking something about
+to be retired rather than the live model. `tests/generatedColumn.test.ts` still
+pins its expression as text in the meantime, so an accidental early rename or
+edit is still caught in CI.
+
+Nothing is inserted and no sequence advances: each expression is evaluated over
 a `VALUES` list, not over rows in a table. Unlike `verify:privileges` it needs
 no data in the database — an empty `checkins` table is fine, because only the
-column's definition is read.
+columns' definitions are read.
 
 The generated file is written fresh on every run and is gitignored, so a stale
-file from an earlier `score.ts` can never be the thing that passes. `db:which`
-runs between the generate and the query, and it now **exits non-zero** on
+file from an earlier run can never be the thing that passes. `db:which` runs
+between the generate and the query, and it now **exits non-zero** on
 production, so the `&&` chain is a real gate rather than a printed warning.
 
 `tests/generatedColumn.test.ts` is the cheap half of this and runs in
 `npm test`. It pins the migration's expression as text, so drift is caught in
 CI — it does **not** prove Postgres and JavaScript agree. Only the command
 above does that, and only against a database. `tests/scoreParity.test.ts` is
-the other half of the cheap side: it checks the generator itself covers all
-7,776 combinations exactly once with totals that plain addition agrees with,
-because the "all 7776 combinations agree" line the command prints is generated
-from the same list it describes.
+the other half of the cheap side: rather than re-running the arithmetic, it
+asserts six properties of the generated SQL string itself — the `round()`
+wrapper, `is distinct from` rather than a bare `<>`, that it inserts, updates
+and deletes nothing, that it raises one named exception per bucket naming that
+bucket's own column, that each bucket's values-list alias names that bucket's
+own question keys, and that the state total it prints (5,616) matches the
+number of states it actually generated — because dropping any of these would
+pass the whole suite silently until `verify:score` is run against a live
+database.
 
 ### `npm run verify:lifecycle`
 
@@ -628,6 +654,47 @@ Both exit non-zero.
 the migration's constraint text, the seven reason codes (membership **and**
 count), and the unique index — so drift is caught in CI. It does **not** prove
 Postgres enforces any of it.
+
+### `npm run verify:scoring-view`
+
+**Staging only, and like `verify:invites` it writes.** It inserts one client and
+two check-ins to exercise `public.checkin_scores`, and because `clients.id` is
+`generated always as identity`, that insert advances `clients_id_seq` even
+though every fixture row is deleted again inside the same transaction before the
+script exits.
+
+It proves four things about the **deployed** view, over a fixed period date with
+only `started_on` moved to isolate the boundary:
+
+- **The 90-day gate.** `advocacy_applies` is shut at 89 days, and open at exactly
+  90 and at 91 — checked as three separate assertions rather than one, because a
+  boundary bug is almost always off by a day in one direction, not absent
+  entirely. A null `started_on` must never open the gate either.
+- **Null propagation, 44 cases.** With the gate open, nulling any one of the 22
+  answers must null `overall_score`. With the gate shut, nulling any of the 18
+  core answers must still null it, but nulling any of the 4 Advocacy answers
+  must leave it **unchanged** — not merely non-null, exactly unchanged — because
+  a view that folded a nulled Advocacy answer into the denominator with
+  `coalesce(.., 0)` would still return a different, non-null number and pass a
+  weaker check.
+- **The arithmetic**, including the vector from spec §3.2 that catches a revert
+  to averaging the six bucket means instead of the 22 answers: Communication all
+  5s and the other 19 questions all 2s gives 2.41 under the correct
+  question-weighted mean and 2.50 under bucket-averaging — the same vector
+  `scoreV2.test.ts` pins in JavaScript, checked here against the deployed SQL
+  instead.
+- **The RLS boundary.** Without `security_invoker = true` the view runs as its
+  owner and bypasses every policy on `checkins` and `clients`. An **inactive**
+  account must read zero rows through `checkin_scores`; an **active** account
+  must read every row the owner does — both arms are needed, because checking
+  only the negative arm would still pass if a later migration revoked
+  `authenticated`'s grant on the view entirely.
+
+Like `verify:lifecycle` and `verify:capability`, it reads the live expression
+rather than a copy of what was intended, and it distinguishes `COULD NOT VERIFY`
+(a precondition unmet, such as no inactive profile existing to test against) from
+`FAILED` (the deployed behaviour disagrees with its stated intent). Both exit
+non-zero.
 
 ### `npm run verify:capability`
 

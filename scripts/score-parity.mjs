@@ -1,5 +1,6 @@
-// Generates the SQL that proves scoreV2.ts's bucketScore() and the six
-// per-bucket generated columns agree. Slice 4 step 1.
+// Generates the SQL that proves meanOrNull() -- the arithmetic primitive
+// scoreV2.ts's bucketScore() is built from -- agrees with the six per-bucket
+// generated columns. Slice 4 step 1.
 //
 // Extended naively from five pillars to 22 questions, an exhaustive check
 // would need 6^22 states -- dead on arrival. It survives because each
@@ -27,8 +28,11 @@ import { meanOrNull } from '../src/lib/scoreMath.ts'
 export const OUT = 'scripts/.score-parity.generated.sql'
 
 // The expected bucket mean, composed here from the same meanOrNull the
-// application uses. Not a reimplementation: the arithmetic under test is the
-// shipped one.
+// application uses -- a line-for-line recomposition of scoreV2.ts's own
+// bucketScore(), which cannot be imported directly (see above). meanOrNull
+// itself is not a reimplementation: it is the shipped primitive, imported
+// unchanged. bucketScore() is pinned separately, against this same
+// primitive, by scoreV2.test.ts -- this file does not re-prove that.
 function expectedBucketScore(state, bucket) {
   return meanOrNull(questionsFor(bucket).map((question) => state[question.key]))
 }
@@ -103,7 +107,7 @@ begin
   ) into v_bad;
 
   if v_bad > 0 then
-    raise exception 'score parity FAILED for ${column}: % of ${states.length} states disagree between scoreV2.ts and the deployed expression', v_bad;
+    raise exception 'score parity FAILED for ${column}: % of ${states.length} states disagree between scoreMath.ts''s meanOrNull() and the deployed expression', v_bad;
   end if;
 
   raise notice 'score parity ok for ${column}: ${states.length} states';

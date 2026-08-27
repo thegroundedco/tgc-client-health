@@ -6,18 +6,17 @@ import { BUCKETS, questionsFor } from '../src/lib/buckets.ts'
 // import target.
 import { buildSql } from '../scripts/score-parity.mjs'
 
-// Why this exists. `npm run verify:score` needs a database, and this
-// repository's Supabase CLI cannot reach one right now -- see task-4-report.md.
-// These assertions do NOT touch a database. They check the generator's own
-// output: the three properties the brief calls load-bearing and non-obvious
-// -- the round() wrapper (pg_get_expr strips the column's numeric(3,2)
-// rounding, so without it every state disagrees), `is distinct from` rather
-// than `<>` (half these states are null on both sides, and `null <> null` is
-// null, not true, so `<>` would silently pass the whole null-propagation
-// half), and the values alias list naming the real columns (the expression
-// read from the catalogue refers to them by name). Without a test like this,
-// dropping any of the three would pass the whole suite silently until
-// verify:score is run against a live database -- which cannot happen here.
+// Why this exists. These assertions do NOT touch a database -- they check
+// the generator's own output: three non-obvious properties of the SQL it
+// produces -- the round() wrapper (pg_get_expr strips the column's
+// numeric(3,2) rounding, so without it every state disagrees), `is distinct
+// from` rather than `<>` (half these states are null on both sides, and
+// `null <> null` is null, not true, so `<>` would silently pass the whole
+// null-propagation half), and the values alias list naming the real columns
+// (the expression read from the catalogue refers to them by name). Without a
+// test like this, dropping any of the three would pass the whole suite
+// silently in CI, and only be caught later by a manual `verify:score` run
+// against a real database.
 const { sql, total } = buildSql() as { sql: string; total: number }
 
 const BUCKET_SCORE_COLUMN: Record<string, string> = {
