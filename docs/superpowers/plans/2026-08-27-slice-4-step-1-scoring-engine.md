@@ -1421,7 +1421,12 @@ begin
   -- the two are indistinguishable. This is the db:which failure class -- a
   -- guard whose absence looks exactly like its presence.
   if not exists (select 1 from public.profiles where is_active = false) then
-    raise notice '§4 COULD NOT VERIFY: no inactive profile on this project. NOT A PASS.';
+    -- EXCEPTION, not notice. A NOTICE is invisible through `supabase db query`
+    -- (measured), so a notice here would exit 0 and echo the same final row as a
+    -- real pass -- reproducing, inside the guard, the exact db:which failure this
+    -- section exists to prevent. verify-privileges.sql:1784 is the house pattern:
+    -- COULD NOT VERIFY exits NON-ZERO.
+    raise exception '§4 COULD NOT VERIFY: no inactive profile on this project. This is NOT a pass -- the RLS boundary went unchecked.';
   else
     declare
       v_inactive uuid;
@@ -1470,8 +1475,12 @@ Add to `package.json` scripts, matching the guarded shape of its siblings exactl
 - [ ] **Step 3: Run it against staging**
 
 Run: `npm run db:which` — confirm staging, then `npm run verify:scoring-view`
-Expected: exit 0 and echoed rows. §4 may report COULD NOT VERIFY if staging holds no inactive
-profile; that is not a pass, and Step 5 resolves it.
+Expected: exit 0 and echoed rows. If §4 raises COULD NOT VERIFY, the run exits non-zero — that is
+not a pass and not a failure of the view, it means the boundary went unchecked. Step 5 resolves it.
+
+**Staging already holds an inactive viewer** (measured 2026-08-27: admin/active 1,
+account_manager/active 1, viewer/active 1, viewer/inactive 1), so §4 should genuinely execute here.
+A COULD NOT VERIFY on staging means the predicate is wrong, not that the data is missing.
 
 - [ ] **Step 4: Prove it can fail**
 
