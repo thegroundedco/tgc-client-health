@@ -165,10 +165,29 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
     )
 
     const advocacy = within(screen.getByTestId('bucket-advocacy')).getAllByRole('radio')
-    expect(advocacy).toHaveLength(20)
+    // 4 yes/no questions x 2 options, now that Advocacy renders YesNoRow
+    // rather than QuestionRow's five-option scale.
+    expect(advocacy).toHaveLength(8)
     for (const radio of advocacy) expect((radio as HTMLInputElement).disabled).toBe(true)
 
     const communication = within(screen.getByTestId('bucket-communication')).getAllByRole('radio')
     for (const radio of communication) expect((radio as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('renders Yes/No controls for Advocacy and 1-5 for the rest', () => {
+    hookState.current = mockCheckin({ advocacyApplies: true })
+    render(
+      <CheckIn
+        client={CLIENT}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+      />,
+    )
+
+    const advocacy = within(screen.getByTestId('bucket-advocacy'))
+    expect(advocacy.getAllByRole('radio')).toHaveLength(8) // 4 questions x Yes/No
+    const communication = within(screen.getByTestId('bucket-communication'))
+    expect(communication.getAllByRole('radio')).toHaveLength(15) // 3 x 1-5
   })
 })

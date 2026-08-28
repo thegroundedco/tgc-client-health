@@ -8,6 +8,7 @@ import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
+import { YesNoRow } from './YesNoRow'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
@@ -280,19 +281,33 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
                 </p>
               )}
 
-              {questionsFor(bucket).map((question) => (
-                <QuestionRow
-                  key={question.key}
-                  question={question}
-                  value={draft.answers[question.key]}
-                  lastValue={
-                    (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
-                  }
-                  disabled={saving || !canEdit || shut}
-                  onChange={(value) => checkin.setAnswer(question.key, value)}
-                  onClear={() => checkin.setAnswer(question.key, null)}
-                />
-              ))}
+              {questionsFor(bucket).map((question) =>
+                question.kind === 'yesno' ? (
+                  <YesNoRow
+                    key={question.key}
+                    question={question}
+                    value={draft.answers[question.key] as boolean | undefined}
+                    lastValue={
+                      (lastMonth?.[question.key as keyof CheckinRow] as boolean | null) ?? null
+                    }
+                    disabled={saving || !canEdit || shut}
+                    onChange={(value) => checkin.setAnswer(question.key, value)}
+                    onClear={() => checkin.setAnswer(question.key, null)}
+                  />
+                ) : (
+                  <QuestionRow
+                    key={question.key}
+                    question={question}
+                    value={draft.answers[question.key] as number | undefined}
+                    lastValue={
+                      (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
+                    }
+                    disabled={saving || !canEdit || shut}
+                    onChange={(value) => checkin.setAnswer(question.key, value)}
+                    onClear={() => checkin.setAnswer(question.key, null)}
+                  />
+                ),
+              )}
             </section>
           )
         })}

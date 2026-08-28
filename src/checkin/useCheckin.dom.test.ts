@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, OVERALL_QUESTIONS } from '../lib/buckets'
 import { requiredQuestions } from '../lib/scoreV2'
 
 // A fake of the Supabase chained builder, in the same style as
@@ -143,6 +143,60 @@ describe('useCheckin: the local overall', () => {
     expect(result.current.localOverall).toBe(3)
     expect(result.current.scored).toBe(18)
   })
+
+  // Spec §3.2 amended, through the hook. `required` (completeness) and the
+  // overall's divisor (always the 18) are different numbers now -- this proves
+  // both at once, with the gate open: the overall reads only the 18 while
+  // `required` still asks for 22 and `scored` still stops at 18 with every
+  // Advocacy answer blank.
+  it('has an overall from the 18 even with every Advocacy answer blank', async () => {
+    const { result } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
+      period: '2026-08-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.advocacyApplies).toBe(true)
+    for (const key of OVERALL_QUESTIONS) act(() => result.current.setAnswer(key, 4))
+    expect(result.current.localOverall).toBe(4)
+    // ...and still 22 required, so it is not yet complete.
+    expect(result.current.required).toBe(22)
+    expect(result.current.scored).toBe(18)
+  })
+})
+
+describe('useCheckin: restoring stored answers', () => {
+  // The bug this task exists to fix: draftFromRow filtered stored values by
+  // `typeof value === 'number'`, which drops every boolean -- so a saved
+  // Advocacy answer vanished the moment the screen reloaded. Seeds a stored
+  // row with boolean Advocacy answers, including a `false` (the case a
+  // careless `if (value)`-shaped fix would still drop), and proves they
+  // arrive in the draft -- present as `false`, not merely non-crashing.
+  it('restores boolean Advocacy answers from a stored row, including false', async () => {
+    db.checkins = async () => ({
+      data: [
+        {
+          client_id: 1,
+          period: '2026-08-01',
+          notes: null,
+          adv_left_review: false,
+          adv_case_study: true,
+          adv_would_refer: null,
+          adv_reference_check: null,
+        },
+      ],
+      error: null,
+    })
+    const { result } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: null },
+      period: '2026-08-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.answers.adv_left_review).toBe(false)
+    expect(result.current.draft.answers.adv_case_study).toBe(true)
+    // Unanswered means absent, not a stored null carried through as a key.
+    expect(result.current.draft.answers).not.toHaveProperty('adv_would_refer')
+    expect(result.current.draft.answers).not.toHaveProperty('adv_reference_check')
+  })
 })
 
 describe('useCheckin: submit', () => {
@@ -161,6 +215,21 @@ describe('useCheckin: submit', () => {
     for (const key of ALL_QUESTIONS) expect(payload).toHaveProperty(key)
     expect(payload.comm_timely).toBe(5)
     expect(payload.adv_left_review).toBeNull()
+  })
+
+  // The coercion trap. `false ?? null` is false and `false || null` is null,
+  // and the two look identical at a glance. Getting it wrong writes null for
+  // every No and silently turns four answered Nos into an unanswered bucket.
+  it('sends a No to the database as false, not as null', async () => {
+    const { result, upsert } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
+      period: '2026-08-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('adv_left_review', false))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    expect(upsert.mock.calls[0][0].adv_left_review).toBe(false)
   })
 
   // The submitted marker tracks the REQUIRED count, so a gated-out check-in can

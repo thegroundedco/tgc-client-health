@@ -43,7 +43,7 @@ export type UseCheckin = {
   storedByYou: boolean
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
-  setAnswer: (key: string, value: number | null) => void
+  setAnswer: (key: string, value: number | boolean | null) => void
   setNotes: (notes: string) => void
   reload: () => void
   submit: () => void
@@ -60,7 +60,13 @@ function draftFromRow(row: CheckinRow | null): Draft {
   const answers: QuestionScores = {}
   for (const key of ALL_QUESTIONS) {
     const value = row[key as keyof CheckinRow]
-    if (typeof value === 'number') answers[key] = value
+    // Both answer shapes survive this filter, not just numbers: a scale
+    // question stores a number and a yes/no question stores a boolean, and
+    // `false` is as much an answer as `4` is. The retired legacy/pillar
+    // columns and `notes` are excluded not by their JS type but by this loop
+    // running over ALL_QUESTIONS rather than the row's own keys -- see the
+    // file comment above.
+    if (typeof value === 'number' || typeof value === 'boolean') answers[key] = value
   }
   return { answers, notes: row.notes ?? '' }
 }
@@ -225,7 +231,7 @@ export function useCheckin(
   )
 
   const setAnswer = useCallback(
-    (key: string, value: number | null) => {
+    (key: string, value: number | boolean | null) => {
       const answers: QuestionScores = { ...draft.answers }
       // Deleted, not set to null. An unanswered question is an absent key
       // everywhere else in this code -- draftCache validates on that basis, and
@@ -243,7 +249,7 @@ export function useCheckin(
   )
 
   const scored = answeredCount(draft.answers, applies)
-  const localOverall = overallScore(draft.answers, applies)
+  const localOverall = overallScore(draft.answers)
   const storedOverall = scores.find((row) => row.period === period)?.overall_score ?? null
   const lastOverall = scores.find((row) => row.period === lastPeriod)?.overall_score ?? null
   const hasContent = !isDraftEmpty(draft)

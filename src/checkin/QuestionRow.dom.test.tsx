@@ -24,7 +24,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const QUESTION: Question = { key: 'rel_respectful', prompt: 'They are respectful.' }
+const QUESTION: Question = { key: 'rel_respectful', prompt: 'They are respectful.', kind: 'scale' }
 
 // QuestionRow is controlled: clearing is the parent deleting the score and
 // re-rendering. Testing the focus behaviour without that round trip would test
