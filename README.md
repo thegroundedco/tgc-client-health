@@ -584,15 +584,19 @@ before every deploy that touches a migration.
 
 Proves the six bucket scores on screen and the six bucket scores in the
 database are the same numbers. Generates every state across all six buckets —
-2 × 6³ for the two three-question buckets plus 4 × 6⁴ for the four
-four-question buckets, **5,616 states** in total — computes each expected
-bucket mean with `meanOrNull()` from `src/lib/scoreMath.ts` and the bucket's own
-question keys from `questionsFor()` in `src/lib/buckets.ts`, then reads the
-**six live `*_score` expressions** (`comm_score`, `growth_score`, `fin_score`,
-`rel_score`, `del_score`, `adv_score`) out of Postgres's catalogue via
-`pg_attrdef` and evaluates each against its own state space. `score.ts` is
-never loaded — see `scripts/score-parity.mjs` for why the generator can only
-import leaf modules. Any disagreement raises an exception naming the **bucket**.
+2 × 6³ for the two three-question scale buckets, plus 3 × 6⁴ for the three
+four-question scale buckets, plus 3⁴ for the four-question Advocacy bucket
+(each of its four questions is yes/no, so it has only 3 reachable states —
+unanswered, yes, no — not 6), **4,401 states** in total — computes each
+expected bucket mean with `meanOrNull()` from `src/lib/scoreMath.ts`, except
+Advocacy, which goes through `yesNoScore()` instead, both from
+`src/lib/scoreMath.ts`, applied to the bucket's own question keys from
+`questionsFor()` in `src/lib/buckets.ts`, then reads the **six live `*_score`
+expressions** (`comm_score`, `growth_score`, `fin_score`, `rel_score`,
+`del_score`, `adv_score`) out of Postgres's catalogue via `pg_attrdef` and
+evaluates each against its own state space. `score.ts` is never loaded — see
+`scripts/score-parity.mjs` for why the generator can only import leaf
+modules. Any disagreement raises an exception naming the **bucket**.
 
 `total_score` is no longer covered by `verify:score`. That column retires —
 renamed to `legacy_total_score` alongside the five old pillar columns — in a
@@ -620,7 +624,7 @@ asserts six properties of the generated SQL string itself — the `round()`
 wrapper, `is distinct from` rather than a bare `<>`, that it inserts, updates
 and deletes nothing, that it raises one named exception per bucket naming that
 bucket's own column, that each bucket's values-list alias names that bucket's
-own question keys, and that the state total it prints (5,616) matches the
+own question keys, and that the state total it prints (4,401) matches the
 number of states it actually generated — because dropping any of these would
 pass the whole suite silently until `verify:score` is run against a live
 database.
@@ -670,19 +674,26 @@ only `started_on` moved to isolate the boundary:
   90 and at 91 — checked as three separate assertions rather than one, because a
   boundary bug is almost always off by a day in one direction, not absent
   entirely. A null `started_on` must never open the gate either.
-- **Null propagation, 44 cases.** With the gate open, nulling any one of the 22
-  answers must null `overall_score`. With the gate shut, nulling any of the 18
-  core answers must still null it, but nulling any of the 4 Advocacy answers
-  must leave it **unchanged** — not merely non-null, exactly unchanged — because
-  a view that folded a nulled Advocacy answer into the denominator with
-  `coalesce(.., 0)` would still return a different, non-null number and pass a
-  weaker check.
-- **The arithmetic**, including the vector from spec §3.2 that catches a revert
-  to averaging the six bucket means instead of the 22 answers: Communication all
-  5s and the other 19 questions all 2s gives 2.41 under the correct
-  question-weighted mean and 2.50 under bucket-averaging — the same vector
-  `scoreV2.test.ts` pins in JavaScript, checked here against the deployed SQL
-  instead.
+- **Null propagation, 44 cases.** Nulling any one of the 18 core answers must
+  null `overall_score` — checked in **both** gate states, because "in either
+  gate state" is the whole point and a fix that only special-cased one would
+  still pass a check that looked only at the other. Nulling any one of the 4
+  Advocacy answers must leave `overall_score` **unchanged** — not merely
+  non-null, exactly unchanged — again in both gate states: Advocacy left
+  `overall_score` for good (spec §3.2, amended 2026-08-28), so a null
+  Advocacy answer must never move it, gate open or shut. This is the loop
+  that would catch a reversion to folding Advocacy back into the divisor: a
+  view that still summed a nulled Advocacy answer into the denominator with
+  `coalesce(.., 0)` would return a different, non-null number — 2.59, not
+  the unchanged 3.00 — and pass a weaker check that only asked "is it still
+  non-null".
+- **The arithmetic**, including the vector from spec §3.2 that catches a
+  revert to averaging the five remaining bucket means instead of the 18 core
+  answers (Advocacy already excludes itself from both, so this vector no
+  longer touches it): Communication all 5s and the other 15 core questions
+  all 2s gives 2.50 under the correct question-weighted mean and 2.60 under
+  bucket-averaging — the same vector `scoreV2.test.ts` pins in JavaScript,
+  checked here against the deployed SQL instead.
 - **The RLS boundary.** Without `security_invoker = true` the view runs as its
   owner and bypasses every policy on `checkins` and `clients`. An **inactive**
   account must read zero rows through `checkin_scores`; an **active** account
