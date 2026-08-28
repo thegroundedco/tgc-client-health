@@ -80,4 +80,50 @@ describe('the per-bucket enumeration the verifier rests on', () => {
       }
     }
   })
+
+  // The property step 2.5 exists to establish, stated as its own assertion
+  // rather than folded into the one above: an answered No is not a null. A
+  // four-No Advocacy state must be reachable and must score 1 (not null,
+  // not the same state as all-unanswered). Measured: setting
+  // score-parity.mjs's YESNO_VALUES to [null, true, true] -- dropping
+  // `false` from the generator entirely -- leaves every other assertion in
+  // this describe block green: the length check above only counts states,
+  // and both allNull and allMax above stay reachable, so nothing notices
+  // that every No-containing state silently vanished. Only a check that a
+  // specific all-No state exists catches that.
+  it('includes the all-no state for every yesno bucket, and it scores 1 -- not null', () => {
+    for (const bucket of BUCKETS) {
+      const questions = questionsFor(bucket)
+      if (questions[0].kind !== 'yesno') continue
+      const keys = questions.map((q) => q.key)
+      const states: Record<string, boolean | null>[] = enumerateBucketStates(bucket)
+      const allNo = states.find((s) => keys.every((k) => s[k] === false))
+      expect(allNo, bucket).toBeDefined()
+      expect(yesNoScore(keys.map((k) => allNo![k])), bucket).toBe(1)
+    }
+  })
+
+  // The same class of coverage bug can hit a scale question too -- e.g. a
+  // typo'd SCALE_VALUES that repeats one number and drops another would
+  // pass the length and allNull/allMax checks above exactly the way
+  // [null, true, true] does for yesno. Checking that each question's own
+  // generated values are pairwise DISTINCT, and cover the full expected
+  // set, closes that off for every question in every bucket -- not just the
+  // one the F4 mutation happened to target.
+  it("covers each question's full, distinct value set -- {null,1,2,3,4,5} for scale, {null,true,false} for yesno", () => {
+    for (const bucket of BUCKETS) {
+      const questions = questionsFor(bucket)
+      const isYesNoBucket = questions[0].kind === 'yesno'
+      const states: Record<string, number | boolean | null>[] = enumerateBucketStates(bucket)
+      for (const question of questions) {
+        const label = `${bucket}.${question.key}`
+        const seen = new Set(states.map((s) => s[question.key]))
+        expect(seen.size, label).toBe(isYesNoBucket ? 3 : 6)
+        const expectedValues = isYesNoBucket ? [null, true, false] : [null, 1, 2, 3, 4, 5]
+        for (const value of expectedValues) {
+          expect(seen.has(value), `${label} should reach ${value}`).toBe(true)
+        }
+      }
+    }
+  })
 })
