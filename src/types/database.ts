@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -45,11 +45,11 @@ export type Database = {
       }
       checkins: {
         Row: {
-          adv_case_study: number | null
-          adv_left_review: number | null
-          adv_reference_check: number | null
+          adv_case_study: boolean | null
+          adv_left_review: boolean | null
+          adv_reference_check: boolean | null
           adv_score: number | null
-          adv_would_refer: number | null
+          adv_would_refer: boolean | null
           client_id: number
           comm_consistent: number | null
           comm_constructive: number | null
@@ -89,11 +89,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          adv_case_study?: number | null
-          adv_left_review?: number | null
-          adv_reference_check?: number | null
+          adv_case_study?: boolean | null
+          adv_left_review?: boolean | null
+          adv_reference_check?: boolean | null
           adv_score?: number | null
-          adv_would_refer?: number | null
+          adv_would_refer?: boolean | null
           client_id: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -133,11 +133,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          adv_case_study?: number | null
-          adv_left_review?: number | null
-          adv_reference_check?: number | null
+          adv_case_study?: boolean | null
+          adv_left_review?: boolean | null
+          adv_reference_check?: boolean | null
           adv_score?: number | null
-          adv_would_refer?: number | null
+          adv_would_refer?: boolean | null
           client_id?: number
           comm_consistent?: number | null
           comm_constructive?: number | null
