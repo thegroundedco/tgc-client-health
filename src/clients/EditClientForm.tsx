@@ -129,6 +129,29 @@ export function EditClientForm({ client, owners, state, onSave, onCancel, onEdit
       </div>
 
       <div className={styles.fieldBlock}>
+        {/* "Client start date", not "Start date": the add form uses "Start
+            date" and both forms can be on screen at once, so an identical
+            label would announce as two indistinguishable date fields and make
+            getByLabelText('Start date') ambiguous. Matches the existing
+            "Client name" / "Name" and "Client owner" / "Owner" asymmetry. */}
+        <label className="t-label" htmlFor="edit-client-started">
+          Client start date
+        </label>
+        <input
+          className="field"
+          disabled={saving}
+          id="edit-client-started"
+          onChange={(event) => edit({ ...draft, startedOn: event.target.value })}
+          type="date"
+          value={draft.startedOn}
+        />
+        <p className="t-caption prose">
+          Advocacy is not scored until a client has a start date, and then only
+          from the first check-in month beginning 90 days after it.
+        </p>
+      </div>
+
+      <div className={styles.fieldBlock}>
         <label className="t-label" htmlFor="edit-client-status">
           Status
         </label>

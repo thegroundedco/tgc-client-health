@@ -134,6 +134,20 @@ export function ClientsAdmin({ onBack }: Props) {
 
               <p className="t-caption">{ownerText(client, admin.owners)}</p>
 
+              {/* The list is where the owner checks eleven dates at a glance
+                  without opening eleven forms, and "no start date" has to be
+                  visible rather than blank -- a blank reads as a rendering
+                  gap, and it is the reason a whole bucket is unscored.
+                  The raw YYYY-MM-DD is deliberate, not a call to
+                  formatSavedAt: that helper is for timestamps, and would parse
+                  this as UTC midnight and print the day before in a western
+                  zone -- the exact class of bug the gate is sensitive to. */}
+              <p className="t-caption" data-testid="client-started">
+                {client.started_on === null
+                  ? 'No start date — Advocacy is not scored'
+                  : `Started ${client.started_on}`}
+              </p>
+
               {isChurned(client.status) && (
                 <p className="t-caption" data-testid="client-ended">
                   Ended {client.ended_on ?? 'on an unrecorded date'} ·{' '}

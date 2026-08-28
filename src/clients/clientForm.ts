@@ -92,7 +92,7 @@ export function isChurned(status: string): boolean {
 // `id` is here because the update needs it. `created_at` is not, because
 // nothing on this screen shows it.
 export const CLIENT_COLUMNS =
-  'id, name, owner_id, status, ended_on, end_reason_code, end_reason_note, updated_at'
+  'id, name, owner_id, status, started_on, ended_on, end_reason_code, end_reason_note, updated_at'
 
 export type AdminClient = {
   id: number
@@ -103,6 +103,11 @@ export type AdminClient = {
   // verify, and formProblems() below is what turns an unknown value into a
   // refusal a person can read instead of a crash.
   status: string
+  // Read by the 90-day Advocacy gate (spec §4), which lives on the check-in
+  // screen rather than here. This screen is only where it is entered: the gate
+  // is shut for every client whose start date is null, so an empty column here
+  // is why a whole bucket is unscored two screens away.
+  started_on: string | null
   ended_on: string | null
   end_reason_code: string | null
   end_reason_note: string | null
@@ -116,6 +121,7 @@ export type ClientDraft = {
   name: string
   ownerId: string | null
   status: string
+  startedOn: string
   endedOn: string
   endReasonCode: string
   endReasonNote: string
@@ -125,6 +131,7 @@ export const EMPTY_DRAFT: ClientDraft = {
   name: '',
   ownerId: null,
   status: 'active',
+  startedOn: '',
   endedOn: '',
   endReasonCode: '',
   endReasonNote: '',
@@ -135,6 +142,7 @@ export function draftFromRow(row: AdminClient): ClientDraft {
     name: row.name,
     ownerId: row.owner_id,
     status: row.status,
+    startedOn: row.started_on ?? '',
     endedOn: row.ended_on ?? '',
     endReasonCode: row.end_reason_code ?? '',
     endReasonNote: row.end_reason_note ?? '',
@@ -142,7 +150,7 @@ export function draftFromRow(row: AdminClient): ClientDraft {
 }
 
 export type FormProblem = {
-  field: 'name' | 'status' | 'endedOn' | 'endReasonCode'
+  field: 'name' | 'status' | 'startedOn' | 'endedOn' | 'endReasonCode'
   text: string
 }
 
@@ -197,24 +205,34 @@ export function reactivationWarning(from: string, to: string): string | null {
   return 'Saving will clear the end date and the reason. Those are recorded facts, and this screen cannot bring them back.'
 }
 
-// Status is fixed at 'active' and the three lifecycle columns are absent
-// entirely, not sent as nulls. Spec §7: "the form does not offer a churned
-// status on creation, because a client who has already left is not something
-// anybody needs to add." Absent rather than null so a future edit that wants to
-// send one has to add the key and notice this comment.
+// Status is fixed at 'active' and the two end-reason columns and the end date
+// are absent entirely, not sent as nulls. Spec §7: "the form does not offer a
+// churned status on creation, because a client who has already left is not
+// something anybody needs to add."
+//
+// started_on is the exception, and it is sent explicitly. It is not a lifecycle
+// column -- clients_lifecycle_coherent constrains ended_on and the two reason
+// columns only, and says nothing about a start date -- and a client being added
+// is exactly the moment somebody knows when the engagement began. Sent as null
+// rather than omitted when blank, because the value being absent is itself the
+// thing the gate reads.
 export function insertPayload(draft: ClientDraft) {
   return {
     name: draft.name.trim(),
     owner_id: draft.ownerId,
     status: 'active',
+    started_on: draft.startedOn === '' ? null : draft.startedOn,
   }
 }
 
-// All six columns, every time, whatever the status. This is what makes rule 2's
-// three-column clear structurally impossible to forget: the constraint is
+// All seven columns, every time, whatever the status. This is what makes rule
+// 2's three-column clear structurally impossible to forget: the constraint is
 // bidirectional (spec §10 decision 2), so an update that moves a client off
 // `former` without nulling all three is refused by Postgres. Sending only the
 // changed columns would make that a thing each caller had to remember.
+// started_on rides along unconditionally too, for the same reason it is
+// unconditional on the row itself: it is not one of the three the constraint
+// governs, so there is no status-dependent rule to apply to it here.
 export function updatePayload(draft: ClientDraft) {
   const churned = isChurned(draft.status)
   const note = draft.endReasonNote.trim()
@@ -222,6 +240,7 @@ export function updatePayload(draft: ClientDraft) {
     name: draft.name.trim(),
     owner_id: draft.ownerId,
     status: draft.status,
+    started_on: draft.startedOn === '' ? null : draft.startedOn,
     ended_on: churned && draft.endedOn !== '' ? draft.endedOn : null,
     end_reason_code: churned && draft.endReasonCode !== '' ? draft.endReasonCode : null,
     // Null rather than an empty string, matching how the check-in screen stores

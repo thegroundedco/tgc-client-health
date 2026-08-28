@@ -99,6 +99,27 @@ export function AddClientForm({ owners, state, onAdd, onEdited }: Props) {
         </select>
       </div>
 
+      <div className={styles.fieldBlock}>
+        <label className="t-label" htmlFor="add-client-started">
+          Start date
+        </label>
+        <input
+          className="field"
+          disabled={saving}
+          id="add-client-started"
+          onChange={(event) => edit({ ...draft, startedOn: event.target.value })}
+          type="date"
+          value={draft.startedOn}
+        />
+        {/* Optional, and the consequence of leaving it blank is stated here
+            rather than discovered two screens away on a check-in whose
+            Advocacy section is shut with no explanation the person who added
+            the client would recognise. */}
+        <p className="t-caption prose">
+          Optional. Advocacy is not scored until a client has a start date.
+        </p>
+      </div>
+
       <div className={styles.actions}>
         <button
           aria-describedby="add-client-status"

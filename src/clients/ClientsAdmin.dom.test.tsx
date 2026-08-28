@@ -33,6 +33,7 @@ function client(overrides: Partial<AdminClient> = {}): AdminClient {
     name: 'Acme',
     owner_id: null,
     status: 'active',
+    started_on: null,
     ended_on: null,
     end_reason_code: null,
     end_reason_note: null,
@@ -173,6 +174,24 @@ describe('the clients admin screen, reading', () => {
     expect(screen.queryByTestId('client-ended')).toBeNull()
   })
 
+  // The list is where the owner checks eleven dates at a glance without
+  // opening eleven forms, and "no start date" has to be visible rather than
+  // blank -- a blank reads as a rendering gap, and it is the reason a whole
+  // bucket is unscored.
+  it('says on the row when a client has no start date', () => {
+    mount({ clients: [client({ started_on: null })] })
+
+    expect(screen.getByTestId('client-started').textContent).toContain(
+      'No start date — Advocacy is not scored',
+    )
+  })
+
+  it('shows the start date on the row when there is one', () => {
+    mount({ clients: [client({ started_on: '2026-01-15' })] })
+
+    expect(screen.getByTestId('client-started').textContent).toContain('Started 2026-01-15')
+  })
+
   it('names when each client last changed, which is what survives a reload', () => {
     // Spec §7: every write says what happened and names the time, and survives a
     // reload -- no toast. The status line beside a form is the immediate half;
@@ -233,6 +252,19 @@ describe('the clients admin screen, adding', () => {
       ownerId: AMY,
       status: 'active',
     })
+  })
+
+  it('offers a start date on the add form and sends it', async () => {
+    const addClient = vi.fn()
+    mount({ addClient })
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Acme')
+    await userEvent.type(screen.getByLabelText('Start date'), '2026-01-15')
+    await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
+
+    expect(addClient).toHaveBeenCalledWith(
+      expect.objectContaining({ startedOn: '2026-01-15' }),
+    )
   })
 
   it('refuses to send a nameless client, and says why', async () => {
@@ -362,6 +394,13 @@ describe('the clients admin screen, editing', () => {
     expect(screen.getByLabelText('Status')).toHaveProperty('value', 'active')
     // One form, not one per row: spec §7 says a list and a form.
     expect(screen.getAllByLabelText('Status')).toHaveLength(1)
+  })
+
+  it('offers a start date on the edit form, whatever the status', async () => {
+    mount({ clients: [client({ status: 'active', started_on: '2026-01-15' })] })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    expect(screen.getByLabelText('Client start date')).toHaveProperty('value', '2026-01-15')
   })
 
   it('hides the lifecycle fields while the status is live', async () => {

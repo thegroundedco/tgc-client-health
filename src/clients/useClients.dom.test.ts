@@ -72,6 +72,7 @@ const ACME: AdminClient = {
   name: 'Acme',
   owner_id: null,
   status: 'active',
+  started_on: null,
   ended_on: null,
   end_reason_code: null,
   end_reason_note: null,
@@ -84,6 +85,7 @@ const DRAFT: ClientDraft = {
   name: 'Acme Holdings',
   ownerId: null,
   status: 'active',
+  startedOn: '',
   endedOn: '',
   endReasonCode: '',
   endReasonNote: '',
@@ -168,13 +170,13 @@ describe('the clients hook, updating', () => {
     expect(db.lastFilter).toEqual(['id', GONE.id])
   })
 
-  it('sends all six columns on the update, whatever the draft holds', async () => {
+  it('sends all seven columns on the update, whatever the draft holds', async () => {
     // The hook-level half of the bidirectional-constraint guarantee.
     // clients_lifecycle_coherent refuses a partial update, so a payload that
     // omitted a lifecycle column would be rejected by Postgres -- and
-    // updatePayload building all six is only load-bearing if the hook actually
-    // sends what it built. clientForm.test.ts proves the builder; this proves
-    // the wire.
+    // updatePayload building all seven is only load-bearing if the hook
+    // actually sends what it built. clientForm.test.ts proves the builder;
+    // this proves the wire.
     const { result } = await ready()
     await act(async () => {
       result.current.saveClient(ACME.id, DRAFT)
@@ -186,6 +188,7 @@ describe('the clients hook, updating', () => {
       'ended_on',
       'name',
       'owner_id',
+      'started_on',
       'status',
     ])
   })

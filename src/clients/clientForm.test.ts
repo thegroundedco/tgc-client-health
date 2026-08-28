@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CLIENT_COLUMNS,
   CLIENT_STATUSES,
   CONCURRENT_SAVE_TEXT,
   END_REASON_CODES,
@@ -27,6 +28,7 @@ function row(overrides: Partial<AdminClient> = {}): AdminClient {
     name: 'Acme',
     owner_id: null,
     status: 'active',
+    started_on: null,
     ended_on: null,
     end_reason_code: null,
     end_reason_note: null,
@@ -138,7 +140,7 @@ describe('rule 2 -- reactivating destroys a recorded fact, and says so', () => {
     }
   })
 
-  it('sends all six columns on every save, whatever the status', () => {
+  it('sends all seven columns on every save, whatever the status', () => {
     for (const status of CLIENT_STATUSES) {
       expect(Object.keys(updatePayload(draft({ status }))).sort()).toEqual([
         'end_reason_code',
@@ -146,6 +148,7 @@ describe('rule 2 -- reactivating destroys a recorded fact, and says so', () => {
         'ended_on',
         'name',
         'owner_id',
+        'started_on',
         'status',
       ])
     }
@@ -176,11 +179,13 @@ describe('rule 2 -- reactivating destroys a recorded fact, and says so', () => {
 describe('adding a client', () => {
   it('creates it active, and offers no way to create a churned one', () => {
     // Spec §7: "a client who has already left is not something anybody needs
-    // to add". The absence of the three keys is the assertion -- a payload that
-    // merely happened to send nulls would still let a future edit set them.
+    // to add". The absence of the two end-reason keys and the end date is the
+    // assertion -- a payload that merely happened to send nulls would still let
+    // a future edit set them. started_on is present regardless: it is not one
+    // of the three the spec is talking about here.
     const payload = insertPayload(draft({ status: 'former', endedOn: '2026-08-01' }))
     expect(payload.status).toBe('active')
-    expect(Object.keys(payload).sort()).toEqual(['name', 'owner_id', 'status'])
+    expect(Object.keys(payload).sort()).toEqual(['name', 'owner_id', 'started_on', 'status'])
   })
 })
 
@@ -191,6 +196,7 @@ describe('a row becoming a form', () => {
         name: 'Acme',
         ownerId: null,
         status: 'former',
+        startedOn: '',
         endedOn: '2026-08-01',
         endReasonCode: 'price',
         endReasonNote: '',
@@ -210,6 +216,7 @@ describe('a row becoming a form', () => {
       name: 'Polar Divide',
       owner_id: 'owner-1',
       status: 'cancelled',
+      started_on: null,
       ended_on: '2026-07-15',
       end_reason_code: 'went_quiet',
       end_reason_note: 'stopped replying',
@@ -335,6 +342,41 @@ describe('the two refusals Postgres never raises', () => {
     expect(CONCURRENT_SAVE_TEXT).toContain('again')
     expect(UPDATE_MATCHED_NOTHING_TEXT).not.toContain('again')
     expect(UPDATE_MATCHED_NOTHING_TEXT).toContain('Ask an admin')
+  })
+})
+
+describe('started_on', () => {
+  it('is in the column literal, so the select fetches it', () => {
+    expect(CLIENT_COLUMNS).toContain('started_on')
+  })
+
+  it('reaches the draft as a string, and a null row reaches it as empty', () => {
+    expect(draftFromRow(row({ started_on: '2026-01-15' })).startedOn).toBe('2026-01-15')
+    expect(draftFromRow(row({ started_on: null })).startedOn).toBe('')
+  })
+
+  // Null rather than an empty string, matching every other optional column on
+  // this table. An empty string is not a date and the column would refuse it.
+  it('is sent as null when the field is blank, and as the date when it is not', () => {
+    expect(insertPayload(draft({ startedOn: '' })).started_on).toBeNull()
+    expect(insertPayload(draft({ startedOn: '2026-01-15' })).started_on).toBe('2026-01-15')
+    expect(updatePayload(draft({ startedOn: '' })).started_on).toBeNull()
+    expect(updatePayload(draft({ startedOn: '2026-01-15' })).started_on).toBe('2026-01-15')
+  })
+
+  // The gate is the only thing that reads this column, and a shut gate is not a
+  // refusal to save -- it is a bucket that is not scored yet. A client with no
+  // start date is a normal, saveable row.
+  it('is never required, whatever the status', () => {
+    for (const status of CLIENT_STATUSES) {
+      const attempt = draft({
+        status,
+        startedOn: '',
+        endedOn: '2026-02-01',
+        endReasonCode: 'price',
+      })
+      expect(formProblems(attempt).some((p) => p.field === 'startedOn')).toBe(false)
+    }
   })
 })
 
