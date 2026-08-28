@@ -173,7 +173,14 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
     const communication = within(screen.getByTestId('bucket-communication')).getAllByRole('radio')
     for (const radio of communication) expect((radio as HTMLInputElement).disabled).toBe(false)
   })
+})
 
+// Fix round 1, Cosmetic 3: this test sets `advocacyApplies: true` against
+// CLIENT (started_on 2020-01-01, long clear of the gate) -- it was never
+// about the gate being shut, and had been left inside that describe by
+// mistake. Its own block, so a reader of either describe's name is told the
+// truth about what its tests cover.
+describe('CheckIn, the question controls per kind', () => {
   it('renders Yes/No controls for Advocacy and 1-5 for the rest', () => {
     hookState.current = mockCheckin({ advocacyApplies: true })
     render(

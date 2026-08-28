@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { previousPeriod } from '../lib/month'
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, isYesNo } from '../lib/buckets'
 import { advocacyApplies as gateApplies } from '../lib/gate'
 import { answeredCount, overallScore, requiredQuestions } from '../lib/scoreV2'
 import type { Profile } from '../auth/useProfile'
@@ -60,13 +60,25 @@ function draftFromRow(row: CheckinRow | null): Draft {
   const answers: QuestionScores = {}
   for (const key of ALL_QUESTIONS) {
     const value = row[key as keyof CheckinRow]
-    // Both answer shapes survive this filter, not just numbers: a scale
-    // question stores a number and a yes/no question stores a boolean, and
-    // `false` is as much an answer as `4` is. The retired legacy/pillar
-    // columns and `notes` are excluded not by their JS type but by this loop
-    // running over ALL_QUESTIONS rather than the row's own keys -- see the
-    // file comment above.
-    if (typeof value === 'number' || typeof value === 'boolean') answers[key] = value
+    // Validated against the rubric's OWN kind for this key, not merely "is it
+    // a number or a boolean" -- the same discipline draftCache.ts's
+    // validAnswer() applies to untrusted storage. A bare `number ||
+    // boolean` check would wave a stray number through for an adv_* column
+    // on a database where this migration has not yet run (production,
+    // today): the draft would hold a number where YesNoRow expects a
+    // boolean, its `checked={value === option.value}` would be false for
+    // both options, the question would render blank while answeredCount
+    // still counted it, and a resubmit would write that number straight
+    // back into a boolean column. Excluding `id`, `client_id` and the
+    // retired legacy/pillar columns is still done by iterating
+    // ALL_QUESTIONS rather than the row's own keys -- see the file comment
+    // above -- not by this per-key type check, which only guards the shape
+    // of a value already known to belong to a real question.
+    if (isYesNo(key)) {
+      if (typeof value === 'boolean') answers[key] = value
+    } else if (typeof value === 'number') {
+      answers[key] = value
+    }
   }
   return { answers, notes: row.notes ?? '' }
 }

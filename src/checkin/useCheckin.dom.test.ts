@@ -197,6 +197,72 @@ describe('useCheckin: restoring stored answers', () => {
     expect(result.current.draft.answers).not.toHaveProperty('adv_would_refer')
     expect(result.current.draft.answers).not.toHaveProperty('adv_reference_check')
   })
+
+  // Fix round 1, Important 1: the filter must be validated against each
+  // key's OWN kind, not merely "is it a number or a boolean" -- a bare
+  // `number || boolean` check would wave a stray NUMBER through for an
+  // adv_* column on a database where this migration has not yet run
+  // (production, today). That number would reach YesNoRow, whose
+  // `checked={value === option.value}` is false for both Yes and No, so the
+  // question would render blank while answeredCount kept counting it as
+  // answered -- and a resubmit would write that same number straight back
+  // into a boolean column.
+  it('drops a number stored in a yes/no column, rather than admitting it', async () => {
+    db.checkins = async () => ({
+      data: [
+        {
+          client_id: 1,
+          period: '2026-08-01',
+          notes: null,
+          // The pre-migration shape: a 1-5 score sitting in a column that is
+          // now boolean.
+          adv_left_review: 4,
+        },
+      ],
+      error: null,
+    })
+    const { result } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: null },
+      period: '2026-08-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.answers).not.toHaveProperty('adv_left_review')
+  })
+
+  // Fix round 1, Minor 2: pins the scoping the file comment relies on. The
+  // reviewer mutated `for (const key of ALL_QUESTIONS)` to
+  // `for (const key of Object.keys(row))` and the rest of the suite still
+  // passed -- letting `id`, `client_id` and other non-rubric columns leak
+  // into draft.answers. Seeds a row carrying a retired legacy column and a
+  // non-empty `notes` string alongside two real answers, and asserts the
+  // draft's answer keys are exactly the two seeded answers -- nothing else,
+  // which the `Object.keys(row)` version would fail.
+  it('keeps only the rubric\'s own keys, never a legacy column or notes', async () => {
+    db.checkins = async () => ({
+      data: [
+        {
+          client_id: 1,
+          period: '2026-08-01',
+          notes: 'Renewal conversation went well.',
+          // A retired pillar column this row still carries (public.checkins
+          // has not dropped it yet). Not a real question, and must never
+          // surface as one.
+          relationship: 3,
+          comm_timely: 4,
+          adv_left_review: true,
+        },
+      ],
+      error: null,
+    })
+    const { result } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: null },
+      period: '2026-08-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(Object.keys(result.current.draft.answers).sort()).toEqual(
+      ['adv_left_review', 'comm_timely'].sort(),
+    )
+  })
 })
 
 describe('useCheckin: submit', () => {
