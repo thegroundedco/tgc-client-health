@@ -132,7 +132,8 @@ begin
   -- left overall_score entirely, so it must not affect the score whether the
   -- gate is open or shut. This is the case that would catch a reversion to
   -- the old 22-divisor: a view that still folded Advocacy into the overall's
-  -- denominator (with coalesce(.., 0) masking the null) would score 2.86 here
+  -- denominator (with coalesce(.., 0) masking the null) would score 2.59 here
+  -- -- (54 core + 3 remaining Advocacy yeses cast to int) / 22 = 57 / 22 --
   -- for the gate-open case and pass a not-null-only check; asserting the
   -- exact value catches it even when the gate is open.
   foreach v_col in array c_adv loop
@@ -235,6 +236,19 @@ begin
     raise exception '§3b FAILED: four Nos gave adv_score %, expected 1.00', v_overall;
   end if;
 
+  -- overall_score, read in this same all-No state: it must still be 3.00.
+  -- Reading it HERE -- beside the four-Nos check, before Advocacy is restored
+  -- to all-true below -- is the point: all-No is the state that would move if
+  -- overall_score's divisor (or a coalesce) still counted Advocacy at all. A
+  -- check taken only after restoring to all-true would never see that state.
+  select overall_score into v_overall from public.checkin_scores where id = v_open;
+  if v_overall is distinct from 3.00 then
+    raise exception
+      '§3b FAILED: overall_score read % with Advocacy all No '
+      '(expected unchanged 3.00 -- Advocacy must not leak into it)',
+      v_overall;
+  end if;
+
   -- Three Yeses and one unanswered: null propagates through adv_score exactly
   -- as it does through overall_score for the eighteen.
   update public.checkins
@@ -249,20 +263,10 @@ begin
       v_overall;
   end if;
 
-  -- Restore to fully answered, and confirm overall_score never moved through
-  -- any of the adv_score arithmetic above -- Advocacy is not part of it at
-  -- all, in either direction.
+  -- Restore to fully answered, matching the rest of the fixture for §4 below.
   execute format('update public.checkins set %s where id = $1', v_set_adv) using v_open;
 
-  select overall_score into v_overall from public.checkin_scores where id = v_open;
-  if v_overall is distinct from 3.00 then
-    raise exception
-      '§3b FAILED: overall_score read % while adv_score was under test '
-      '(expected unchanged 3.00 -- Advocacy must not leak into it)',
-      v_overall;
-  end if;
-
-  raise notice '§3b ok: adv_score is 1.00 on four Nos, null on three Yeses and a blank, and overall_score never moved';
+  raise notice '§3b ok: adv_score is 1.00 on four Nos, null on three Yeses and a blank; overall_score stayed 3.00 with Advocacy all No';
 
   -- ============================================================== §4 RLS
   -- WHY THIS SECTION EXISTS: without `with (security_invoker = true)` the view
