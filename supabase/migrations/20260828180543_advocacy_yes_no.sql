@@ -7,6 +7,38 @@
 -- Advocacy answer anywhere to translate, which is the whole reason this lands
 -- before step 4 rather than after it.
 
+-- Preflight. Everything that follows is safe exactly once, against a
+-- database with no Advocacy answers -- and the file has no way to know
+-- which run this is. A first run against production (which has neither this
+-- migration nor 20260827192720) fails loudly on the bare `drop column`s
+-- below with "column does not exist", which is fine and deliberate: it is
+-- what enforces migration ORDER, and is why those drops stay unguarded
+-- rather than gaining `if exists`. But a SECOND run against a database that
+-- already has this migration hits no such error -- every statement below
+-- would succeed again, silently dropping and re-adding the four adv_*
+-- columns WITH WHATEVER ANSWERS THEY HOLD. `db:push` cannot replay an
+-- applied migration because `supabase_migrations.schema_migrations`
+-- remembers it, but the owner applies to production by pasting into the SQL
+-- editor by hand, which has no such memory -- and the same loss follows if
+-- he applies the six-bucket migration and scores even one client before
+-- pasting this one, two separate manual acts and a plausible order. This
+-- block turns that one silent failure into a loud refusal; checking for a
+-- non-null answer works whether the columns are still the pre-migration
+-- smallints or the post-migration booleans, so it catches the danger on
+-- either run.
+do $$ begin
+  if exists (select 1 from public.checkins
+             where adv_left_review is not null or adv_case_study is not null
+                or adv_would_refer is not null or adv_reference_check is not null) then
+    raise exception 'REFUSING: Advocacy answers exist. This migration drops the four adv_* columns and would destroy them. Translate them first.';
+  end if;
+end $$;
+
+-- Already applied to staging (2026-08-28). Adding the guard above changes no
+-- schema -- it is pure preflight, evaluated and discarded -- so staging's
+-- applied result is identical to what this file now produces; there is
+-- nothing to reconcile.
+
 -- The view and the generated column both depend on the four columns, so both
 -- come down first. Dropping the view is not destructive -- it holds no data.
 drop view if exists public.checkin_scores;
@@ -62,7 +94,14 @@ select
   -- Retained even though overall_score no longer consults it: the check-in
   -- screen and the board both need to know whether the gate is open, and
   -- computing it here keeps the database's answer comparable with the
-  -- TypeScript gate's (tests/gateParity.test.ts reads the 90 out of this file).
+  -- TypeScript gate's. tests/gateParity.test.ts does not read the 90 out of
+  -- this file by name -- it resolves whichever migration is the LATEST to
+  -- contain `advocacy_applies`, so it follows the predicate here today and
+  -- would follow it into whatever migration next redefines this view,
+  -- without needing an edit. (An earlier version of this comment named this
+  -- file specifically while the test still pointed at the six-bucket
+  -- migration and had not been touched -- exactly the drift this phrasing
+  -- is now written to survive.)
   (c.started_on is not null and ch.period >= c.started_on + 90) as advocacy_applies,
   round(
     (ch.comm_constructive + ch.comm_timely + ch.comm_consistent
