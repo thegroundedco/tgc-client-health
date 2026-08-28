@@ -1,4 +1,4 @@
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, isYesNo } from '../lib/buckets'
 import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
 
 // The local draft. Slice 1 spec §5.5: every click and keystroke is written here,
@@ -23,20 +23,30 @@ import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
 // this form would present values from a different rubric as this month's
 // answers, which is the same failure class as reading a value that means one
 // thing as though it meant another. So the key carries a version segment, a v1
-// key can never be read as a v2 one, and readDraft deletes any v1 key it passes
-// -- rejected rather than migrated, spec §7.
+// key can never be read as the current one, and readDraft deletes any v1 key it
+// passes -- rejected rather than migrated, spec §7.
+//
+// Fourth, that version has already had to bump once more, for the same reason.
+// Advocacy's four questions became booleans in the database, and a v2 draft
+// holds a NUMBER against a key like adv_left_review -- a 1-5 score where a
+// boolean belongs. So the key is now v3, a v2 key can never be read as a v3
+// one, and readDraft deletes any v2 key it passes -- alongside the v1 discard
+// it already did, because a browser that has not opened this tool since before
+// the six-bucket change still holds one of those, and it is two shapes out of
+// date rather than one.
 
 // Absent, not null: an unanswered question has no key. Everything downstream
 // counts on that -- normaliseAnswers builds on it, and scoreV2.answeredCount
 // treats undefined and null alike so either would be safe there, but the upsert
 // in useCheckin spreads the rubric rather than the object's own keys and would
-// not notice a null.
-export type QuestionScores = Partial<Record<string, number>>
+// not notice a null. false is a real answer, not absence: it gets a key like
+// any other value, and only its absence means unanswered.
+export type QuestionScores = Partial<Record<string, number | boolean>>
 export type Draft = { answers: QuestionScores; notes: string }
 
 export const EMPTY_DRAFT: Draft = { answers: {}, notes: '' }
 export const DRAFT_KEY_PREFIX = 'checkin-draft'
-export const DRAFT_VERSION = 'v2'
+export const DRAFT_VERSION = 'v3'
 
 // Only the three methods used, so a test can supply a plain object rather than
 // a whole Storage.
@@ -51,6 +61,12 @@ function legacyDraftKey(clientId: number, period: string): string {
   return `${DRAFT_KEY_PREFIX}:${clientId}:${period}`
 }
 
+// The key v2 wrote, one version behind the current shape rather than two.
+// Only readDraft knows it, and only to delete it.
+function v2DraftKey(clientId: number, period: string): string {
+  return `${DRAFT_KEY_PREFIX}:v2:${clientId}:${period}`
+}
+
 function defaultStorage(): StorageLike | null {
   try {
     return globalThis.localStorage ?? null
@@ -63,7 +79,13 @@ function isQuestion(key: string): boolean {
   return ALL_QUESTIONS.includes(key)
 }
 
-function validAnswer(value: unknown): value is number {
+// Validated per key against the rubric's kind, not against "is it a number or a
+// boolean". A 4 stored against adv_left_review is exactly the v2 shape this
+// version bump exists to reject, and it must be dropped even if it somehow
+// reaches a v3 key -- storage is untrusted, and a value that survives here
+// reaches the upsert and comes back as a type error nobody can act on.
+function validAnswer(key: string, value: unknown): value is number | boolean {
+  if (isYesNo(key)) return typeof value === 'boolean'
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&
@@ -81,12 +103,18 @@ function normaliseAnswers(source: unknown): QuestionScores {
   const answers: QuestionScores = {}
   if (typeof source === 'object' && source !== null) {
     for (const [key, value] of Object.entries(source)) {
-      if (isQuestion(key) && validAnswer(value)) answers[key] = value
+      if (isQuestion(key) && validAnswer(key, value)) answers[key] = value
     }
   }
   return answers
 }
 
+// Counts keys, not truthy values: `false` is a real answer to a yes/no
+// question, so a draft holding only `{ adv_left_review: false }` must not
+// register as empty. Object.keys sees the key regardless of what it holds,
+// so this is already correct as written -- there is nothing to change here
+// for booleans, only this note for the next reader who reaches for `if
+// (value)` and finds it silently drops a "No".
 export function isDraftEmpty(draft: Draft): boolean {
   return Object.keys(draft.answers).length === 0 && draft.notes.trim() === ''
 }
@@ -99,11 +127,16 @@ export function readDraft(
   if (!store) return null
 
   // Before anything else, and its own try/catch: a throwing removeItem must not
-  // stop this month's real draft from being read. Nothing depends on the
-  // deletion succeeding -- a surviving v1 key is still unreadable, because
-  // draftKey can no longer name it.
+  // stop this month's real draft from being read. Nothing depends on either
+  // deletion succeeding -- a surviving v1 or v2 key is still unreadable,
+  // because draftKey can no longer name it.
   try {
     store.removeItem(legacyDraftKey(clientId, period))
+  } catch {
+    // Nothing to do and nothing to say.
+  }
+  try {
+    store.removeItem(v2DraftKey(clientId, period))
   } catch {
     // Nothing to do and nothing to say.
   }
@@ -199,6 +232,11 @@ export function clearDraft(
 // different -- which would raise the "you have unsaved changes" warning on every
 // load. Notes are trimmed for the same reason: a textarea's trailing newline is
 // not a change the person made.
+//
+// The `?? null` per key already distinguishes `false` from absent -- `false`
+// coalesces to itself, only `undefined` becomes `null` -- so a yes/no answer
+// of "No" compares unequal to that same question being unanswered, exactly as
+// it must. Nothing here needed to change for booleans.
 export function draftsDiffer(a: Draft, b: Draft): boolean {
   if (a.notes.trim() !== b.notes.trim()) return true
   for (const key of ALL_QUESTIONS) {

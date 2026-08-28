@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, isYesNo } from '../lib/buckets'
 import {
   DRAFT_KEY_PREFIX,
   DRAFT_VERSION,
@@ -143,7 +143,13 @@ describe('the versioned key', () => {
 
 describe('the 22 answers', () => {
   it('round-trips every question key the rubric defines', () => {
-    const answers = Object.fromEntries(ALL_QUESTIONS.map((key, index) => [key, (index % 5) + 1]))
+    // Each key gets a value matching its own kind -- a scale question gets a
+    // 1-5 score, a yes/no question gets a boolean -- because the rubric mixes
+    // both kinds now, and a value valid for one is exactly what the other must
+    // reject.
+    const answers = Object.fromEntries(
+      ALL_QUESTIONS.map((key, index) => [key, isYesNo(key) ? index % 2 === 0 : (index % 5) + 1]),
+    )
     const { store } = memoryStore()
     expect(writeDraft(7, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
     expect(readDraft(7, '2026-08-01', store)?.answers).toEqual(answers)
@@ -324,5 +330,90 @@ describe('draftsDiffer', () => {
     expect(
       draftsDiffer({ answers: {}, notes: 'a note\n' }, { answers: {}, notes: 'a note' }),
     ).toBe(false)
+  })
+})
+
+describe('the version bump to v3', () => {
+  it('carries v3 in the key', () => {
+    expect(DRAFT_VERSION).toBe('v3')
+    expect(draftKey(7, '2026-08-01')).toBe(`${DRAFT_KEY_PREFIX}:v3:7:2026-08-01`)
+  })
+
+  // The new instance of the old failure: a v2 draft holds a NUMBER against an
+  // Advocacy key, and those columns are booleans now.
+  it('ignores and deletes a v2 draft', () => {
+    const v2Key = `${DRAFT_KEY_PREFIX}:v2:7:2026-08-01`
+    const { store, map } = memoryStore({
+      [v2Key]: JSON.stringify({ answers: { adv_left_review: 4, comm_timely: 3 }, notes: 'v2' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)).toBeNull()
+    expect(map.has(v2Key)).toBe(false)
+  })
+
+  // Still. A browser that has not opened this tool since before the six-bucket
+  // change holds one of these, and it is two shapes out of date rather than one.
+  it('still ignores and deletes a v1 draft', () => {
+    const v1Key = `${DRAFT_KEY_PREFIX}:7:2026-08-01`
+    const { store, map } = memoryStore({
+      [v1Key]: JSON.stringify({ pillars: { relationship: 4 }, notes: 'v1' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)).toBeNull()
+    expect(map.has(v1Key)).toBe(false)
+  })
+
+  it('a throwing removeItem on either old key cannot break the read', () => {
+    const store: StorageLike = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => { throw new Error('quota') },
+    }
+    expect(() => readDraft(7, '2026-08-01', store)).not.toThrow()
+  })
+})
+
+describe('boolean answers', () => {
+  it('round-trips true and false against the yes/no keys', () => {
+    const { store } = memoryStore()
+    const answers = { adv_left_review: true, adv_case_study: false, comm_timely: 3 }
+    expect(writeDraft(7, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
+    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual(answers)
+  })
+
+  // false is a real answer and must survive. An earlier draft of this module
+  // would have treated it as empty.
+  it('a draft of nothing but a single false is not empty', () => {
+    const draft = { answers: { adv_left_review: false }, notes: '' }
+    expect(isDraftEmpty(draft)).toBe(false)
+    const { store } = memoryStore()
+    expect(writeDraft(7, '2026-08-01', draft, store)).toBe(true)
+    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual({ adv_left_review: false })
+  })
+
+  // Type discipline per key, both ways round.
+  it('drops a number against a yes/no key and a boolean against a scale key', () => {
+    const { store } = memoryStore({
+      [draftKey(7, '2026-08-01')]: JSON.stringify({
+        answers: { adv_left_review: 4, comm_timely: true, comm_constructive: 3 },
+        notes: '',
+      }),
+    })
+    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual({ comm_constructive: 3 })
+  })
+})
+
+describe('draftsDiffer with booleans', () => {
+  it('sees true against false', () => {
+    expect(draftsDiffer(
+      { answers: { adv_left_review: true }, notes: '' },
+      { answers: { adv_left_review: false }, notes: '' },
+    )).toBe(true)
+  })
+
+  // The one that would silently discard work: false is present, absent is not.
+  it('sees false against unanswered', () => {
+    expect(draftsDiffer(
+      { answers: { adv_left_review: false }, notes: '' },
+      { answers: {}, notes: '' },
+    )).toBe(true)
   })
 })
