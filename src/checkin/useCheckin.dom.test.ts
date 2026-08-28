@@ -1,0 +1,220 @@
+// @vitest-environment jsdom
+
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Profile } from '../auth/useProfile'
+import { ALL_QUESTIONS } from '../lib/buckets'
+import { requiredQuestions } from '../lib/scoreV2'
+
+// A fake of the Supabase chained builder, in the same style as
+// src/board/useBoard.dom.test.ts: two tables are read on load
+// (`checkins` and `checkin_scores`), and `checkins` also takes the upsert
+// that submit() sends. Kept as two independently swappable async functions
+// per table, plus the upsert spy, so a test can make either read fail or
+// inspect exactly what was written without caring about the others.
+type Result<T> = { data: T; error: unknown }
+
+const db = vi.hoisted(() => ({
+  checkins: async (): Promise<Result<unknown[]>> => ({ data: [], error: null }),
+  scores: async (): Promise<Result<unknown[]>> => ({ data: [], error: null }),
+  upsertResult: async (row: Record<string, unknown>): Promise<Result<unknown>> => ({
+    data: { ...row, id: 1, created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-15T00:00:00.000Z' },
+    error: null,
+  }),
+  upsert: vi.fn(),
+}))
+
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    from: (table: string) => {
+      if (table === 'checkins') {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => db.checkins(),
+            }),
+          }),
+          upsert: (row: Record<string, unknown>) => {
+            db.upsert(row)
+            return {
+              select: () => ({
+                single: () => db.upsertResult(row),
+              }),
+            }
+          },
+        }
+      }
+      if (table === 'checkin_scores') {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => db.scores(),
+            }),
+          }),
+        }
+      }
+      throw new Error(`unexpected table: ${table}`)
+    },
+  },
+}))
+
+import { useCheckin } from './useCheckin'
+
+const PROFILE: Profile = {
+  id: 'profile-1',
+  email: 'amy@example.com',
+  full_name: 'Amy Account',
+  is_active: true,
+  role: 'account_manager',
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-01T00:00:00.000Z',
+}
+
+beforeEach(() => {
+  db.checkins = async () => ({ data: [], error: null })
+  db.scores = async () => ({ data: [], error: null })
+  db.upsert.mockClear()
+  db.upsertResult = async (row) => ({
+    data: { ...row, id: 1, created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-15T00:00:00.000Z' },
+    error: null,
+  })
+  // Each test's own localStorage, not the jsdom default across tests: a draft
+  // written by one test must never be read back by the next one, the same
+  // isolation draftCache.test.ts gives itself.
+  window.localStorage.clear()
+})
+
+// Renders the hook with a client shape and period, and hands back the upsert
+// spy alongside the result -- the shape the brief's tests are written against.
+// An arrow around renderHook, not a bare reference, for the same
+// react/rules-of-hooks reason useBoard.dom.test.ts's `ready()` gives.
+function renderCheckin(opts: {
+  client: { id: number; name: string; started_on: string | null }
+  period?: string
+}) {
+  const period = opts.period ?? '2026-08-01'
+  const rendered = renderHook(() => useCheckin(opts.client, period, PROFILE))
+  return { ...rendered, upsert: db.upsert }
+}
+
+describe('useCheckin: the gate, through the hook', () => {
+  // The gate, through the hook. The screen's whole shape depends on this boolean
+  // and it is the one value here that is computed rather than fetched.
+  it('is gated out for a client with no start date, and requires 18', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.advocacyApplies).toBe(false)
+    expect(result.current.required).toBe(18)
+  })
+
+  it('is gated in past 90 days, and requires 22', async () => {
+    const { result } = renderCheckin({
+      client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
+      period: '2026-04-01',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.advocacyApplies).toBe(true)
+    expect(result.current.required).toBe(22)
+  })
+})
+
+describe('useCheckin: the local overall', () => {
+  // §3.3: a missing answer must never read as a low score. 17 of 18 is null, not
+  // a mean of the 17.
+  it('has no local overall until every required question is answered', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    const required = requiredQuestions(false)
+    for (const key of required.slice(0, required.length - 1)) {
+      act(() => result.current.setAnswer(key, 4))
+    }
+    expect(result.current.localOverall).toBeNull()
+
+    act(() => result.current.setAnswer(required[required.length - 1], 4))
+    expect(result.current.localOverall).toBe(4)
+  })
+
+  // The four gated-out Advocacy answers must not hold the overall hostage.
+  it('ignores unanswered Advocacy questions when the gate is shut', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))
+    expect(result.current.localOverall).toBe(3)
+    expect(result.current.scored).toBe(18)
+  })
+})
+
+describe('useCheckin: submit', () => {
+  // Every answer column is sent, including the unanswered ones as null. Sending
+  // only the answered ones would leave a cleared answer at its old value in the
+  // database, and the bucket columns are generated from those columns -- so the
+  // bar on the board would be the one nobody chose.
+  it('sends all 22 answer columns on save, unanswered ones as null', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 5))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+
+    const payload = upsert.mock.calls[0][0]
+    for (const key of ALL_QUESTIONS) expect(payload).toHaveProperty(key)
+    expect(payload.comm_timely).toBe(5)
+    expect(payload.adv_left_review).toBeNull()
+  })
+
+  // The submitted marker tracks the REQUIRED count, so a gated-out check-in can
+  // be submitted at 18. Marking it only at 22 would make a complete check-in
+  // permanently unsubmittable for every client inside their first 90 days.
+  it('marks a gated-out check-in submitted at 18 answers', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    expect(upsert.mock.calls[0][0].submitted_at).not.toBeNull()
+  })
+
+  // The confirmation survives the score refresh. An earlier draft of this hook
+  // called load() here, which dispatches 'loaded' and resets the reducer to
+  // `clean` -- erasing the sentence that says the save happened, which is the
+  // exact defect this whole screen was rewritten to fix.
+  it('still says the check-in was saved after refreshing the overall', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.submit())
+    await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
+    expect(result.current.saveState.kind).toBe('saved')
+  })
+
+  // The ordering the brief calls out as the single most important thing in
+  // this task: the score refresh is awaited BEFORE 'succeeded' is dispatched,
+  // so storedOverall is never stale at the exact moment the confirmation
+  // appears. A version that fired the refresh and dispatched immediately
+  // would pass the previous test (saveState still reaches 'saved') while
+  // failing this one -- so this test is not redundant with it, it pins the
+  // ordering the previous test cannot see.
+  it('has the refreshed stored overall by the time the save is confirmed', async () => {
+    let scoresRead = 0
+    db.scores = async () => {
+      scoresRead += 1
+      // The second read is the post-save refresh triggered from submit();
+      // that is the one the confirmation must already reflect.
+      if (scoresRead >= 2) {
+        return {
+          data: [{ client_id: 1, period: '2026-08-01', overall_score: 4, advocacy_applies: false }],
+          error: null,
+        }
+      }
+      return { data: [], error: null }
+    }
+
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.submit())
+    await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
+    expect(result.current.storedOverall).toBe(4)
+  })
+})

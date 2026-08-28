@@ -10,7 +10,16 @@ import { activeCount, isOnBoard } from './boardScope'
 // union, for the same reason AdminClient's is: that is what the column holds --
 // text with a check constraint -- and narrowing it here would be a claim this
 // file cannot verify.
-export type BoardClient = { id: number; name: string; status: string }
+export type BoardClient = {
+  id: number
+  name: string
+  status: string
+  // Selected here rather than queried by the check-in screen, which is the only
+  // thing that reads it today: this query already runs, and the check-in screen
+  // opening would otherwise cost a round trip to fetch one date. Step 3's card
+  // needs it too, for the gated-out client's five-bars-and-a-note.
+  started_on: string | null
+}
 
 export type UseBoard = {
   status: 'loading' | 'ready' | 'error'
@@ -52,7 +61,7 @@ export function useBoard(period: string): UseBoard {
           // active clients; it now reads every row and the show-archived toggle
           // decides what is drawn. `status` is selected because that decision
           // needs it.
-          .select('id, name, status')
+          .select('id, name, status, started_on')
           .order('name')
 
         if (isCancelled()) return
