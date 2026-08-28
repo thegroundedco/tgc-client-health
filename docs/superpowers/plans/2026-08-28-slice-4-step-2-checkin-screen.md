@@ -78,6 +78,19 @@ Between this step and step 3, a check-in saved through the new screen writes the
 
 This is inherent to splitting the screen from the board, it exists on staging only (production is unmigrated and deploys in step 4), and it resolves the moment step 3 points the board at `checkin_scores`. Do not try to fix it here by writing both column sets: the old columns are being retired, and populating them would make the `legacy_*` rename in step 3 harder, not easier.
 
+## The broken window: Tasks 3 through 7
+
+**Between Task 3 and Task 7 the repository does not build, and `npm test -- --run` does not pass. This is expected. Do not try to fix it.**
+
+The check-in screen is rewritten from the bottom up, so its layers disagree with each other until the top one lands:
+
+- **After Task 3**, `useCheckin.ts` still reads `draft.pillars`, which `Draft` no longer has. TypeScript types are erased before vitest runs, so this is not a test failure — it is `undefined` at runtime in any test that exercises the real hook. `npm run build` fails.
+- **After Task 4**, `CheckIn.tsx` imports `./PillarRow`, which no longer exists. That *is* a module-resolution failure, so **`CheckIn.test.tsx` and `CheckIn.dom.test.tsx` fail from Task 4 until Task 7 rewrites them.**
+
+**So Tasks 3, 4, 5 and 6 run only the test files their own step lists name.** Do not run the full suite inside the window and do not run `npm run build`; both are expected to fail and neither tells you anything about the task you are on. Tasks 1 and 2 are outside the window and do run the full suite and the build.
+
+**Task 7 Step 6 is the gate that closes the window** — the first full-suite-plus-build run since Task 2, and the one that must come back green.
+
 ---
 
 ## Task 1: `started_on` on the clients admin
@@ -1814,14 +1827,38 @@ and in the upsert, `...answers` in place of `...pillars`. The `.select().single(
           .single()
 ```
 
-and on success, after `setStored(data)`, refresh the view so the stored overall is the database's:
+and on success, after `setStored(data)`, refresh the view — but **do not call `load()`**:
 
 ```ts
         setStored(data)
-        // The view is a separate relation and the upsert could not return it.
-        // Without this the screen would show a stored overall from before the
-        // save for as long as it stayed open.
-        void load()
+
+        // The view is a separate relation, so the upsert could not return the
+        // overall. It is re-read here, and AWAITED BEFORE the confirmation is
+        // dispatched, for two reasons that pull the same way.
+        //
+        // Not load(): load() dispatches { type: 'loaded' }, which resets the
+        // reducer to `clean` -- wiping the `succeeded` confirmation that is
+        // about to be dispatched below. The confirmation IS this slice; the
+        // whole rewrite exists because a save that worked looked exactly like
+        // one that failed, and refreshing a number by erasing the sentence that
+        // says the save happened would reintroduce that defect from the other
+        // side.
+        //
+        // And awaited, not fired off: displayedOverall shows the STORED overall
+        // once the state is `saved`, so dispatching the confirmation before this
+        // lands would print an em dash beside "Check-in submitted" -- a complete
+        // check-in reading as not scored, for one round trip.
+        const refreshed = await supabase
+          .from('checkin_scores')
+          .select('*')
+          .eq('client_id', clientId)
+          .in('period', [lastPeriod, period])
+
+        // A failed refresh is not a failed save. The write succeeded and the
+        // person is told so; the overall stays at its pre-save value until the
+        // next load. Reporting a save failure here would be the more harmful
+        // lie of the two.
+        if (!refreshed.error) setScores(refreshed.data)
 ```
 
 Return the new shape:
@@ -1853,7 +1890,24 @@ Return the new shape:
   }
 ```
 
-Add `applies` and `required` to `submit`'s dependency array.
+Add `applies` and `required` to `submit`'s dependency array. **Do not add `load`** — `submit` no longer calls it, and adding it would rebuild `submit` on every load.
+
+Add a test pinning the defect this avoids:
+
+```ts
+// The confirmation survives the score refresh. An earlier draft of this hook
+// called load() here, which dispatches 'loaded' and resets the reducer to
+// `clean` -- erasing the sentence that says the save happened, which is the
+// exact defect this whole screen was rewritten to fix.
+it('still says the check-in was saved after refreshing the overall', async () => {
+  const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+  await waitFor(() => expect(result.current.status).toBe('ready'))
+  act(() => result.current.setAnswer('comm_timely', 4))
+  act(() => result.current.submit())
+  await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
+  expect(result.current.saveState.kind).toBe('saved')
+})
+```
 
 - [ ] **Step 5: Run to verify it passes**
 
@@ -1911,11 +1965,20 @@ it('states the scale once', () => {
 })
 
 describe('when the gate is shut', () => {
-  // Shown rather than hidden, "so the scorer learns the bucket exists".
-  it('still renders the Advocacy section, with its reason', () => {
-    renderScreen({ advocacyApplies: false, gateReason: 'no start date' })
+  // The reason is NOT a hook field -- the screen derives it from the client's
+  // start date via advocacyGate(). So these drive it through `startedOn` on the
+  // client prop, and only `advocacyApplies` comes from the mocked hook. A test
+  // that passed a `gateReason` would be asserting against a prop that does not
+  // exist and would pass whatever the screen rendered.
+  it('still renders the Advocacy section, and names the missing start date', () => {
+    renderScreen({ advocacyApplies: false, startedOn: null })
     expect(screen.getByTestId('bucket-advocacy')).toBeInTheDocument()
     expect(screen.getByTestId('advocacy-gate')).toHaveTextContent('no start date')
+  })
+
+  it('names the month the gate opens for a client inside their first 90 days', () => {
+    renderScreen({ advocacyApplies: false, startedOn: '2026-01-15', period: '2026-03-01' })
+    expect(screen.getByTestId('advocacy-gate')).toHaveTextContent('May 2026')
   })
 
   it('disables every Advocacy radio and leaves the other 18 enabled', () => {
@@ -1975,6 +2038,7 @@ import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
+import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
@@ -2122,7 +2186,7 @@ The six sections, replacing `<div className={styles.pillars}>`:
                   question={question}
                   value={draft.answers[question.key]}
                   lastValue={
-                    (lastMonth?.[question.key as keyof typeof lastMonth] as number | null) ?? null
+                    (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
                   }
                   disabled={saving || !canEdit || shut}
                   onChange={(value) => checkin.setAnswer(question.key, value)}
