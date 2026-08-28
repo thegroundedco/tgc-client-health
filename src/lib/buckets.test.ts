@@ -4,6 +4,8 @@ import {
   BUCKETS,
   BUCKET_DEFINITIONS,
   GATED_BUCKET,
+  isYesNo,
+  OVERALL_QUESTIONS,
   questionsFor,
 } from './buckets'
 
@@ -80,5 +82,38 @@ describe('the question keys', () => {
         expect(question.prompt.trim(), question.key).toBe(question.prompt)
       }
     }
+  })
+})
+
+describe('question kinds', () => {
+  it('marks every Advocacy question yes/no and every other question scale', () => {
+    for (const bucket of BUCKETS) {
+      for (const question of questionsFor(bucket)) {
+        expect(question.kind).toBe(bucket === GATED_BUCKET ? 'yesno' : 'scale')
+      }
+    }
+  })
+
+  it('isYesNo agrees with the definitions, and is false for an unknown key', () => {
+    expect(isYesNo('adv_left_review')).toBe(true)
+    expect(isYesNo('comm_timely')).toBe(false)
+    expect(isYesNo('not_a_question')).toBe(false)
+  })
+
+  // The eighteen that make the overall. Spec §3.2 as amended: Advocacy is
+  // excluded whatever the gate says, so this list is fixed and does not take a
+  // gate argument.
+  it('OVERALL_QUESTIONS is the 18 non-Advocacy keys, in rubric order', () => {
+    expect(OVERALL_QUESTIONS).toHaveLength(18)
+    expect(OVERALL_QUESTIONS.some((k) => isYesNo(k))).toBe(false)
+    expect([...OVERALL_QUESTIONS]).toEqual(
+      ALL_QUESTIONS.filter((k) => !isYesNo(k)),
+    )
+  })
+
+  it('the four yes/no keys are exactly the Advocacy bucket', () => {
+    expect(ALL_QUESTIONS.filter(isYesNo)).toEqual(
+      questionsFor(GATED_BUCKET).map((q) => q.key),
+    )
   })
 })

@@ -23,10 +23,19 @@ export type Bucket = (typeof BUCKETS)[number]
 // written as the string at each call site, so the gate has one definition.
 export const GATED_BUCKET: Bucket = 'advocacy'
 
+export type QuestionKind = 'scale' | 'yesno'
+
 export type Question = {
   // The column on public.checkins. Also the key in an Answers object.
   key: string
   prompt: string
+  // How it is answered, and therefore what column type holds it. 'scale' is a
+  // 1-5 smallint; 'yesno' is a boolean. Carried per question rather than per
+  // bucket, even though today every yesno question happens to be in Advocacy:
+  // the rubric is the one place that knows what a question IS, and a consumer
+  // asking "is this bucket Advocacy?" to decide how to render a control would
+  // be reading identity where it means to read type.
+  kind: QuestionKind
 }
 
 export type BucketDefinition = {
@@ -44,41 +53,42 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     label: 'Communication',
     initial: 'C',
     questions: [
-      { key: 'comm_constructive', prompt: 'Provides constructive feedback.' },
-      { key: 'comm_timely', prompt: 'Provides timely feedback.' },
-      { key: 'comm_consistent', prompt: 'Provides consistent feedback.' },
+      { key: 'comm_constructive', prompt: 'Provides constructive feedback.', kind: 'scale' },
+      { key: 'comm_timely', prompt: 'Provides timely feedback.', kind: 'scale' },
+      { key: 'comm_consistent', prompt: 'Provides consistent feedback.', kind: 'scale' },
     ],
   },
   growth: {
     label: 'Growth',
     initial: 'G',
     questions: [
-      { key: 'growth_goals_defined', prompt: 'Short and long term goals are clearly defined.' },
-      { key: 'growth_progress_trackable', prompt: 'We can track progress towards their goals.' },
-      { key: 'growth_hitting_goals', prompt: 'We are hitting their goals.' },
+      { key: 'growth_goals_defined', prompt: 'Short and long term goals are clearly defined.', kind: 'scale' },
+      { key: 'growth_progress_trackable', prompt: 'We can track progress towards their goals.', kind: 'scale' },
+      { key: 'growth_hitting_goals', prompt: 'We are hitting their goals.', kind: 'scale' },
     ],
   },
   finances: {
     label: 'Finances',
     initial: 'F',
     questions: [
-      { key: 'fin_rack_rate', prompt: 'Paying rack rate.' },
-      { key: 'fin_pays_on_time', prompt: 'Pays on time.' },
-      { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.' },
-      { key: 'fin_on_terms', prompt: 'On terms.' },
+      { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'scale' },
+      { key: 'fin_pays_on_time', prompt: 'Pays on time.', kind: 'scale' },
+      { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.', kind: 'scale' },
+      { key: 'fin_on_terms', prompt: 'On terms.', kind: 'scale' },
     ],
   },
   relationship: {
     label: 'Relationship',
     initial: 'R',
     questions: [
-      { key: 'rel_collaborative', prompt: 'They are collaborative.' },
-      { key: 'rel_respectful', prompt: 'They are respectful.' },
-      { key: 'rel_fun', prompt: 'They have fun with us.' },
+      { key: 'rel_collaborative', prompt: 'They are collaborative.', kind: 'scale' },
+      { key: 'rel_respectful', prompt: 'They are respectful.', kind: 'scale' },
+      { key: 'rel_fun', prompt: 'They have fun with us.', kind: 'scale' },
       {
         key: 'rel_multi_threaded',
         prompt:
           'We are multi-threaded, we work with their partners, and they work with ours.',
+        kind: 'scale',
       },
     ],
   },
@@ -86,20 +96,24 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     label: 'Delivery',
     initial: 'D',
     questions: [
-      { key: 'del_on_time', prompt: 'We are delivering on time.' },
-      { key: 'del_quantity', prompt: 'We are delivering a healthy quantity.' },
-      { key: 'del_client_likes', prompt: 'The client likes our assets.' },
-      { key: 'del_we_are_proud', prompt: 'We are proud of what we are delivering.' },
+      { key: 'del_on_time', prompt: 'We are delivering on time.', kind: 'scale' },
+      { key: 'del_quantity', prompt: 'We are delivering a healthy quantity.', kind: 'scale' },
+      { key: 'del_client_likes', prompt: 'The client likes our assets.', kind: 'scale' },
+      { key: 'del_we_are_proud', prompt: 'We are proud of what we are delivering.', kind: 'scale' },
     ],
   },
   advocacy: {
     label: 'Advocacy',
     initial: 'A',
     questions: [
-      { key: 'adv_left_review', prompt: 'They have left a review.' },
-      { key: 'adv_case_study', prompt: 'We could use them for a case study.' },
-      { key: 'adv_would_refer', prompt: 'They would refer us without being prompted.' },
-      { key: 'adv_reference_check', prompt: 'We could send leads to them as a reference check.' },
+      { key: 'adv_left_review', prompt: 'They have left a review.', kind: 'yesno' },
+      { key: 'adv_case_study', prompt: 'We could use them for a case study.', kind: 'yesno' },
+      { key: 'adv_would_refer', prompt: 'They would refer us without being prompted.', kind: 'yesno' },
+      {
+        key: 'adv_reference_check',
+        prompt: 'We could send leads to them as a reference check.',
+        kind: 'yesno',
+      },
     ],
   },
 }
@@ -113,3 +127,23 @@ export const ALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
 )
 
 export type QuestionKey = (typeof ALL_QUESTIONS)[number]
+
+export function isYesNo(key: string): boolean {
+  return YESNO_KEYS.includes(key)
+}
+
+const YESNO_KEYS: readonly string[] = BUCKETS.flatMap((bucket) =>
+  questionsFor(bucket)
+    .filter((question) => question.kind === 'yesno')
+    .map((question) => question.key),
+)
+
+// The eighteen the overall is the mean of. Spec §3.2 as amended: Advocacy is
+// excluded whether the gate is open or shut, so unlike requiredQuestions() in
+// scoreV2 this takes no gate argument and never varies. Keeping the two apart
+// is the whole point -- they were one number before 2026-08-28 and are two now.
+export const OVERALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
+  questionsFor(bucket)
+    .filter((question) => question.kind === 'scale')
+    .map((question) => question.key),
+)
