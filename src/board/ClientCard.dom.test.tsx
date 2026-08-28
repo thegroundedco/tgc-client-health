@@ -10,7 +10,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const CLIENT = { id: 7, name: 'Polar Divide', status: 'active' }
+const CLIENT = { id: 7, name: 'Polar Divide', status: 'active', started_on: null }
 const ME = '11111111-1111-1111-1111-111111111111'
 
 const bars = () => screen.getAllByTestId('pillar-bar')
@@ -205,8 +205,8 @@ describe('a client card', () => {
 })
 
 describe('an archived client card', () => {
-  const ARCHIVED = { id: 8, name: 'Test Client', status: 'former' }
-  const PAUSED = { id: 9, name: 'Bellwether', status: 'paused' }
+  const ARCHIVED = { id: 8, name: 'Test Client', status: 'former', started_on: null }
+  const PAUSED = { id: 9, name: 'Bellwether', status: 'paused', started_on: null }
 
   it('marks an active card with no status pill, so the working roster stays quiet', () => {
     render(<ClientCard checkin={null} client={CLIENT} onOpen={() => {}} viewerId={ME} />)

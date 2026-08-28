@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { Profile } from '../auth/useProfile'
 import type { SaveState } from './saveState'
 import type { CheckinRow, UseCheckin } from './useCheckin'
-import { PILLARS } from '../lib/score'
 
 // Fix round 2, Important 1: nothing in this file tree tested CheckIn.tsx's
 // *use* of saveStatus() -- if the `.map()` over its result were replaced
@@ -11,8 +10,8 @@ import { PILLARS } from '../lib/score'
 // saveState.test.ts would still pass, because that file only calls
 // saveStatus() directly and never renders CheckIn. This file renders CheckIn
 // itself (with useCheckin mocked, so no Supabase client and no DOM are
-// needed) and reads the save-status region out of the markup by id, the same
-// way a reviewer opening the deployed page would read it by eye.
+// needed) and reads markup out of the string react-dom/server produces, the
+// same way a reviewer opening the deployed page would read it by eye.
 //
 // vi.mock's factory runs before every import in this file, including
 // CheckIn.tsx's own `import { useCheckin } from './useCheckin'` -- vi.hoisted
@@ -42,30 +41,30 @@ const PROFILE: Profile = {
   updated_at: '2026-01-01T00:00:00.000Z',
 }
 
-const CLIENT = { id: 1, name: 'Acme' }
 const PERIOD = '2026-08-01'
+// Well clear of the gate for PERIOD, so the default fixture's client and its
+// mocked advocacyApplies (below) agree -- the gate is a separate computation
+// (advocacyGate, driven by this date) from the hook's own advocacyApplies
+// field, and a test not about the gate itself should not have the two
+// disagree by accident.
+const CLIENT = { id: 1, name: 'Acme', started_on: '2020-01-01' }
 
 function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
   return {
     id: 1,
     client_id: CLIENT.id,
     period: PERIOD,
-    relationship: 3,
-    delivery: 3,
-    financial: 3,
-    sentiment: 3,
-    growth: 3,
-    total_score: 15,
+    relationship: null,
+    delivery: null,
+    financial: null,
+    sentiment: null,
+    growth: null,
+    total_score: null,
     notes: null,
     submitted_at: null,
     submitted_by: null,
     created_at: '2026-08-01T00:00:00.000Z',
     updated_at: '2026-08-21T15:42:00.000Z',
-    // The 22 answer columns and 6 generated bucket scores added by the
-    // six-bucket migration (20260827192720_six_bucket_scoring.sql). Verified
-    // on staging: the sole existing checkins row has null in every one of
-    // these columns (production was not queried), so null is the true value
-    // here, not a placeholder.
     comm_constructive: null,
     comm_timely: null,
     comm_consistent: null,
@@ -95,6 +94,36 @@ function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
     del_score: null,
     adv_score: null,
     ...overrides,
+  }
+}
+
+// The full hook shape, defaulted to a settled, ungated, empty screen. Every
+// test overrides only the handful of fields its own scenario cares about, in
+// the same spirit as mockCheckin below.
+function defaultHook(): UseCheckin {
+  return {
+    status: 'ready',
+    loadError: null,
+    stored: null,
+    lastMonth: null,
+    lastPeriod: '2026-07-01',
+    draft: { answers: {}, notes: '' },
+    saveState: { kind: 'clean' },
+    advocacyApplies: true,
+    required: 22,
+    scored: 0,
+    localOverall: null,
+    storedOverall: null,
+    lastOverall: null,
+    hasContent: false,
+    storedSubmitted: false,
+    storedByYou: false,
+    draftPersisted: true,
+    unsavedFromEarlierVisit: false,
+    setAnswer: () => {},
+    setNotes: () => {},
+    reload: () => {},
+    submit: () => {},
   }
 }
 
@@ -139,43 +168,26 @@ const STORED_SHAPES: readonly {
   },
 ]
 
-function mockCheckin(options: {
-  readFailed: boolean
-  state: SaveState
-  hasContent: boolean
-  stored: CheckinRow | null
-  storedSubmitted: boolean
-}): UseCheckin {
-  const { readFailed, state, hasContent, stored, storedSubmitted } = options
-  return {
-    status: readFailed ? 'error' : 'ready',
-    loadError: readFailed ? 'network refused' : null,
-    stored,
-    lastMonth: null,
-    lastPeriod: '2026-07-01',
-    draft: {
-      pillars: hasContent ? { relationship: 3, delivery: 3, financial: 3 } : {},
-      notes: '',
-    },
-    saveState: state,
-    scored: hasContent ? 3 : 0,
-    localTotal: hasContent ? 9 : null,
-    hasContent,
-    storedSubmitted,
-    storedByYou: storedSubmitted && stored?.submitted_by === PROFILE.id,
-    draftPersisted: true,
-    unsavedFromEarlierVisit: false,
-    setPillar: () => {},
-    setNotes: () => {},
-    reload: () => {},
-    submit: () => {},
-  }
+type ScreenOverrides = Partial<UseCheckin> & {
+  // Not hook fields: the gate the screen shows is derived from the client's
+  // start date via advocacyGate(client.started_on, period), never from a hook
+  // field -- so these drive the gate through the same props the real screen
+  // reads, and `advocacyApplies` above is the only piece of gate-adjacent
+  // state that genuinely does come from the hook.
+  startedOn?: string | null
+  period?: string
 }
 
-function render(options: Parameters<typeof mockCheckin>[0]) {
-  hookState.current = mockCheckin(options)
+function render(overrides: ScreenOverrides = {}): string {
+  const { startedOn, period, ...hookOverrides } = overrides
+  hookState.current = { ...defaultHook(), ...hookOverrides }
+  // `startedOn` can legitimately be `null` (no start date), so its presence
+  // is checked with `in` rather than `??` -- `null ?? fallback` would read
+  // "not provided" and silently discard a test's explicit null.
+  const startedOnValue = 'startedOn' in overrides ? startedOn : CLIENT.started_on
+  const client = { ...CLIENT, started_on: startedOnValue ?? null }
   return renderToStaticMarkup(
-    <CheckIn client={CLIENT} period={PERIOD} profile={PROFILE} onBack={() => {}} />,
+    <CheckIn client={client} period={period ?? PERIOD} profile={PROFILE} onBack={() => {}} />,
   )
 }
 
@@ -183,6 +195,24 @@ function extractSaveStatusText(markup: string): string | null {
   const match = markup.match(/<p[^>]*\bid="checkin-save-status"[^>]*>([\s\S]*?)<\/p>/)
   if (!match) return null
   return match[1].replace(/<[^>]+>/g, '').trim()
+}
+
+// A generic reader for the flat, non-self-nesting elements this screen marks
+// with data-testid -- headings, spans, a <p> and a <dl> with no element of
+// its own tag nested inside. Returns every match, in document order, so the
+// six-heading test can assert on order and not only membership.
+function extractAllByTestId(markup: string, tag: string, testid: string): string[] {
+  const re = new RegExp(`<${tag}[^>]*\\bdata-testid="${testid}"[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'g')
+  const out: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = re.exec(markup))) {
+    out.push(match[1].replace(/<[^>]+>/g, '').trim())
+  }
+  return out
+}
+
+function extractByTestId(markup: string, tag: string, testid: string): string | null {
+  return extractAllByTestId(markup, tag, testid)[0] ?? null
 }
 
 describe('CheckIn', () => {
@@ -196,8 +226,9 @@ describe('CheckIn', () => {
       for (const hasContent of [true, false]) {
         it(`replaces the form with the error screen (state: ${label}, hasContent: ${hasContent})`, () => {
           const markup = render({
-            readFailed: true,
-            state,
+            status: 'error',
+            loadError: 'network refused',
+            saveState: state,
             hasContent,
             stored: null,
             storedSubmitted: false,
@@ -208,6 +239,15 @@ describe('CheckIn', () => {
         })
       }
     }
+  })
+
+  describe('when it is still loading', () => {
+    it('shows a loading message and nothing else', () => {
+      const markup = render({ status: 'loading' })
+      expect(markup).toContain('Loading…')
+      expect(markup).not.toContain('id="checkin-save-status"')
+      expect(markup).not.toContain('data-testid="scale-legend"')
+    })
   })
 
   describe('the save-status region', () => {
@@ -222,8 +262,7 @@ describe('CheckIn', () => {
         for (const { label: storedLabel, stored, storedSubmitted } of STORED_SHAPES) {
           it(`is present and non-empty (state: ${stateLabel}, hasContent: ${hasContent}, stored: ${storedLabel})`, () => {
             const markup = render({
-              readFailed: false,
-              state,
+              saveState: state,
               hasContent,
               stored,
               storedSubmitted,
@@ -239,27 +278,162 @@ describe('CheckIn', () => {
 
   it('Critical 1: a clean, unblocked draft says it was saved', () => {
     const markup = render({
-      readFailed: false,
-      state: { kind: 'clean' },
+      saveState: { kind: 'clean' },
       hasContent: true,
+      scored: 3,
+      required: 22,
       stored: storedRow({ submitted_at: null, submitted_by: null }),
       storedSubmitted: false,
     })
     const text = extractSaveStatusText(markup)
     expect(text).toMatch(/draft saved/i)
-    expect(text).toContain(`3 of ${PILLARS.length} pillars scored`)
+    expect(text).toContain('3 of 22 questions scored')
   })
 
   it('Critical 2: a blocked dirty press still says why', () => {
     const markup = render({
-      readFailed: false,
-      state: { kind: 'dirty' },
+      saveState: { kind: 'dirty' },
       hasContent: false,
       stored: null,
       storedSubmitted: false,
     })
     const text = extractSaveStatusText(markup)
     expect(text).toContain('Unsaved changes.')
-    expect(text).toMatch(/at least one pillar/i)
+    expect(text).toMatch(/at least one question/i)
+  })
+
+  // Carried from the pillar-era screen: an unsaved draft from an earlier
+  // visit is announced near the top, with the label of the control that
+  // keeps it.
+  it('names the earlier-visit draft and how to keep it', () => {
+    const markup = render({ unsavedFromEarlierVisit: true, hasContent: true, scored: 1 })
+    expect(markup).toContain('These scores are from an earlier visit on this device')
+    expect(markup).toContain('Press Save draft to keep them.')
+  })
+
+  it('says nothing about an earlier visit when there was not one', () => {
+    const markup = render({ unsavedFromEarlierVisit: false })
+    expect(markup).not.toContain('earlier visit')
+  })
+
+  // Carried from the pillar-era screen: a browser that cannot persist a
+  // local copy is told so, since that changes what pressing away from the
+  // screen risks.
+  it('warns when this browser is not keeping a local copy', () => {
+    const markup = render({ draftPersisted: false })
+    expect(markup).toContain('This browser is not keeping a local copy')
+  })
+
+  it('says nothing about local storage when it is working', () => {
+    const markup = render({ draftPersisted: true })
+    expect(markup).not.toContain('not keeping a local copy')
+  })
+
+  // Carried from the pillar-era screen: the last submission is named outside
+  // the save-status region, since it describes what is stored rather than
+  // what just happened.
+  it('names who last submitted, and when', () => {
+    const markup = render({
+      stored: storedRow({ submitted_at: '2026-08-15T09:00:00.000Z', submitted_by: 'someone-else' }),
+      storedSubmitted: true,
+      storedByYou: false,
+    })
+    expect(markup).toContain('Last submitted')
+    expect(markup).toContain('another account manager')
+  })
+
+  it('names "you" when the viewer submitted it themselves', () => {
+    const markup = render({
+      stored: storedRow({ submitted_at: '2026-08-15T09:00:00.000Z', submitted_by: PROFILE.id }),
+      storedSubmitted: true,
+      storedByYou: true,
+    })
+    expect(markup).toContain('Last submitted')
+    expect(markup).toMatch(/by\s*you/)
+  })
+
+  it("renders all six buckets as headings, in the boss's order", () => {
+    const markup = render()
+    expect(extractAllByTestId(markup, 'h3', 'bucket-heading')).toEqual([
+      'Communication',
+      'Growth',
+      'Finances',
+      'Relationship',
+      'Delivery',
+      'Advocacy',
+    ])
+  })
+
+  // §7: nothing collapses. A collapsed section hides unanswered work, and
+  // §3.3's whole point is that unanswered work is impossible to miss.
+  it('renders every one of the 22 questions at once', () => {
+    const markup = render()
+    expect(markup.match(/role="radiogroup"/g)).toHaveLength(22)
+  })
+
+  // §7: one legend, not 66 anchors.
+  it('states the scale once', () => {
+    const markup = render()
+    expect(extractAllByTestId(markup, 'dl', 'scale-legend')).toHaveLength(1)
+    const legend = extractByTestId(markup, 'dl', 'scale-legend')
+    expect(legend).toContain('strongly disagree')
+    expect(legend).toContain('strongly agree')
+  })
+
+  describe('when the gate is shut', () => {
+    // The reason is NOT a hook field -- the screen derives it from the
+    // client's start date via advocacyGate(). So these drive it through
+    // `startedOn` on the client prop, and only `advocacyApplies` comes from
+    // the mocked hook. A test that passed a `gateReason` would be asserting
+    // against a prop that does not exist and would pass whatever the screen
+    // rendered.
+    it('still renders the Advocacy section, and names the missing start date', () => {
+      const markup = render({ advocacyApplies: false, required: 18, startedOn: null })
+      expect(markup).toContain('data-testid="bucket-advocacy"')
+      const reason = extractByTestId(markup, 'p', 'advocacy-gate')
+      expect(reason).toContain('no start date')
+    })
+
+    it('names the month the gate opens for a client inside their first 90 days', () => {
+      const markup = render({
+        advocacyApplies: false,
+        required: 18,
+        startedOn: '2026-01-15',
+        period: '2026-03-01',
+      })
+      const reason = extractByTestId(markup, 'p', 'advocacy-gate')
+      expect(reason).toContain('May 2026')
+    })
+
+    it('says nothing about the gate when it is open', () => {
+      const markup = render({ advocacyApplies: true })
+      expect(markup).not.toContain('data-testid="advocacy-gate"')
+    })
+  })
+
+  describe('the overall', () => {
+    // §3.3: an incomplete check-in shows an em dash, never a number. The words
+    // beside it are what a screen reader gets, since an em dash announces as
+    // nothing on its own.
+    it('shows an em dash and the count when there is no overall', () => {
+      const markup = render({ storedOverall: null, localOverall: null, scored: 7, required: 18 })
+      expect(extractByTestId(markup, 'span', 'overall-value')).toBe('—')
+      expect(extractByTestId(markup, 'span', 'overall-caption')).toBe('not scored · 7 of 18 answered')
+    })
+
+    it('shows two decimals out of 5 when there is one', () => {
+      const markup = render({
+        storedOverall: 3.6,
+        localOverall: 3.6,
+        saveState: { kind: 'clean' },
+      })
+      expect(extractByTestId(markup, 'span', 'overall-value')).toBe('3.60')
+      expect(extractByTestId(markup, 'span', 'overall-caption')).toContain('of 5')
+    })
+
+    it('bands on the new thresholds', () => {
+      const markup = render({ storedOverall: 3.6, saveState: { kind: 'clean' } })
+      expect(extractByTestId(markup, 'span', 'overall-band')).toBe('Healthy')
+    })
   })
 })

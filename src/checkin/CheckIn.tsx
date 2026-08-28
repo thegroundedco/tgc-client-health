@@ -1,16 +1,19 @@
-import { PILLARS, BAND_LABELS, MAX_TOTAL, bandFor } from '../lib/score'
+import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, questionsFor } from '../lib/buckets'
+import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
+import { advocacyGate } from '../lib/gate'
 import { formatPeriod, formatSavedAt } from '../lib/month'
 import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
-import { PillarRow } from './PillarRow'
-import { displayedTotal, saveStatus, submitBlock, submitLabel } from './saveState'
+import type { CheckinRow } from './useCheckin'
+import { QuestionRow } from './QuestionRow'
+import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
 
 type Props = {
-  client: { id: number; name: string }
+  client: { id: number; name: string; started_on: string | null }
   period: string
   profile: Profile
   onBack: () => void
@@ -26,8 +29,17 @@ const TONE_CLASS: Record<SaveStatusTone, string> = {
   quiet: 't-caption',
 }
 
+// Two decimals, always. numeric(3,2) is what the view stores and what
+// scoreMath.meanTo2dp produces, so 3.6 and 3.60 are the same number -- but a
+// column of scores where some show one decimal and some show two reads as
+// noise, and the trailing zero is the difference between "3.6 out of 5" and a
+// number somebody has to look twice at.
+function formatOverall(overall: number): string {
+  return overall.toFixed(2)
+}
+
 export function CheckIn({ client, period, profile, onBack }: Props) {
-  const checkin = useCheckin(client.id, period, profile)
+  const checkin = useCheckin(client, period, profile)
   const {
     status,
     loadError,
@@ -36,8 +48,12 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
     lastPeriod,
     draft,
     saveState,
+    advocacyApplies,
+    required,
     scored,
-    localTotal,
+    localOverall,
+    storedOverall,
+    lastOverall,
     hasContent,
     storedSubmitted,
     storedByYou,
@@ -46,7 +62,8 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
   } = checkin
 
   const readFailed = status === 'error'
-  const label = submitLabel(scored)
+  const label = submitLabel(scored, required)
+  const gate = advocacyGate(client.started_on, period)
 
   // The third caller of can() in the application, after the two in
   // src/board/Board.tsx. Convenience, not security, same as those two: a
@@ -70,15 +87,16 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
     hasContent,
     storedSubmitted,
   })
-  const total = displayedTotal({
+  const overall = displayedOverall({
     state: saveState,
-    localTotal,
-    storedTotal: stored?.total_score ?? null,
+    localOverall,
+    storedOverall,
   })
   const statusLines = saveStatus({
     state: saveState,
     block,
     scored,
+    required,
     storedUpdatedAt: stored?.updated_at ?? null,
   })
   const saving = saveState.kind === 'saving'
@@ -140,18 +158,22 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         <div className={styles.total}>
           <p className="t-label">This month</p>
           <p className={styles.totalLine}>
-            {/* An incomplete check-in shows an em dash, never a number. Parent
-                spec §6.2: incomplete must not read as "at risk". The words
-                beside it are what a screen reader gets, since an em dash on its
-                own announces as nothing. */}
-            <span className={`t-display ${styles.totalValue} numeric`}>
-              {total === null ? '—' : total}
+            {/* An incomplete check-in shows an em dash, never a number. §3.3:
+                incomplete must not read as "at risk". The words beside it are
+                what a screen reader gets, since an em dash on its own
+                announces as nothing. */}
+            <span className={`t-display ${styles.totalValue} numeric`} data-testid="overall-value">
+              {overall === null ? '—' : formatOverall(overall)}
             </span>
-            <span className="t-caption">
-              {total === null ? `not scored · ${scored} of ${PILLARS.length} pillars` : `of ${MAX_TOTAL}`}
+            <span className="t-caption" data-testid="overall-caption">
+              {overall === null
+                ? `not scored · ${scored} of ${required} answered`
+                : `of ${MAX_SCORE}`}
             </span>
           </p>
-          <span className={bandClassName(bandFor(total))}>{BAND_LABELS[bandFor(total)]}</span>
+          <span className={bandClassName(bandFor(overall))} data-testid="overall-band">
+            {BAND_LABELS[bandFor(overall)]}
+          </span>
         </div>
 
         {/* §5.2: last month alongside, because a score compared is a judgment
@@ -160,14 +182,14 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
           <p className="t-label">{formatPeriod(lastPeriod)}</p>
           <p className={styles.totalLine}>
             <span className={`t-display ${styles.totalValue} numeric`}>
-              {lastMonth?.total_score == null ? '—' : lastMonth.total_score}
+              {lastOverall === null ? '—' : formatOverall(lastOverall)}
             </span>
             <span className="t-caption">
-              {lastMonth?.total_score == null ? 'not scored' : `of ${MAX_TOTAL}`}
+              {lastOverall === null ? 'not scored' : `of ${MAX_SCORE}`}
             </span>
           </p>
-          <span className={bandClassName(bandFor(lastMonth?.total_score ?? null))}>
-            {BAND_LABELS[bandFor(lastMonth?.total_score ?? null)]}
+          <span className={bandClassName(bandFor(lastOverall))}>
+            {BAND_LABELS[bandFor(lastOverall)]}
           </span>
         </div>
       </div>
@@ -218,18 +240,62 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </p>
       )}
 
-      <div className={styles.pillars}>
-        {PILLARS.map((pillar) => (
-          <PillarRow
-            key={pillar}
-            pillar={pillar}
-            value={draft.pillars[pillar]}
-            lastValue={lastMonth?.[pillar] ?? null}
-            disabled={saving || !canEdit}
-            onChange={(value) => checkin.setPillar(pillar, value)}
-            onClear={() => checkin.setPillar(pillar, null)}
-          />
-        ))}
+      {/* §7: one legend for 22 questions, not three anchors on each. The
+          questions are already specific statements, so an agreement scale
+          carries them -- and the alternative is 66 pieces of copy nobody has
+          written. A definition list because that is what it is: two scores and
+          what each one means, with 2, 3 and 4 reading as between them. */}
+      <dl className={styles.legend} data-testid="scale-legend">
+        <div className={styles.legendPair}>
+          <dt className={`t-label ${styles.legendTerm} numeric`}>1</dt>
+          <dd className="t-caption">strongly disagree</dd>
+        </div>
+        <div className={styles.legendPair}>
+          <dt className={`t-label ${styles.legendTerm} numeric`}>5</dt>
+          <dd className="t-caption">strongly agree</dd>
+        </div>
+      </dl>
+
+      <div className={styles.buckets}>
+        {BUCKETS.map((bucket) => {
+          const definition = BUCKET_DEFINITIONS[bucket]
+          // Only Advocacy is gated, and it is named rather than compared to a
+          // string so the gate has one definition (buckets.ts).
+          const shut = bucket === GATED_BUCKET && !advocacyApplies
+          return (
+            <section className={styles.bucket} data-testid={`bucket-${bucket}`} key={bucket}>
+              <h3 className="t-header" data-testid="bucket-heading">
+                {definition.label}
+              </h3>
+
+              {/* Shown, not hidden -- §7, "so the scorer learns the bucket
+                  exists". A hidden section is a screen that silently asks for
+                  18 questions one month and 22 the next with nothing to
+                  explain the change. The reason distinguishes the two shut
+                  cases, because one is a missing fact somebody can go and
+                  enter and the other is a client who is simply new. */}
+              {shut && !gate.open && (
+                <p className="alert prose" data-testid="advocacy-gate" role="status">
+                  {gate.reason}
+                </p>
+              )}
+
+              {questionsFor(bucket).map((question) => (
+                <QuestionRow
+                  key={question.key}
+                  question={question}
+                  value={draft.answers[question.key]}
+                  lastValue={
+                    (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
+                  }
+                  disabled={saving || !canEdit || shut}
+                  onChange={(value) => checkin.setAnswer(question.key, value)}
+                  onClear={() => checkin.setAnswer(question.key, null)}
+                />
+              ))}
+            </section>
+          )
+        })}
       </div>
 
       <div className={styles.notesBlock}>

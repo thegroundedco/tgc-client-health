@@ -296,12 +296,11 @@ export function useCheckin(
           // is the time the confirmation names. One round trip.
           //
           // What it does NOT carry is the overall -- that lives in
-          // public.checkin_scores, which an upsert cannot return. reload()
-          // below is what refreshes it, and until it lands displayedOverall
-          // shows the local mean, which is the same value unless scoreV2 and
-          // the view disagree. Surfacing that disagreement is the point of the
-          // local/stored split, so this is the intended behaviour rather than a
-          // gap.
+          // public.checkin_scores, which an upsert cannot return. The inline
+          // read about 30 lines below is what refreshes it, awaited before
+          // the confirmation is dispatched, so there is no window in which a
+          // stale or local value stands in for it. See that read's own
+          // comment for why it is awaited rather than fired off.
           .select()
           .single()
 

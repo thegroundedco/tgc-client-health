@@ -217,4 +217,29 @@ describe('useCheckin: submit', () => {
     await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
     expect(result.current.storedOverall).toBe(4)
   })
+
+  // The `if (!refreshed.error)` branch in submit(): a failed post-save refresh
+  // is not a failed save. The upsert above it already succeeded, so the person
+  // must still be told so -- reporting a save failure here would be the more
+  // harmful of the two lies this comment weighs. Rigs the SECOND
+  // `checkin_scores` read (the post-save refresh; the first is the initial
+  // load) to fail, the same counting trick the ordering test above uses for
+  // the opposite case.
+  it('still reports the save as succeeded when the post-save score refresh fails', async () => {
+    let scoresRead = 0
+    db.scores = async () => {
+      scoresRead += 1
+      if (scoresRead >= 2) {
+        return { data: [], error: 'refresh failed' }
+      }
+      return { data: [], error: null }
+    }
+
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.submit())
+    await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
+    expect(result.current.saveState.kind).toBe('saved')
+  })
 })

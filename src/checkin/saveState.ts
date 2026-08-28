@@ -114,7 +114,7 @@ export function submitBlock(args: {
   // keeps the reason permanent instead of borrowing a transient one that
   // happens to be true right now and stops being true the moment the read
   // succeeds. See CheckIn.tsx: this is also enforced above the reducer, by
-  // disabling the pillar rows and the notes field themselves -- this check
+  // disabling the question rows and the notes field themselves -- this check
   // is what keeps the submit button itself honest even so, and it is the
   // only backstop if a future caller ever wires a control this file does not
   // already know about.
@@ -130,7 +130,7 @@ export function submitBlock(args: {
   // Checked next, ahead of everything else that follows: parent spec §8.1,
   // never write after a failed read. If the read failed, the form on screen is
   // not this month's check-in -- it is an empty form -- and saving it would
-  // replace real pillars with nothing.
+  // replace real answers with nothing.
   if (args.readFailed) {
     return {
       blocked: true,

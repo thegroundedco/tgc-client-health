@@ -1,16 +1,17 @@
-/* The check-in screen: two totals, five pillar rows, notes, and one control
-   that says what it will do and then says what it did. */
+/* The check-in screen: two totals, six bucket sections of questions, notes,
+   and one control that says what it will do and then says what it did. */
 
 .screen {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  /* --measure-prose (62ch), not --measure-column (30rem): the pillar rows
-     below carry three anchor sentences each, and --measure-column is sized
-     for the single-field sign-in/access-pending forms, not for a screen this
-     dense. --measure-prose is already the token App.module.css's .centred and
-     Board.module.css's .state reach for on a whole-screen container, so this
-     follows that precedent rather than adding a new one. */
+  /* --measure-prose (62ch). The comment this replaces justified it by the three
+     anchor sentences each pillar row carried, and §7 retired those in favour of
+     one legend -- so the old reason is gone, but the measure stays. A wider
+     screen would suit the new row shape (a prompt and a five-point scale that
+     would rather not wrap), and the token for it, --measure-admin at 90ch,
+     already exists on the unmerged admin-visual-pass branch. Declaring a second
+     one here would collide with it on merge. Revisit when that branch lands. */
   max-width: var(--measure-prose);
 }
 
@@ -63,10 +64,40 @@
   display: contents;
 }
 
-.pillars {
+.buckets {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
+}
+
+/* The section is the card, not the question. Twenty-two bordered question cards
+   is a scroll; six bordered sections is a screen with six landmarks in it. */
+.bucket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Two pairs on one line where there is room. The scale is read once, at the
+   top, and then not again -- so it is a caption-weight aside, not a panel. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+.legendPair {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.legendTerm {
+  text-align: end;
 }
 
 .notesBlock {

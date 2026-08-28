@@ -61,9 +61,9 @@ const PROFILE: Profile = {
 }
 
 const CLIENTS = [
-  { id: 1, name: 'Babaloo', status: 'active' },
-  { id: 2, name: 'Colorfil', status: 'active' },
-  { id: 3, name: 'Sno-Go', status: 'active' },
+  { id: 1, name: 'Babaloo', status: 'active', started_on: null },
+  { id: 2, name: 'Colorfil', status: 'active', started_on: null },
+  { id: 3, name: 'Sno-Go', status: 'active', started_on: null },
 ]
 
 const SUBMITTED: CardCheckin = {
@@ -105,7 +105,7 @@ const clientList = () => screen.queryByRole('list', { name: /clients/i })
 const READY = {
   status: 'ready' as const,
   loadError: null,
-  clients: [{ id: 1, name: 'Acme', status: 'active' }],
+  clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
   checkins: new Map(),
   submitted: 0,
   activeTotal: 1,
@@ -293,9 +293,9 @@ describe('the show-archived toggle', () => {
   const MIXED = {
     ...READY,
     clients: [
-      { id: 1, name: 'Acme', status: 'active' },
-      { id: 2, name: 'Bellwether', status: 'paused' },
-      { id: 3, name: 'Test Client', status: 'former' },
+      { id: 1, name: 'Acme', status: 'active', started_on: null },
+      { id: 2, name: 'Bellwether', status: 'paused', started_on: null },
+      { id: 3, name: 'Test Client', status: 'former', started_on: null },
     ],
     activeTotal: 1,
   }
@@ -374,7 +374,7 @@ describe('the show-archived toggle', () => {
     // three clients exist.
     vi.mocked(useBoard).mockReturnValue({
       ...MIXED,
-      clients: [{ id: 3, name: 'Test Client', status: 'former' }],
+      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null }],
       activeTotal: 0,
       submitted: 0,
     })
@@ -392,7 +392,7 @@ describe('the show-archived toggle', () => {
     // telling them how to get a working roster back disappeared.
     vi.mocked(useBoard).mockReturnValue({
       ...MIXED,
-      clients: [{ id: 3, name: 'Test Client', status: 'former' }],
+      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null }],
       activeTotal: 0,
       submitted: 0,
     })
