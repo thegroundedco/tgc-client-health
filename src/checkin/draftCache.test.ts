@@ -58,6 +58,15 @@ describe('readDraft', () => {
     })
   })
 
+  it('keeps different periods for the same client separate', () => {
+    // This module's central job: last month's abandoned draft must never
+    // surface as this month's. draftKey folds the period into the key, so a
+    // draft written for one period must be invisible when reading any other.
+    const { store } = memoryStore()
+    writeDraft(7, '2026-08-01', { answers: { comm_timely: 4 }, notes: 'august' }, store)
+    expect(readDraft(7, '2026-09-01', store)).toBeNull()
+  })
+
   it('returns null on stored text that is not JSON', () => {
     // Not hypothetical: a half-written value, a different app on the same
     // origin, or a hand-edited key. A crash here would take out the whole
@@ -285,6 +294,28 @@ describe('draftsDiffer', () => {
         true,
       )
     }
+  })
+
+  it('is true when the same key is present on both sides with different values', () => {
+    // The "absent vs present" case above never exercises the branch that
+    // compares two present values against each other. A regression that only
+    // ever compared a value against `null` would still pass that test.
+    expect(
+      draftsDiffer(
+        { answers: { comm_timely: 1 }, notes: '' },
+        { answers: { comm_timely: 2 }, notes: '' },
+      ),
+    ).toBe(true)
+  })
+
+  it('is true when notes differ by real content, not just whitespace', () => {
+    // The remaining notes assertions are both "false" cases (reordered keys,
+    // trailing whitespace) -- a regression that made the notes-inequality
+    // branch always return false would pass this suite undetected without
+    // this one "true" case.
+    expect(
+      draftsDiffer({ answers: { comm_timely: 3 }, notes: 'x' }, { answers: { comm_timely: 3 }, notes: 'y' }),
+    ).toBe(true)
   })
 
   it('ignores surrounding whitespace in notes', () => {
