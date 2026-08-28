@@ -92,11 +92,49 @@ turns them into a migration and §9 verifies them by name.
   Have they left a review / could we use them for a case study / would they refer us unprompted /
   could we send leads to them as a reference check.
 
+  **AMENDED 2026-08-28: these four are YES/NO, not 1-5.** The owner ruled it, and the reason is that
+  the questions are not opinions: "they have left a review" is a fact that either happened or did
+  not, and a 3 out of 5 against it records nothing anyone can act on. They are stored as `boolean`
+  rather than as a smallint constrained to two values, so the column states what it is and nobody can
+  later write a 3 into it. §3.2 gives the bucket arithmetic that keeps the result on the same
+  1.00-5.00 scale as the other five buckets.
+
 Three plus three plus four plus four plus four plus four is 22.
 
 ### 3.2 The arithmetic, and the property that makes it work
 
-Every question is scored 1-5. A bucket's score is the mean of its own questions. A client's overall
+**AMENDED 2026-08-28. The paragraph below records the superseded rule; read this block first.**
+
+The eighteen non-Advocacy questions are scored 1-5 and each bucket's score is the mean of its own
+questions, unchanged. Advocacy is now different in two ways, both ruled by the owner 2026-08-28:
+
+1. **Its four questions are yes/no**, and its bucket score is **`1 + the number of yeses`** — which
+   lands on exactly 1.00, 2.00, 3.00, 4.00, 5.00 for zero through four yeses. That is deliberate:
+   it puts Advocacy on the identical 1.00-5.00 scale as the other five, so the board's bar, the
+   matrix's cell and the bands need no special case for it. A null in any of the four still yields a
+   null bucket score, never a low one (§3.3).
+2. **Advocacy is excluded from the overall score entirely.** The overall is ALWAYS the mean of the
+   eighteen non-Advocacy answers, whether the gate is open or shut. The owner's reason: the matrix in
+   Slice 5 compares clients side by side, and measuring one client on 22 questions and another on 18
+   makes that comparison unfair — the more so because Advocacy is the hardest bucket to score well
+   on. Every client's headline number is now on one basis.
+
+**The consequence to carry everywhere: `required` and the overall's divisor have DECOUPLED.** They
+were the same number until this ruling and are now two. `required` — how many answers a check-in
+needs before it counts as complete, and what every count on screen reads against — is still 22 when
+the gate is open and 18 when it is shut. The overall's divisor is 18, always. A gate-open check-in
+therefore asks four questions that do not move the headline number, and that is intended: they feed
+the Advocacy bucket, the board's sixth bar and the matrix's A column.
+
+**The 90-day gate survives and still matters.** It no longer decides the overall's divisor; it
+decides whether the four Advocacy questions are ASKED at all — which is the point, because "would
+they refer us without being prompted?" is not a question anyone can answer about a three-week-old
+client.
+
+---
+
+*Superseded 2026-08-28, retained because §10 and §11 argue against it:* Every question is scored 1-5.
+A bucket's score is the mean of its own questions. A client's overall
 score is the mean of **every question they were required to answer** — not the mean of the six
 bucket scores. The owner ruled this 2026-08-27; §10 records what it costs.
 
@@ -108,19 +146,30 @@ buckets and a two-year client scored on six produce numbers that can sit in the 
 same table and mean the same thing. Under the old raw-total model — 25 points across five pillars —
 adding a sixth would have moved the ceiling to 30 and silently rebased every threshold.
 
-**Every question weighs the same; buckets therefore do not.** A four-question bucket moves the
-overall score by a third more than a three-question bucket, because it owns four twenty-seconds of
-it against three. Communication and Growth are consequently the two quietest buckets in the model,
-purely because they hold one question fewer.
+**Every question weighs the same; buckets therefore do not.** *Amended 2026-08-28: the fractions
+below are restated over eighteen, not twenty-two, and Advocacy is out of this comparison entirely.*
+A four-question bucket moves the overall score by a third more than a three-question bucket, because
+it owns four eighteenths of it against three. Communication and Growth are consequently the two
+quietest buckets that count, purely because they hold one question fewer.
 
-The alternative — averaging the six bucket means, so each bucket owns exactly a sixth — was the
-first draft of this design and was overruled. The difference is real but modest: a Communication
-answer is worth 1/18 of the score under bucket-equal and 1/22 under question-equal, about 22% more
-influence; a Delivery answer is 1/24 against 1/22, about 8% less.
+**Advocacy weighs nothing at all against the overall**, by §3.2's amendment, and that is worth saying
+plainly rather than leaving a reader to derive it: a client can answer all four Advocacy questions No
+and their headline health number does not move. Advocacy shows up in its own bar and its own matrix
+column, and nowhere else.
+
+The alternative — averaging the bucket means, so each bucket owns an equal share — was the first
+draft of this design and was overruled. *Amended 2026-08-28:* with Advocacy excluded the comparison
+is now over five buckets and eighteen questions. A Communication answer is worth 1/15 of the score
+under bucket-equal and 1/18 under question-equal, about 20% more influence; a Delivery answer is
+1/20 against 1/18, about 10% less. The shape of the trade-off is unchanged; only the denominators
+moved.
 
 **The six bucket columns survive this decision unchanged.** They are what the matrix averages down
-its columns and what the board draws as bars, so §5.3 stands exactly as written. Only the view's
-overall expression differs, which is why this choice binds late and costs one line to reverse.
+its columns and what the board draws as bars. *Amended 2026-08-28:* §5.3 stands as written for five
+of them; `adv_score` changes shape because its inputs became booleans, but it still produces
+numeric(3,2) on the 1.00-5.00 range, so nothing that CONSUMES a bucket score has to change. Only the
+view's overall expression differs, which is why this choice binds late and costs one line to
+reverse.
 
 ### 3.3 Incompleteness
 
@@ -218,9 +267,21 @@ the moment this ships.
 
 ### 5.2 The 22 answer columns
 
-Each nullable, each `smallint check between 1 and 5`, matching the existing pillar columns exactly.
-Nullable because a draft is a check-in with unanswered questions, and the check constraint rather
-than an enum because that is how `status` and `end_reason_code` are already stored on these tables.
+**AMENDED 2026-08-28: eighteen smallints and four booleans, not twenty-two smallints.**
+
+The eighteen non-Advocacy answers are each nullable `smallint check between 1 and 5`, matching the
+existing pillar columns exactly. Nullable because a draft is a check-in with unanswered questions,
+and the check constraint rather than an enum because that is how `status` and `end_reason_code` are
+already stored on these tables.
+
+The four Advocacy answers are each nullable `boolean` (§3.1). Null still means unanswered; `false`
+means answered No, and the two must never be conflated — a false read as a null would make a
+complete check-in look incomplete, and a null read as a false would invent an answer nobody gave.
+
+**This amendment is only cheap while production is unmigrated.** These columns exist on staging
+alone and hold no real answers, so today this is an edit to an unapplied migration. Once §5's
+migration has run on production and one scoring round has happened, the same change becomes a data
+migration on real answers.
 
 ### 5.3 The six bucket columns
 
@@ -232,8 +293,21 @@ comm_score numeric(3,2) generated always as
   ((comm_constructive + comm_timely + comm_consistent)::numeric / 3) stored
 ```
 
-and the same shape for the other five. The explicit `::numeric` cast is required: without it
-Postgres does integer division on the smallints and 4 + 4 + 5 becomes 4 instead of 4.33.
+and the same shape for the other four 1-5 buckets. The explicit `::numeric` cast is required:
+without it Postgres does integer division on the smallints and 4 + 4 + 5 becomes 4 instead of 4.33.
+
+**Advocacy differs, per §3.2's amendment.** Its four inputs are booleans, so its generated column
+counts yeses and offsets by one:
+
+```sql
+adv_score numeric(3,2) generated always as
+  ((1 + adv_left_review::int + adv_case_study::int
+      + adv_would_refer::int + adv_reference_check::int)::numeric) stored
+```
+
+Null propagation still holds: `::int` on a null boolean is null, and null through `+` is null, so an
+unanswered Advocacy question yields a null bucket score exactly as §3.3 requires. The result is
+exactly 1.00 through 5.00, so this column is comparable with its five siblings with no rescaling.
 
 ### 5.4 The old columns are renamed, not dropped
 
@@ -269,17 +343,18 @@ select
   ch.comm_score, ch.growth_score, ch.fin_score,
   ch.rel_score, ch.del_score, ch.adv_score,
   (c.started_on is not null and ch.period >= c.started_on + 90) as advocacy_applies,
-  case
-    when c.started_on is not null and ch.period >= c.started_on + 90
-      then (ch.comm_constructive + ch.comm_timely + ... + ch.adv_reference_check)::numeric / 22
-    else (ch.comm_constructive + ch.comm_timely + ... + ch.del_we_are_proud)::numeric / 18
-  end as overall_score
+  -- AMENDED 2026-08-28 (§3.2): the case expression is GONE. The overall is always the
+  -- eighteen non-Advocacy answers, so there is one branch, not two.
+  (ch.comm_constructive + ch.comm_timely + ... + ch.del_we_are_proud)::numeric / 18
+    as overall_score
 from public.checkins ch
 join public.clients c on c.id = ch.client_id;
 ```
 
-Both branches are elided above for length; the migration writes all 22 and all 18 column names out
-in full. The `::numeric` cast is required for the same reason as §5.3 — without it Postgres divides
+The sum is elided above for length; the migration writes all eighteen column names out in full.
+`advocacy_applies` stays in the view even though the overall no longer consults it — the check-in
+screen and the board both need to know whether the gate is open, and computing it once here keeps
+the database's answer and the TypeScript gate's answer comparable (tests/gateParity.test.ts). The `::numeric` cast is required for the same reason as §5.3 — without it Postgres divides
 smallint sums with integer division and every overall score truncates to a whole number.
 
 Note that the overall reads the **answer** columns, not the six generated bucket columns. That falls
@@ -287,8 +362,10 @@ out of §3.2's ruling, and it has a useful side effect: the view does not depend
 columns at all, so a future change to how a bucket is derived cannot silently move the headline
 number.
 
-Null propagation carries through both branches of the `case`, so §3.3's rule holds for the overall
-score without a line of code asserting it.
+Null propagation carries through the sum, so §3.3's rule holds for the overall score without a line
+of code asserting it. Note what this now means: a gate-open check-in with all four Advocacy answers
+blank still has an overall score, because Advocacy is not in the sum. It does not yet count as
+COMPLETE — `required` is 22 for that client (§3.2) — but the number it shows is real.
 
 **`security_invoker = true` is not optional and is not decoration.** A view without it executes
 against the privileges of its owner, so every RLS policy on `checkins` and `clients` would be
@@ -359,12 +436,19 @@ have replaced an exhaustive proof with a sample.
 
 ### 9.2 The view is verified separately
 
-`overall_score` sums 22 or 18 nullable answers, so it cannot be enumerated exhaustively and is not
-pinned that way. Instead: for each of the 22 answers, and for both gate states, assert that nulling
-that one answer nulls the overall exactly when §3.3 requires it — 44 cases, which is complete
-coverage of the null behaviour that matters. Add arithmetic spot checks on known vectors, including
-the all-3s case (overall exactly 3.00 in both gate states) and a vector where the two readings of
-§3.2 disagree, so a silent reversion to bucket-averaging fails loudly rather than drifting.
+*Amended 2026-08-28 for §3.2's ruling.* `overall_score` sums eighteen nullable answers in a single
+branch, so it cannot be enumerated exhaustively and is not pinned that way. Instead: for each of the
+eighteen answers, assert that nulling that one answer nulls the overall — eighteen cases, complete
+coverage of the null behaviour that matters. Then assert the property the amendment introduced:
+**nulling any of the four Advocacy answers must NOT null the overall**, in either gate state — four
+more cases, and they are the ones that would catch a silent reversion to the old 22-divisor. Add
+arithmetic spot checks on known vectors, including the all-3s case (overall exactly 3.00 regardless
+of gate state or Advocacy) and a vector where the two readings of §3.2 disagree, so a reversion to
+bucket-averaging fails loudly rather than drifting.
+
+The exhaustive bucket sweep in §9.1 shrinks too, and gets cheaper: Advocacy's four booleans have
+three states each (null, true, false) rather than six, so its arm is 3^4 = 81 rather than 6^4 = 1296.
+The total falls from 5,616 to 4,401.
 
 The gate predicate is checked at its boundaries: 89, 90 and 91 days, and a null `started_on`.
 
