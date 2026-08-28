@@ -24,6 +24,18 @@
 - **Every on-screen count is against the required number for that client and period** — 18 gated out, 22 gated in — never a hardcoded 22 (§4.4).
 - **Copy must not say "after 90 days".** The gate opens on the first check-in month beginning on or after day 90, not on day 90 itself. Copy that says otherwise is wrong.
 - **`import type` for type-only imports.** The codebase uses `verbatimModuleSyntax`; a value import of a type fails lint.
+- **`@testing-library/jest-dom` IS NOT INSTALLED.** Only `@testing-library/react` and `user-event` are, and there is no vitest setup file registering custom matchers. The DOM test snippets in Tasks 4, 6 and 7 below were written using jest-dom matchers by mistake — **translate them, do not install the package.** Existing DOM tests in this repo assert with plain vitest matchers only (`toContain`, `toBe`, `toMatch`, `toHaveProperty`, `toEqual`, `toHaveLength`). Translate as follows, and keep the assertion exactly as strong:
+
+  | Snippet says | Write instead |
+  |---|---|
+  | `expect(el).toBeInTheDocument()` | `expect(el).not.toBeNull()` — or rely on `getBy*`, which already throws when absent |
+  | `expect(el).toHaveTextContent(s)` | `expect(el.textContent).toContain(s)` |
+  | `expect(el).toHaveValue(v)` | `expect((el as HTMLInputElement).value).toBe(v)` |
+  | `expect(el).toHaveAttribute(a, v)` | `expect(el.getAttribute(a)).toBe(v)` |
+  | `expect(el).toBeDisabled()` | `expect((el as HTMLInputElement).disabled).toBe(true)` |
+  | `expect(el).toBeEnabled()` | `expect((el as HTMLInputElement).disabled).toBe(false)` |
+
+  A weakened translation is a defect — `expect(el).not.toBeNull()` in place of a text assertion tests nothing about the text.
 - **Commit after every task.** Stage explicit paths — never `git commit -a`.
 - **Test baseline before you start: 566 tests / 41 files, all passing.** Run `npm test -- --run` to confirm before Task 1 and after every task.
 
