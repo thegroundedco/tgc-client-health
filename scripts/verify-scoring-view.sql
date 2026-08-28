@@ -1,5 +1,6 @@
--- Slice 4 step 1. Pins public.checkin_scores: the gate, null propagation, the
--- arithmetic, and the RLS boundary.
+-- Slice 4 step 1, updated in step 2.5 for Advocacy's yes/no answers. Pins
+-- public.checkin_scores: the gate, null propagation, the arithmetic (now
+-- including adv_score), and the RLS boundary.
 --
 -- Safe to re-run. Every fixture it creates is deleted in the same transaction.
 -- Aim it at STAGING -- it inserts real rows and advances clients_id_seq.
@@ -18,9 +19,14 @@ declare
     'fin_rack_rate','fin_pays_on_time','fin_rate_increased','fin_on_terms',
     'rel_collaborative','rel_respectful','rel_fun','rel_multi_threaded',
     'del_on_time','del_quantity','del_client_likes','del_we_are_proud'];
+  -- The four are boolean now (spec §3.1/§3.2, amended 2026-08-28), not
+  -- smallint like c_core -- every literal written against them below is
+  -- `true`/`false`/`null`, never a number. Mixing the two arrays into one
+  -- (as a pre-amendment `c_all` did) would try to assign an integer into a
+  -- boolean column and fail outright, which is the fastest possible way to
+  -- notice this file was not updated for the type change.
   c_adv text[] := array[
     'adv_left_review','adv_case_study','adv_would_refer','adv_reference_check'];
-  c_all text[] := c_core || c_adv;
 
   -- The period is FIXED and started_on is what varies. period is always the
   -- first of a month, so moving the period cannot express a one-day boundary:
@@ -42,14 +48,16 @@ declare
   v_total bigint;
   v_inactive uuid;
   v_active uuid;
-  v_set text;
+  v_set_core text;
+  v_set_adv text;
 begin
   -- Fixture. The name is deliberately unusable as a real client.
   insert into public.clients (name, started_on)
   values ('__verify_scoring_view__', v_start)
   returning id into v_client;
 
-  v_set := (select string_agg(format('%I = 3', col), ', ') from unnest(c_all) as col);
+  v_set_core := (select string_agg(format('%I = 3', col), ', ') from unnest(c_core) as col);
+  v_set_adv := (select string_agg(format('%I = true', col), ', ') from unnest(c_adv) as col);
 
   -- ============================================================ §1 the gate
   -- One check-in at a fixed period; started_on moves across the boundary.
@@ -102,21 +110,45 @@ begin
   raise notice '§1 ok: shut at 89d, open at exactly 90d and at 91d, shut on a null start date';
 
   -- ================================================ §2 null propagation, 44
-  -- Fill both check-ins completely, then null one answer at a time.
-  execute format('update public.checkins set %s where id in ($1, $2)', v_set)
+  -- Fill both check-ins completely -- the 18 core answers to 3, the 4
+  -- Advocacy answers to true -- then null one answer at a time. Two separate
+  -- update lists because the two arrays hold different SQL types (see the
+  -- c_adv declaration above).
+  execute format('update public.checkins set %s, %s where id in ($1, $2)', v_set_core, v_set_adv)
     using v_open, v_closed;
 
-  -- Gate OPEN: nulling any of the 22 must null the overall.
-  foreach v_col in array c_all loop
+  -- Gate OPEN, the 18 core answers: nulling any one must null the overall.
+  foreach v_col in array c_core loop
     execute format('update public.checkins set %I = null where id = $1', v_col) using v_open;
     select overall_score into v_overall from public.checkin_scores where id = v_open;
     if v_overall is not null then
-      raise exception '§2 FAILED: gate open, % nulled, overall still % ', v_col, v_overall;
+      raise exception '§2 FAILED: gate open, core % nulled, overall still % ', v_col, v_overall;
     end if;
     execute format('update public.checkins set %I = 3 where id = $1', v_col) using v_open;
   end loop;
 
-  -- Gate CLOSED: the 18 core answers null it; the 4 Advocacy answers must not.
+  -- Gate OPEN, the 4 Advocacy answers: nulling one must leave the overall
+  -- UNCHANGED at 3.00 -- not merely non-null. Spec §3.2 as amended: Advocacy
+  -- left overall_score entirely, so it must not affect the score whether the
+  -- gate is open or shut. This is the case that would catch a reversion to
+  -- the old 22-divisor: a view that still folded Advocacy into the overall's
+  -- denominator (with coalesce(.., 0) masking the null) would score 2.86 here
+  -- for the gate-open case and pass a not-null-only check; asserting the
+  -- exact value catches it even when the gate is open.
+  foreach v_col in array c_adv loop
+    execute format('update public.checkins set %I = null where id = $1', v_col) using v_open;
+    select overall_score into v_overall from public.checkin_scores where id = v_open;
+    if v_overall is distinct from 3.00 then
+      raise exception
+        '§2 FAILED: gate open, Advocacy % nulled, overall moved to % (expected '
+        'unchanged 3.00). An Advocacy answer must not affect the score at all, '
+        'gate open or shut -- this is the 22-divisor regression case.',
+        v_col, v_overall;
+    end if;
+    execute format('update public.checkins set %I = true where id = $1', v_col) using v_open;
+  end loop;
+
+  -- Gate CLOSED, the 18 core answers: nulling any one must null the overall.
   foreach v_col in array c_core loop
     execute format('update public.checkins set %I = null where id = $1', v_col) using v_closed;
     select overall_score into v_overall from public.checkin_scores where id = v_closed;
@@ -126,11 +158,10 @@ begin
     execute format('update public.checkins set %I = 3 where id = $1', v_col) using v_closed;
   end loop;
 
-  -- An Advocacy answer nulled while the gate is shut must leave the score
-  -- UNCHANGED at 3.00, not merely non-null. A view that folded a nulled
-  -- Advocacy answer into the 22-question denominator with coalesce(.., 0)
-  -- would still return a non-null number here (e.g. 2.86) and pass a
-  -- not-null-only check; asserting the exact value catches that.
+  -- Gate CLOSED, the 4 Advocacy answers: same assertion as the gate-open arm
+  -- above, repeated here because "in either gate state" is the whole point --
+  -- a fix that only special-cased the open gate would still pass a check that
+  -- looked only at the shut one.
   foreach v_col in array c_adv loop
     execute format('update public.checkins set %I = null where id = $1', v_col) using v_closed;
     select overall_score into v_overall from public.checkin_scores where id = v_closed;
@@ -140,10 +171,10 @@ begin
         'unchanged 3.00). An Advocacy answer must not affect the score at all '
         'while the gate is shut, not merely avoid nulling it.', v_col, v_overall;
     end if;
-    execute format('update public.checkins set %I = 3 where id = $1', v_col) using v_closed;
+    execute format('update public.checkins set %I = true where id = $1', v_col) using v_closed;
   end loop;
 
-  raise notice '§2 ok: 44 null cases, Advocacy required only when the gate is open';
+  raise notice '§2 ok: 44 null cases; the four Advocacy answers never affect overall_score in either gate state';
 
   -- ======================================================== §3 arithmetic
   -- All 3s is exactly 3.00 in both gate states.
@@ -156,27 +187,82 @@ begin
     raise exception '§3 FAILED: all-3s gate closed gave %, expected 3.00', v_overall;
   end if;
 
-  -- The vector where the two weightings disagree (spec §3.2). Communication all
-  -- 5s, the other 19 questions all 2s:
-  --   question-equal (correct): (3*5 + 19*2) / 22 = 53 / 22 = 2.41
-  --   bucket-equal   (wrong):   (5 + 2 + 2 + 2 + 2 + 2) / 6 = 2.50
+  -- The vector where the two weightings disagree (spec §3.2, amended
+  -- 2026-08-28: overall_score is the mean of the EIGHTEEN core answers, never
+  -- of the five remaining bucket means -- Advocacy already left both
+  -- entirely, so this check no longer touches it). Communication all 5s, the
+  -- other 15 core questions all 2s:
+  --   question-equal (correct): (3*5 + 15*2) / 18 = 45 / 18 = 2.50
+  --   bucket-equal   (wrong):   (5 + 2 + 2 + 2 + 2) / 5 = 13 / 5 = 2.60
   execute format(
     'update public.checkins set %s where id = $1',
-    (select string_agg(format('%I = 2', col), ', ') from unnest(c_all) as col)
+    (select string_agg(format('%I = 2', col), ', ') from unnest(c_core) as col)
   ) using v_open;
   update public.checkins
      set comm_constructive = 5, comm_timely = 5, comm_consistent = 5
    where id = v_open;
 
   select overall_score into v_overall from public.checkin_scores where id = v_open;
-  if v_overall is distinct from 2.41 then
+  if v_overall is distinct from 2.50 then
     raise exception
-      '§3 FAILED: weighting vector gave %, expected 2.41. 2.50 means the overall '
-      'reverted to averaging the six bucket means instead of the 22 answers.',
+      '§3 FAILED: weighting vector gave %, expected 2.50. 2.60 means the overall '
+      'reverted to averaging the five remaining bucket means instead of the '
+      'eighteen answers.',
       v_overall;
   end if;
 
-  raise notice '§3 ok: 3.00 in both gate states, and 2.41 not 2.50 on the weighting vector';
+  raise notice '§3 ok: 3.00 in both gate states, and 2.50 not 2.60 on the weighting vector';
+
+  -- ==================================================== §3b adv_score
+  -- adv_score is a generated column on checkins and a pass-through column on
+  -- checkin_scores, even though it never enters overall_score (spec §3.2).
+  -- Restore the core answers to all-3s first, so the overall_score assertion
+  -- below is checking against a known baseline rather than the weighting
+  -- vector this block inherited.
+  execute format('update public.checkins set %s where id = $1', v_set_core) using v_open;
+
+  -- Four Nos: 1 + zero yeses = 1.00 -- distinct from null, which is what an
+  -- unanswered Advocacy question scores. Conflating the two would let a
+  -- client who answered "No" four times read identically to one who was
+  -- never asked.
+  execute format(
+    'update public.checkins set %s where id = $1',
+    (select string_agg(format('%I = false', col), ', ') from unnest(c_adv) as col)
+  ) using v_open;
+
+  select adv_score into v_overall from public.checkin_scores where id = v_open;
+  if v_overall is distinct from 1.00 then
+    raise exception '§3b FAILED: four Nos gave adv_score %, expected 1.00', v_overall;
+  end if;
+
+  -- Three Yeses and one unanswered: null propagates through adv_score exactly
+  -- as it does through overall_score for the eighteen.
+  update public.checkins
+     set adv_left_review = true, adv_case_study = true, adv_would_refer = true,
+         adv_reference_check = null
+   where id = v_open;
+
+  select adv_score into v_overall from public.checkin_scores where id = v_open;
+  if v_overall is not null then
+    raise exception
+      '§3b FAILED: three Yeses and one unanswered gave adv_score %, expected null',
+      v_overall;
+  end if;
+
+  -- Restore to fully answered, and confirm overall_score never moved through
+  -- any of the adv_score arithmetic above -- Advocacy is not part of it at
+  -- all, in either direction.
+  execute format('update public.checkins set %s where id = $1', v_set_adv) using v_open;
+
+  select overall_score into v_overall from public.checkin_scores where id = v_open;
+  if v_overall is distinct from 3.00 then
+    raise exception
+      '§3b FAILED: overall_score read % while adv_score was under test '
+      '(expected unchanged 3.00 -- Advocacy must not leak into it)',
+      v_overall;
+  end if;
+
+  raise notice '§3b ok: adv_score is 1.00 on four Nos, null on three Yeses and a blank, and overall_score never moved';
 
   -- ============================================================== §4 RLS
   -- WHY THIS SECTION EXISTS: without `with (security_invoker = true)` the view

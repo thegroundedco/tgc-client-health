@@ -71,7 +71,12 @@ describe('the generated SQL', () => {
   })
 
   it('states a total that matches the number of states it actually generated', () => {
-    expect(total).toBe(5616)
+    // 2*6^3 (Communication, Growth) + 3*6^4 (Finances, Relationship, Delivery)
+    // + 3^4 (Advocacy, yes/no since spec §3.1/§3.2 amended 2026-08-28)
+    // = 432 + 3,888 + 81 = 4,401. Asserted explicitly, not just echoed from
+    // `total`, so a miscount in the generator (e.g. Advocacy silently reverting
+    // to 6^4) fails this test loudly instead of shrinking the proof silently.
+    expect(total).toBe(4401)
     expect(sql).toContain(
       `score parity PASSED: all ${total} states agree, across ${BUCKETS.length} buckets`,
     )

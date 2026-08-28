@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { BUCKETS, questionsFor } from '../src/lib/buckets.ts'
-import { meanOrNull } from '../src/lib/scoreMath.ts'
+import { meanOrNull, yesNoScore } from '../src/lib/scoreMath.ts'
 // @ts-expect-error -- a .mjs script with no type declarations; the assertions
 // below are the contract, and `npm run build` does not typecheck this file's
 // import target.
@@ -23,8 +23,8 @@ import { enumerateBucketStates } from '../scripts/score-parity.mjs'
 // think about it. It does NOT prove that Postgres evaluates that expression
 // the same way meanOrNull() does -- nothing without a database can. That is
 // `npm run verify:score`, which reads the six live *_score expressions out of
-// the catalogue and checks them against meanOrNull(), across 5,616 states
-// decomposed per bucket (see the next describe block below).
+// the catalogue and checks them against meanOrNull()/yesNoScore(), across
+// 4,401 states decomposed per bucket (see the next describe block below).
 const MIGRATION = 'supabase/migrations/20260821021840_create_clients_and_checkins.sql'
 
 const EXPECTED = `total_score smallint generated always as (
@@ -39,31 +39,45 @@ describe('the total_score generated column', () => {
 })
 
 describe('the per-bucket enumeration the verifier rests on', () => {
-  it('covers exactly 6^n states for an n-question bucket', () => {
+  // Dispatch on the QUESTION's kind, never on the bucket's name: a scale
+  // question has 6 reachable states (null, 1-5); a yesno question has 3
+  // (null, true, false). Today Advocacy is the only all-yesno bucket, but
+  // that is the rubric's fact, not this test's.
+  it('covers exactly 3^n states for a yesno bucket, 6^n for a scale bucket', () => {
     for (const bucket of BUCKETS) {
-      const n = questionsFor(bucket).length
-      expect(enumerateBucketStates(bucket).length, bucket).toBe(6 ** n)
+      const questions = questionsFor(bucket)
+      const perQuestion = questions[0].kind === 'yesno' ? 3 : 6
+      expect(enumerateBucketStates(bucket).length, bucket).toBe(perQuestion ** questions.length)
     }
   })
 
-  it('totals 5,616 states across all six buckets -- fewer than the 7,776 checked before', () => {
+  it('totals 4,401 states across all six buckets: 2*6^3 + 3*6^4 + 3^4', () => {
     const total = BUCKETS.reduce(
       (sum, bucket) => sum + enumerateBucketStates(bucket).length,
       0,
     )
-    expect(total).toBe(5616)
+    expect(total).toBe(4401)
   })
 
-  it('includes the all-null state and the all-5s state for every bucket', () => {
+  it('includes the all-null state and the all-max state for every bucket (all-5s for scale, all-yes for yesno)', () => {
     for (const bucket of BUCKETS) {
-      const keys = questionsFor(bucket).map((q) => q.key)
-      const states: Record<string, number | null>[] = enumerateBucketStates(bucket)
+      const questions = questionsFor(bucket)
+      const keys = questions.map((q) => q.key)
+      const isYesNoBucket = questions[0].kind === 'yesno'
+      const states: Record<string, number | boolean | null>[] = enumerateBucketStates(bucket)
       const allNull = states.find((s) => keys.every((k) => s[k] === null))
-      const allFive = states.find((s) => keys.every((k) => s[k] === 5))
+      const allMax = states.find((s) =>
+        keys.every((k) => (isYesNoBucket ? s[k] === true : s[k] === 5)),
+      )
       expect(allNull, bucket).toBeDefined()
-      expect(allFive, bucket).toBeDefined()
-      expect(meanOrNull(keys.map((k) => allNull![k])), bucket).toBeNull()
-      expect(meanOrNull(keys.map((k) => allFive![k])), bucket).toBe(5)
+      expect(allMax, bucket).toBeDefined()
+      if (isYesNoBucket) {
+        expect(yesNoScore(keys.map((k) => allNull![k] as boolean | null)), bucket).toBeNull()
+        expect(yesNoScore(keys.map((k) => allMax![k] as boolean | null)), bucket).toBe(5)
+      } else {
+        expect(meanOrNull(keys.map((k) => allNull![k] as number | null)), bucket).toBeNull()
+        expect(meanOrNull(keys.map((k) => allMax![k] as number | null)), bucket).toBe(5)
+      }
     }
   })
 })
