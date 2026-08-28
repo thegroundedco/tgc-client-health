@@ -1,20 +1,12 @@
-/* One pillar: its name and hint, the 1-5 scale, the three written anchors, and
-   last month's value. Five of these stack on the check-in screen. */
+/* One question: its prompt, the 1-5 scale, Clear, and last month's value.
+   Twenty-two of these stack inside six bucket sections on the check-in screen,
+   so this row carries no border and no background of its own -- the section is
+   the card. */
 
 .row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--rule-hairline);
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
-}
-
-.heading {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 /* Two gap sizes are needed here: a tight one between the five radios, and a
@@ -128,21 +120,9 @@
   padding: var(--space-1) var(--space-3);
 }
 
-.anchors {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--rule-hairline);
-}
-
-.anchor {
-  display: grid;
-  grid-template-columns: var(--space-5) 1fr;
-  gap: var(--space-3);
-  align-items: baseline;
-}
-
-.anchorTerm {
-  text-align: end;
+/* Pushed to the end of the scale row so it sits opposite the numbers rather
+   than under them. Wraps below on a narrow viewport, which .scale's flex-wrap
+   already handles. */
+.last {
+  margin-inline-start: auto;
 }

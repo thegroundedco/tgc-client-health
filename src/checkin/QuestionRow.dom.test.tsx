@@ -3,15 +3,18 @@
 import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
-import { PillarRow } from './PillarRow'
-import { MAX_PILLAR_SCORE } from '../lib/score'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { QuestionRow } from './QuestionRow'
+import { SCORE_VALUES } from '../lib/scoreMath'
+import type { Question } from '../lib/buckets'
+
 
 // The first tests in this repository that can see a DOM. They exist because the
 // owner's manual pass found something no other gate could reach: after clearing
 // a pillar with the keyboard, Tab stopped on a second number before leaving the
 // row, where an unscored pillar gives exactly one stop. Items 16 and 17 of the
-// visual checklist.
+// visual checklist. QuestionRow inherits the fix (and these tests) unchanged
+// from the PillarRow it replaces.
 //
 // Everything else in src/checkin is tested in the node environment. This file
 // opts into jsdom with the docblock above rather than changing the project
@@ -21,14 +24,16 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-// PillarRow is controlled: clearing is the parent deleting the score and
+const QUESTION: Question = { key: 'rel_respectful', prompt: 'They are respectful.' }
+
+// QuestionRow is controlled: clearing is the parent deleting the score and
 // re-rendering. Testing the focus behaviour without that round trip would test
 // a sequence the app never performs, so this harness is the parent.
 function Harness({ initial }: { initial: number | undefined }) {
   const [value, setValue] = useState<number | undefined>(initial)
   return (
-    <PillarRow
-      pillar="relationship"
+    <QuestionRow
+      question={QUESTION}
       value={value}
       lastValue={null}
       disabled={false}
@@ -38,18 +43,75 @@ function Harness({ initial }: { initial: number | undefined }) {
   )
 }
 
+function renderRow(overrides: Partial<Parameters<typeof QuestionRow>[0]> = {}) {
+  const onChange = vi.fn()
+  const onClear = vi.fn()
+  render(
+    <QuestionRow
+      question={QUESTION}
+      value={undefined}
+      lastValue={null}
+      disabled={false}
+      onChange={onChange}
+      onClear={onClear}
+      {...overrides}
+    />,
+  )
+  return { onChange, onClear }
+}
+
 const radios = () => screen.getAllByRole('radio') as HTMLInputElement[]
 const focusedValue = () => (document.activeElement as HTMLInputElement | null)?.value
 
-describe('a pillar row in a real DOM', () => {
+describe('a question row in a real DOM', () => {
   it('renders one radio per score, and a Clear only when something is scored', () => {
     const { unmount } = render(<Harness initial={undefined} />)
-    expect(radios()).toHaveLength(MAX_PILLAR_SCORE)
+    expect(radios()).toHaveLength(SCORE_VALUES.length)
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
     unmount()
 
     render(<Harness initial={3} />)
     expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy()
+  })
+
+  it('checks the radio matching value, and no other', () => {
+    render(<Harness initial={3} />)
+    for (const radio of radios()) {
+      expect(radio.checked).toBe(radio.value === '3')
+    }
+  })
+
+  it('fires onChange with the clicked score', async () => {
+    const user = userEvent.setup()
+    const { onChange } = renderRow()
+
+    await user.click(screen.getAllByRole('radio')[2])
+
+    expect(onChange).toHaveBeenCalledWith(3)
+  })
+
+  it('disables every radio and Clear when disabled is set', () => {
+    renderRow({ value: 2, disabled: true })
+
+    for (const radio of radios()) {
+      expect(radio.disabled).toBe(true)
+    }
+    expect((screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+  })
+
+  it('shows "No score last month" when there is no prior value', () => {
+    renderRow({ lastValue: null })
+    expect(screen.getByText('No score last month')).not.toBeNull()
+  })
+
+  it('shows last month\'s value when there is one', () => {
+    renderRow({ lastValue: 4 })
+    const label = screen.getByText('Last month:')
+    // Scoped to the label's own paragraph rather than screen.getByText('4'),
+    // because '4' also appears as one of the five score options.
+    expect(label.textContent).toBe('Last month: 4')
   })
 
   it('gives an unscored group a single tab stop (checklist item 17)', async () => {
@@ -153,5 +215,36 @@ describe('a pillar row in a real DOM', () => {
 
     await user.tab()
     expect(focusedValue()).not.toBe('2')
+  })
+
+  it('names the group by its prompt, so 22 groups on one screen are distinguishable', () => {
+    renderRow()
+    expect(screen.getByRole('radiogroup', { name: 'They are respectful.' })).not.toBeNull()
+  })
+
+  // The radios are grouped by `name`. Two questions sharing one would make a
+  // single group of ten across the whole screen -- picking a Delivery score would
+  // silently unpick a Communication one.
+  it('scopes its radio name to the question key', () => {
+    renderRow()
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio.getAttribute('name')).toBe('question-rel_respectful')
+    }
+  })
+
+  // §7: one legend for the screen, not three anchors per question. 66 pieces of
+  // copy nobody has written is what this row is not carrying.
+  it('renders no per-question anchor list', () => {
+    const { container } = render(
+      <QuestionRow
+        question={QUESTION}
+        value={3}
+        lastValue={null}
+        disabled={false}
+        onChange={() => {}}
+        onClear={() => {}}
+      />,
+    )
+    expect(container.querySelector('dl')).toBeNull()
   })
 })
