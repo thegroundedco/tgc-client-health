@@ -1942,6 +1942,7 @@ Six sections in the boss's order — Communication, Growth, Finances, Relationsh
 **Files:**
 - Modify: `src/checkin/CheckIn.tsx`, `src/checkin/CheckIn.module.css`
 - Modify: `src/board/Board.tsx` (the `client` prop is now a `BoardClient`, which it already is — verify only)
+- Modify: `src/board/ClientCard.dom.test.tsx`, `src/board/Board.test.tsx` — **added after Task 6 found the gap.** Task 6 widened `BoardClient` with `started_on`, and these two files build `BoardClient` fixtures inline, so `tsc` now rejects them. They pass under vitest, which does not typecheck, so only the build catches it. **This task's build gate cannot go green until both fixtures carry `started_on`.** Add the field to the fixtures and change nothing else in them — they are the board's tests and the board is step 3's work.
 - Test: `src/checkin/CheckIn.test.tsx`, `src/checkin/CheckIn.dom.test.tsx`
 
 **Interfaces:**
