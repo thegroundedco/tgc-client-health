@@ -12,14 +12,29 @@ import { GATE_DAYS } from '../src/lib/gate.ts'
 // against the 89/90/91-day boundary on a live database.
 const MIGRATIONS = 'supabase/migrations'
 
-function migration(suffix: string): string {
-  const names = readdirSync(MIGRATIONS).filter((name) => name.endsWith(suffix))
-  expect(names, `migrations ending in ${suffix}`).toHaveLength(1)
-  return readFileSync(`${MIGRATIONS}/${names[0]}`, 'utf8')
+// Resolves to whichever migration file most recently (re)defines the view --
+// not to one fixed filename -- because the view has already been redefined
+// once since this rule was first written (20260827192720_six_bucket_scoring.sql,
+// then 20260828180543_advocacy_yes_no.sql), and this file kept reading the
+// first one. Measured 2026-08-28: changing `+ 90` to `+ 60` in the LIVE
+// migration left this test passing, because it was reading a predicate the
+// database no longer uses at all. Migration filenames are timestamp-prefixed
+// (`YYYYMMDDHHMMSS_description.sql`), so a lexical sort is a chronological
+// one, and the last file containing the needle is the last one to have
+// touched it -- the same file `verify:scoring-view` exercises live.
+function latestMigrationContaining(needle: string): string {
+  const names = readdirSync(MIGRATIONS)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()
+  const matches = names.filter((name) =>
+    readFileSync(`${MIGRATIONS}/${name}`, 'utf8').includes(needle),
+  )
+  expect(matches.length, `migrations containing ${needle}`).toBeGreaterThan(0)
+  return readFileSync(`${MIGRATIONS}/${matches[matches.length - 1]}`, 'utf8')
 }
 
 describe('the screen agrees with the view about the gate', () => {
-  const sql = migration('_six_bucket_scoring.sql')
+  const sql = latestMigrationContaining('advocacy_applies')
 
   it('uses the same number of days the view adds to started_on', () => {
     const matches = [...sql.matchAll(/started_on\s*\+\s*(\d+)/g)].map((m) => Number(m[1]))
