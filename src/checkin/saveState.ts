@@ -1,4 +1,3 @@
-import { PILLARS } from '../lib/score'
 import { formatSavedAt } from '../lib/month'
 
 // The save path as a pure reducer. Slice 1 spec §5.6.
@@ -86,11 +85,13 @@ export function saveReducer(state: SaveState, event: SaveEvent): SaveState {
 }
 
 // §5.4: one control, whose label reflects the state it is in. The label is the
-// only place the draft/submitted distinction is visible before the press, and it
-// is the deliberate opposite of `Score all 3s`, which wrote a constant whatever
-// the state was.
-export function submitLabel(scored: number): string {
-  return scored === PILLARS.length ? 'Submit check-in' : 'Save draft'
+// only place the draft/submitted distinction is visible before the press.
+//
+// `required`, not a constant: §4.4, a gated-out check-in requires 18 answers and
+// a gated-in one 22, and a label promising a submit at the wrong number is a
+// promise the save path will not keep.
+export function submitLabel(scored: number, required: number): string {
+  return scored === required ? 'Submit check-in' : 'Save draft'
 }
 
 export type SubmitBlock = { blocked: false } | { blocked: true; reason: string }
@@ -146,7 +147,7 @@ export function submitBlock(args: {
   if (!args.hasContent) {
     return {
       blocked: true,
-      reason: 'Score at least one pillar, or write a note, before saving.',
+      reason: 'Answer at least one question, or write a note, before saving.',
     }
   }
 
@@ -169,21 +170,27 @@ export function submitBlock(args: {
   return { blocked: false }
 }
 
-// §5.3: the total belongs to the database, and local arithmetic exists so the
-// number moves as pillars are clicked. The moment the form matches what is
-// stored, the stored number is what shows -- so a disagreement between
-// score.ts and the generated column appears on screen rather than being hidden
-// behind a local sum that always agrees with itself.
-export function displayedTotal(args: {
+// §5.3 and §6, restated for the six-bucket model: the overall belongs to the
+// database -- to public.checkin_scores, which is the only place the gated
+// divisor is applied -- and local arithmetic exists so the number moves as
+// questions are answered. The moment the form matches what is stored, the
+// stored number is what shows, so a disagreement between scoreV2.overallScore
+// and the view's expression appears on screen rather than being hidden behind a
+// local mean that always agrees with itself.
+//
+// Renamed from displayedTotal, because the number changed meaning as well as
+// value: a sum out of 25 became a mean out of 5, and a stale caller passing a
+// total into a field that now shows a mean would print 18 where 3.60 belongs.
+export function displayedOverall(args: {
   state: SaveState
-  localTotal: number | null
-  storedTotal: number | null
+  localOverall: number | null
+  storedOverall: number | null
 }): number | null {
   const formDiffers =
     args.state.kind === 'dirty' ||
     args.state.kind === 'saving' ||
     args.state.kind === 'failed'
-  return formDiffers ? args.localTotal : args.storedTotal
+  return formDiffers ? args.localOverall : args.storedOverall
 }
 
 export type SaveStatusTone = 'confirm' | 'error' | 'quiet'
@@ -212,9 +219,10 @@ export function saveStatus(args: {
   state: SaveState
   block: SubmitBlock
   scored: number
+  required: number
   storedUpdatedAt: string | null
 }): SaveStatusLine[] {
-  const { state, block, scored } = args
+  const { state, block, scored, required } = args
 
   // Appended to `dirty`'s state line below, when submitBlock also blocked
   // the press -- the fix for Critical 2, where a blocked `dirty` press used
@@ -233,7 +241,7 @@ export function saveStatus(args: {
   // nothing else can reach it first). For `saved` it is usually "Saved.
   // Change something to save again." too, but not always: submitBlock checks
   // `!hasContent` before it checks `saved`, so a `saved` state paired with
-  // `hasContent: false` gets "Score at least one pillar…" instead. That exact
+  // `hasContent: false` gets "Answer at least one question…" instead. That exact
   // shape cannot arise through this screen's own flow -- any edit dispatches
   // `edited` and leaves `saved` immediately, so a live `saved` state's
   // content is always whatever was just submitted -- but the property test in
@@ -248,7 +256,7 @@ export function saveStatus(args: {
       const verb = state.complete ? 'Check-in submitted' : 'Draft saved'
       const tail = state.complete
         ? ''
-        : ` ${scored} of ${PILLARS.length} pillars scored.`
+        : ` ${scored} of ${required} questions scored.`
       return [
         {
           text: `${verb} ${formatSavedAt(state.at)} by ${state.by}.${tail}`,
@@ -262,7 +270,7 @@ export function saveStatus(args: {
         {
           text:
             `Could not save: ${state.error}. Nothing was lost — everything you ` +
-            `entered is still on screen, and pressing ${submitLabel(scored)} ` +
+            `entered is still on screen, and pressing ${submitLabel(scored, required)} ` +
             'again costs nothing.',
           tone: 'error',
         },
@@ -298,8 +306,8 @@ export function saveStatus(args: {
       return [
         {
           text: at
-            ? `Draft saved ${at}. ${scored} of ${PILLARS.length} pillars scored.`
-            : `Draft saved. ${scored} of ${PILLARS.length} pillars scored.`,
+            ? `Draft saved ${at}. ${scored} of ${required} questions scored.`
+            : `Draft saved. ${scored} of ${required} questions scored.`,
           tone: 'confirm',
         },
       ]

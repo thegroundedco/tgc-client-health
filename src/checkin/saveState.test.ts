@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   INITIAL_SAVE_STATE,
-  displayedTotal,
+  displayedOverall,
   saveReducer,
   saveStatus,
   submitBlock,
   submitLabel,
 } from './saveState'
 import type { SaveState, SubmitBlock } from './saveState'
-import { PILLARS } from '../lib/score'
 import { describeError } from '../lib/errorText'
 
 const CLEAN: SaveState = { kind: 'clean' }
@@ -121,10 +120,24 @@ describe('saveReducer', () => {
 })
 
 describe('submitLabel', () => {
-  it('reads Save draft below five pillars and Submit check-in at five', () => {
-    expect(submitLabel(0)).toBe('Save draft')
-    expect(submitLabel(4)).toBe('Save draft')
-    expect(submitLabel(5)).toBe('Submit check-in')
+  it('reads Save draft below the required count and Submit check-in at it', () => {
+    // Kept distinct from the 18/22 sweep below (§4.4's two real required
+    // values): this pins the plain boundary -- below, at, and one below the
+    // required count -- against an arbitrary required value, so the property
+    // is proven independently of which two numbers the gate happens to use.
+    expect(submitLabel(0, 5)).toBe('Save draft')
+    expect(submitLabel(4, 5)).toBe('Save draft')
+    expect(submitLabel(5, 5)).toBe('Submit check-in')
+  })
+
+  // 18 gated out, 22 gated in. A label that said "Submit" at 22 for a gated-out
+  // client would never appear, and one that said it at 18 for a gated-in client
+  // would promise a complete check-in that is four answers short.
+  it('offers submit only when every REQUIRED question is answered', () => {
+    expect(submitLabel(18, 18)).toBe('Submit check-in')
+    expect(submitLabel(17, 18)).toBe('Save draft')
+    expect(submitLabel(18, 22)).toBe('Save draft')
+    expect(submitLabel(22, 22)).toBe('Submit check-in')
   })
 })
 
@@ -185,7 +198,7 @@ describe('submitBlock', () => {
     expect(blocked.blocked).toBe(true)
     if (blocked.blocked) {
       expect(blocked.reason).toMatch(/cannot save/i)
-      expect(blocked.reason).not.toMatch(/at least one pillar/i)
+      expect(blocked.reason).not.toMatch(/at least one question/i)
     }
   })
 
@@ -205,7 +218,24 @@ describe('submitBlock', () => {
   it('blocks a save with nothing in it', () => {
     const blocked = submitBlock({ ...ready, hasContent: false })
     expect(blocked.blocked).toBe(true)
-    if (blocked.blocked) expect(blocked.reason).toMatch(/at least one pillar/i)
+    if (blocked.blocked) expect(blocked.reason).toMatch(/at least one question/i)
+  })
+
+  it('asks for a question, not a pillar, when there is nothing to save', () => {
+    // The exact reason string, pinned in full: §4.4 replaces "pillar" with
+    // "question" throughout the screen's copy, and a regex match (as the
+    // sibling test above uses) would not have caught "pillar" surviving
+    // verbatim in the rest of the sentence.
+    const block = submitBlock({
+      state: { kind: 'clean' },
+      readFailed: false,
+      canEdit: true,
+      hasContent: false,
+      storedSubmitted: false,
+    })
+    expect(block.blocked).toBe(true)
+    if (!block.blocked) return
+    expect(block.reason).toBe('Answer at least one question, or write a note, before saving.')
   })
 
   it('blocks a repeat press that would write exactly what is already stored', () => {
@@ -271,27 +301,34 @@ describe('submitBlock', () => {
   })
 })
 
-describe('displayedTotal', () => {
-  it('shows the local sum while the form differs from the database', () => {
-    // §5.3: the number has to move as pillars are clicked, or the control gives
-    // no feedback at all.
-    for (const state of [DIRTY, SAVING, FAILED]) {
-      expect(displayedTotal({ state, localTotal: 19, storedTotal: 12 })).toBe(19)
+describe('displayedOverall', () => {
+  // §5.3, restated for the new model: the number belongs to the database, and
+  // local arithmetic exists so it moves as questions are answered. The moment
+  // the form matches what is stored, the STORED number shows -- so a
+  // disagreement between scoreV2.ts and the view appears on screen instead of
+  // hiding behind a local mean that always agrees with itself.
+  //
+  // Renamed from displayedTotal along with the function: same three
+  // properties (local while dirty, stored while it matches, null passes
+  // through), restated under the mean's own shape and values rather than the
+  // old sum's, so nothing here still asserts against a total that no longer
+  // exists.
+  it('shows the stored overall while the form matches the database', () => {
+    for (const state of [{ kind: 'clean' }, { kind: 'saved', at: 'x', by: 'you', complete: true }] as SaveState[]) {
+      expect(displayedOverall({ state, localOverall: 4.5, storedOverall: 3.2 })).toBe(3.2)
     }
   })
 
-  it('shows the database column once the form matches it', () => {
-    // §5.3: the total belongs to the database. Showing the stored value here is
-    // what makes a disagreement between score.ts and the generated column
-    // visible on screen instead of hidden behind local arithmetic.
-    for (const state of [CLEAN, SAVED]) {
-      expect(displayedTotal({ state, localTotal: 19, storedTotal: 12 })).toBe(12)
+  it('shows the local overall while the form differs from it', () => {
+    for (const kind of ['dirty', 'saving', 'failed'] as const) {
+      const state = (kind === 'failed' ? { kind, error: 'x' } : { kind }) as SaveState
+      expect(displayedOverall({ state, localOverall: 4.5, storedOverall: 3.2 })).toBe(4.5)
     }
   })
 
-  it('carries null through, because incomplete has no number', () => {
-    expect(displayedTotal({ state: DIRTY, localTotal: null, storedTotal: 12 })).toBeNull()
-    expect(displayedTotal({ state: CLEAN, localTotal: 19, storedTotal: null })).toBeNull()
+  it('passes null through rather than substituting a number', () => {
+    expect(displayedOverall({ state: { kind: 'dirty' }, localOverall: null, storedOverall: 3.2 })).toBeNull()
+    expect(displayedOverall({ state: { kind: 'clean' }, localOverall: 4.5, storedOverall: null })).toBeNull()
   })
 })
 
@@ -328,6 +365,11 @@ describe('saveStatus', () => {
     // is not swept here: saveStatus's signature does not take it (removed in
     // fix round 2 -- `block` already folds in everything submitBlock decided
     // from it), so there is nothing left for this function to vary on.
+    // `required` is fixed at an arbitrary value here -- this sweep's own
+    // dimension is hasContent, not required. The dedicated sweep across both
+    // real required values (18 and 22) lives in its own describe below,
+    // "saveStatus counts against the required number", rather than folded in
+    // here as a third nested loop.
     for (const state of ALL_STATES) {
       for (const block of [BLOCKED(), UNBLOCKED]) {
         for (const hasContent of [true, false]) {
@@ -335,6 +377,7 @@ describe('saveStatus', () => {
             state,
             block,
             scored: hasContent ? 3 : 0,
+            required: 5,
             storedUpdatedAt: hasContent ? '2026-08-21T15:42:00.000Z' : null,
           })
           expect(
@@ -356,11 +399,12 @@ describe('saveStatus', () => {
       state: CLEAN,
       block: UNBLOCKED,
       scored: 3,
+      required: 5,
       storedUpdatedAt: '2026-08-21T15:42:00.000Z',
     })
     expect(nonEmptyText(lines)).toBe(true)
     expect(lines[0].text).toMatch(/draft saved/i)
-    expect(lines[0].text).toContain(`3 of ${PILLARS.length} pillars scored`)
+    expect(lines[0].text).toContain('3 of 5 questions scored')
   })
 
   it('Critical 1, the nullability question: storedUpdatedAt cannot be null when clean is unblocked, but the guard does not print an empty date if it ever is', () => {
@@ -368,6 +412,7 @@ describe('saveStatus', () => {
       state: CLEAN,
       block: UNBLOCKED,
       scored: 3,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(lines[0].text).not.toMatch(/invalid date/i)
@@ -375,7 +420,7 @@ describe('saveStatus', () => {
     // "Draft saved ." is the exact defect the brief's dead branch would have
     // printed, from formatSavedAt('') returning its input unchanged.
     expect(lines[0].text).not.toContain(' .')
-    expect(lines[0].text).toBe(`Draft saved. 3 of ${PILLARS.length} pillars scored.`)
+    expect(lines[0].text).toBe('Draft saved. 3 of 5 questions scored.')
   })
 
   it('Critical 2: a blocked dirty press still says why', () => {
@@ -383,11 +428,12 @@ describe('saveStatus', () => {
     // is dirty (something changed since it loaded) and empty (nothing left to
     // save), so submitBlock blocks it -- and the old code only ever rendered
     // "Unsaved changes." for `dirty`, never the reason the button disabled.
-    const block = BLOCKED('Score at least one pillar, or write a note, before saving.')
+    const block = BLOCKED('Answer at least one question, or write a note, before saving.')
     const lines = saveStatus({
       state: DIRTY,
       block,
       scored: 0,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(lines).toHaveLength(2)
@@ -407,6 +453,7 @@ describe('saveStatus', () => {
       state: SAVING,
       block: BLOCKED('Saving…'),
       scored: 3,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(saving).toHaveLength(1)
@@ -415,6 +462,7 @@ describe('saveStatus', () => {
       state: SAVED,
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 5,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(saved).toHaveLength(1)
@@ -424,8 +472,9 @@ describe('saveStatus', () => {
     // `!hasContent` check rather than the `saved` check. Still one line.
     const savedEmpty = saveStatus({
       state: SAVED,
-      block: BLOCKED('Score at least one pillar, or write a note, before saving.'),
+      block: BLOCKED('Answer at least one question, or write a note, before saving.'),
       scored: 0,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(savedEmpty).toHaveLength(1)
@@ -436,20 +485,22 @@ describe('saveStatus', () => {
       state: SAVED,
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 5,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(submitted[0].text).toMatch(/^Check-in submitted /)
     expect(submitted[0].text).toContain('by you.')
-    expect(submitted[0].text).not.toMatch(/pillars scored/)
+    expect(submitted[0].text).not.toMatch(/questions scored/)
 
     const draft = saveStatus({
       state: { kind: 'saved', at: '2026-08-21T15:42:00.000Z', by: 'you', complete: false },
       block: BLOCKED('Saved. Change something to save again.'),
       scored: 4,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(draft[0].text).toMatch(/^Draft saved /)
-    expect(draft[0].text).toContain(`4 of ${PILLARS.length} pillars scored`)
+    expect(draft[0].text).toContain('4 of 5 questions scored')
   })
 
   // The exact sentence the owner met on the deployed site with the wifi off,
@@ -463,6 +514,7 @@ describe('saveStatus', () => {
       state: { kind: 'failed', error: describeError(new TypeError('Failed to fetch')) },
       block: UNBLOCKED,
       scored: 3,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(lines).toHaveLength(1)
@@ -479,10 +531,60 @@ describe('saveStatus', () => {
       state: FAILED,
       block: UNBLOCKED,
       scored: 3,
+      required: 5,
       storedUpdatedAt: null,
     })
     expect(lines).toHaveLength(1)
     expect(lines[0].text).toContain('network refused')
     expect(lines[0].text).toMatch(/nothing was lost/i)
+  })
+})
+
+describe('saveStatus counts against the required number', () => {
+  it('names the required total in the clean draft line', () => {
+    const lines = saveStatus({
+      state: { kind: 'clean' },
+      block: { blocked: false },
+      scored: 7,
+      required: 18,
+      storedUpdatedAt: '2026-08-01T10:00:00Z',
+    })
+    expect(lines[0].text).toContain('7 of 18 questions scored')
+  })
+
+  it('names the required total in the saved-draft line', () => {
+    const lines = saveStatus({
+      state: { kind: 'saved', at: '2026-08-01T10:00:00Z', by: 'you', complete: false },
+      block: { blocked: false },
+      scored: 9,
+      required: 22,
+      storedUpdatedAt: null,
+    })
+    expect(lines[0].text).toContain('9 of 22 questions scored')
+  })
+
+  // The property the whole function exists for: never zero lines, never an
+  // empty line, for any combination. Sweep both required values -- distinct
+  // from the hasContent sweep in the 'saveStatus' describe above, which fixes
+  // required at an arbitrary constant because hasContent is its own axis.
+  it('always returns at least one non-empty line', () => {
+    const states: SaveState[] = [
+      { kind: 'clean' },
+      { kind: 'dirty' },
+      { kind: 'saving' },
+      { kind: 'saved', at: '2026-08-01T10:00:00Z', by: 'you', complete: true },
+      { kind: 'saved', at: '2026-08-01T10:00:00Z', by: 'you', complete: false },
+      { kind: 'failed', error: 'nope' },
+    ]
+    const blocks: SubmitBlock[] = [{ blocked: false }, { blocked: true, reason: 'because' }]
+    for (const state of states) {
+      for (const block of blocks) {
+        for (const required of [18, 22]) {
+          const lines = saveStatus({ state, block, scored: 3, required, storedUpdatedAt: null })
+          expect(lines.length).toBeGreaterThan(0)
+          for (const line of lines) expect(line.text.trim()).not.toBe('')
+        }
+      }
+    }
   })
 })
