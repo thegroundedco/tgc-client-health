@@ -1,64 +1,97 @@
-import { PILLARS, scoredCount } from '../lib/score'
-import type { Pillar } from '../lib/score'
+import { ALL_QUESTIONS, BUCKETS, type Bucket } from '../lib/buckets'
+import { answeredCount, requiredQuestions } from '../lib/scoreV2'
+import type { Answers } from '../lib/scoreV2'
 import { formatSavedAt } from '../lib/month'
 
-// Only the columns the card actually reads. Narrower than the table row on
-// purpose: useBoard selects exactly these, and a type that admitted the whole
-// row would let a future edit read a column nothing fetched.
+// The six generated bucket columns. Named here rather than derived from the
+// bucket name, because the abbreviations are not derivable -- `finances` is
+// `fin_score` and `communication` is `comm_score` -- and a derivation could not
+// complain when it guessed wrong. cardSummary.test.ts pins all six.
+export type BucketScoreKey =
+  | 'comm_score' | 'growth_score' | 'fin_score'
+  | 'rel_score' | 'del_score' | 'adv_score'
+
+export const BUCKET_SCORE_KEY: Record<Bucket, BucketScoreKey> = {
+  communication: 'comm_score',
+  growth: 'growth_score',
+  finances: 'fin_score',
+  relationship: 'rel_score',
+  delivery: 'del_score',
+  advocacy: 'adv_score',
+}
+
+// Only what the card reads. Narrower than the table row on purpose: useBoard
+// selects exactly these, and a type admitting the whole row would let a future
+// edit read a column nothing fetched.
+//
+// The answers are typed `number | boolean | null` because the four Advocacy
+// columns are boolean and the other eighteen are smallint. `false` is an
+// ANSWER; only null and absence mean unanswered.
+// AMENDED 2026-08-28 during the pre-flight scan. An earlier draft of this plan
+// wrote this as an intersection with `Partial<Record<string, number | boolean |
+// null>>`. That does not typecheck: the index signature covers `submitted_at`
+// and `submitted_by` too, collapsing their types against number|boolean|null,
+// and `answeredCount(checkin, ...)` could not be called at all. One index
+// signature, admitting string, is the honest shape of a postgrest row.
 export type CardCheckin = {
-  total_score: number | null
+  client_id: number
   submitted_at: string | null
   submitted_by: string | null
-} & Partial<Record<Pillar, number | null>>
+  [key: string]: number | boolean | string | null | undefined
+}
 
-// The columns that produce a CardCheckin, spelled as one literal beside the
-// type rather than in useBoard, for two reasons. supabase-js infers the row
-// type from this string, so a literal is checked against the generated database
-// types and a mistyped column fails `npm run build` -- a computed string
-// degrades the row to untyped and the mistake surfaces at runtime as undefined.
-// And it lives here, not in useBoard, because useBoard imports the Supabase
-// client, which throws when VITE_ config is absent; CI runs vitest with no
-// config, so a test importing useBoard would fail there. This file imports
-// nothing but score and month, so the test beside it runs anywhere.
-//
-// The cost of a literal is that it can drift from PILLARS. cardSummary.test.ts
-// pins it: typing from the literal, drift caught by the test.
-//
-// The five pillars are here because the card draws a bar per pillar, not
-// because anything recomputes the total -- the total comes from the generated
-// column, which `npm run verify:score` proves agrees with totalScore().
-export const CHECKIN_COLUMNS =
-  'client_id, total_score, submitted_at, submitted_by, relationship, delivery, financial, sentiment, growth'
+// One literal, checked against the generated database types by supabase-js, so
+// a mistyped column fails `npm run build` rather than arriving at runtime as
+// undefined. Built from the rubric so it cannot drift from it -- the previous
+// version spelled five pillar names by hand and cardSummary.test.ts existed to
+// catch exactly that drift. Now the drift is impossible and the test proves the
+// construction instead.
+export const CHECKIN_COLUMNS = [
+  'client_id',
+  'submitted_at',
+  'submitted_by',
+  ...ALL_QUESTIONS,
+  ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket]),
+].join(', ')
 
 // The footer IS the save confirmation -- §6. Better than a toast because it
 // survives a reload, which is the check the owner ran on v1 and got no answer
-// from. Every branch returns a non-empty sentence; the whole slice exists
-// because a screen said nothing.
-export function cardFooter(checkin: CardCheckin | null, viewerId: string): string {
+// from. Every branch returns a non-empty sentence.
+//
+// `advocacyApplies` is a parameter rather than something read off the row: the
+// gate lives on the client's start date, not on the check-in, and the view is
+// what answers it. Without it this line would say "of 22" for a client whose
+// Advocacy questions are not being asked, and the person would hunt for four
+// questions that are not on the screen.
+export function cardFooter(
+  checkin: CardCheckin | null,
+  viewerId: string,
+  advocacyApplies: boolean,
+): string {
   if (!checkin) return 'Not started'
 
   if (checkin.submitted_at !== null) {
-    // "you" or the role, never a name -- and as of Slice 2 step 3 that is a
-    // CHOICE rather than a constraint. profiles_select_active_users made other
-    // people's profile rows readable, so the name is now available; wiring it up
-    // needs the board to fetch profiles, which Slice 2 design §8 defers to the
-    // first slice that touches the board again. Until then this sentence stays
-    // honest about what it knows rather than inventing a name.
-    //
-    // The old reason -- profiles_select_own makes another person's profile
-    // unreadable -- was true when this was written and is not any more. Left
-    // recorded rather than deleted, because "why does this still say a role"
-    // is the question a reader will arrive with. Originally Slice 1 spec §10
-    // item 7.
     const who = checkin.submitted_by === viewerId ? 'you' : 'another account manager'
     return `Submitted ${formatSavedAt(checkin.submitted_at)} by ${who}`
   }
 
-  const scored = scoredCount(checkin)
-  // A row can exist with notes and no scores. "Draft, 0 of 5" would send the
+  // Iterate the rubric, not the row's own keys. The row also carries
+  // client_id, the submitted fields, the six generated bucket scores and — once
+  // the rename lands — six legacy_* columns, none of which are answers. This
+  // mirrors useCheckin.ts's draftFromRow exactly, including the typeof filter:
+  // a `false` is an ANSWER and must survive, which a truthiness check would
+  // silently drop. Step 2.5's review proved that filter lethal by mutation.
+  const answers: Answers = {}
+  for (const key of ALL_QUESTIONS) {
+    const value = checkin[key]
+    if (typeof value === 'number' || typeof value === 'boolean') answers[key] = value
+  }
+
+  const scored = answeredCount(answers, advocacyApplies)
+  // A row can exist with notes and no answers. "Draft, 0 of 22" would send the
   // reader looking for scores that were never entered.
   if (scored === 0) return 'Not started'
-  return `Draft, ${scored} of ${PILLARS.length} scored`
+  return `Draft, ${scored} of ${requiredQuestions(advocacyApplies).length} scored`
 }
 
 export function progressLine(submitted: number, total: number): string {
