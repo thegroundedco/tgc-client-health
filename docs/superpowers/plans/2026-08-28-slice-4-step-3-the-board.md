@@ -36,6 +36,18 @@ Task 6's migration file is written and applied to staging during this plan. **It
 
 ---
 
+## A BROKEN WINDOW IS OPEN FROM TASK 1 UNTIL TASK 4
+
+This plan rewrites a data shape from the bottom up, so the tree does not fully build in the middle of it. That is deliberate. Specifically:
+
+- **Task 1** gives `cardFooter` a third parameter, which breaks `ClientCard.tsx` until Task 3.
+- **Task 2** adds `scores` to `UseBoard`, which breaks `Board.test.tsx`'s `board()` helper until Task 4.
+- **Task 1** retires the columns `Board.test.tsx`'s `SUBMITTED` fixture is built from, likewise until Task 4.
+
+**Tasks 1, 2 and 3 run ONLY their own test files** and must not repair a neighbouring file to make the whole suite pass. **Task 4 closes the window**: it is the first task required to leave `npm test -- --run && npm run build && npm run lint` fully green.
+
+An implementer who "helpfully" fixes a file outside its task list has widened its own diff past what its reviewer was given, which is how a real defect gets waved through in this project.
+
 ## Global Constraints
 
 - **The overall score NEVER includes Advocacy.** It is the mean of the eighteen non-Advocacy answers, always, in both gate states. The board reads it from `checkin_scores.overall_score` and never recomputes it.
@@ -239,6 +251,7 @@ Expected: FAIL — `BUCKET_SCORE_KEY` is not exported, and `cardFooter` takes tw
 ```ts
 import { ALL_QUESTIONS, BUCKETS, type Bucket } from '../lib/buckets'
 import { answeredCount, requiredQuestions } from '../lib/scoreV2'
+import type { Answers } from '../lib/scoreV2'
 import { formatSavedAt } from '../lib/month'
 
 // The six generated bucket columns. Named here rather than derived from the
@@ -265,12 +278,18 @@ export const BUCKET_SCORE_KEY: Record<Bucket, BucketScoreKey> = {
 // The answers are typed `number | boolean | null` because the four Advocacy
 // columns are boolean and the other eighteen are smallint. `false` is an
 // ANSWER; only null and absence mean unanswered.
+// AMENDED 2026-08-28 during the pre-flight scan. An earlier draft of this plan
+// wrote this as an intersection with `Partial<Record<string, number | boolean |
+// null>>`. That does not typecheck: the index signature covers `submitted_at`
+// and `submitted_by` too, collapsing their types against number|boolean|null,
+// and `answeredCount(checkin, ...)` could not be called at all. One index
+// signature, admitting string, is the honest shape of a postgrest row.
 export type CardCheckin = {
   client_id: number
   submitted_at: string | null
   submitted_by: string | null
-} & Partial<Record<BucketScoreKey, number | null>>
-  & Partial<Record<string, number | boolean | null>>
+  [key: string]: number | boolean | string | null | undefined
+}
 
 // One literal, checked against the generated database types by supabase-js, so
 // a mistyped column fails `npm run build` rather than arriving at runtime as
@@ -307,7 +326,19 @@ export function cardFooter(
     return `Submitted ${formatSavedAt(checkin.submitted_at)} by ${who}`
   }
 
-  const scored = answeredCount(checkin, advocacyApplies)
+  // Iterate the rubric, not the row's own keys. The row also carries
+  // client_id, the submitted fields, the six generated bucket scores and — once
+  // the rename lands — six legacy_* columns, none of which are answers. This
+  // mirrors useCheckin.ts's draftFromRow exactly, including the typeof filter:
+  // a `false` is an ANSWER and must survive, which a truthiness check would
+  // silently drop. Step 2.5's review proved that filter lethal by mutation.
+  const answers: Answers = {}
+  for (const key of ALL_QUESTIONS) {
+    const value = checkin[key]
+    if (typeof value === 'number' || typeof value === 'boolean') answers[key] = value
+  }
+
+  const scored = answeredCount(answers, advocacyApplies)
   // A row can exist with notes and no answers. "Draft, 0 of 22" would send the
   // reader looking for scores that were never entered.
   if (scored === 0) return 'Not started'
@@ -464,6 +495,20 @@ git commit -m "feat(board): read overall_score and the gate from checkin_scores"
 **Three things change at once and all three are visible.** The bars go from five to six and are fed by different columns. The headline number goes from an integer out of 25 to a two-decimal mean out of 5, so `bandFor` comes from `scoreMath` (3.6 / 2.2) rather than `score.ts` (18 / 11). And a gated-out client draws five bars plus a sentence.
 
 **Do not import `src/lib/score.ts` or `src/lib/pillars.ts`.** Task 5 deletes them.
+
+**AMENDED 2026-08-28 during the pre-flight scan — this task is bigger than its step list implies.**
+`ClientCard.dom.test.tsx` has NO render helper: eighteen tests construct `<ClientCard … />` inline,
+every one of their fixtures is built from `total_score` and the five retired pillar columns, and the
+file imports `PILLARS` from `../lib/score`. Adding a required `score` prop and changing the row shape
+breaks **all eighteen**, not only the new ones.
+
+So this task owns rewriting that file's fixtures wholesale. That is genuine premise retirement — the
+columns do not exist any more — and **NOT** the test consolidation this project bans. Therefore:
+every existing case must survive **as a case**; none may be merged away or dropped because its
+replacement "covers it"; and the report must name each one it touched and why.
+
+Introduce a `renderCard()` helper that defaults `score`, so the next prop addition costs one line
+rather than eighteen. That helper is what the new tests above are written against.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -662,6 +707,18 @@ git commit -m "feat(board): six bucket bars, the gated note, and the overall fro
 **Files:** Modify `src/board/Board.tsx`; Test `src/board/Board.test.tsx`.
 
 **Interfaces:** Consumes `scores` from Task 2 and the `score` prop from Task 3. Produces nothing new.
+
+**THIS TASK CLOSES THE BROKEN WINDOW, and it has two repairs to make that its step list does not
+show.** Found in the pre-flight scan; neither belongs to any earlier task:
+
+1. `Board.test.tsx`'s `board()` helper returns a `UseBoard` **object literal**. Task 2 added `scores`
+   to that type, so the helper no longer typechecks. Give it `scores: new Map()` alongside
+   `checkins: new Map()`, and let `overrides` replace it as it already does for the others.
+2. The same file's `SUBMITTED: CardCheckin` fixture is built from `total_score` and the five retired
+   pillar columns. Rebuild it from the six bucket score columns plus `client_id`.
+
+Both are in-place repairs forced by retired premises — name them in the report. Do not consolidate
+or drop any test in that file.
 
 - [ ] **Step 1: Write the failing test**
 
