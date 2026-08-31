@@ -1,4 +1,4 @@
-import type { Band } from '../lib/score.ts'
+import type { Band } from '../lib/scoreMath.ts'
 
 // This mapping used to live in Board.tsx, exported alongside the Board
 // component. oxlint's only-export-components rule flagged that: React Fast
@@ -13,19 +13,19 @@ import type { Band } from '../lib/score.ts'
 // makes one screen depend on another. Every future reuse would have made
 // that dependency worse.
 //
-// Lives in src/styles/, not src/lib/score.ts, even though BAND_LABELS in
-// score.ts is a structurally identical Record<Band, string> and the parallel
-// is tempting. score.ts is domain logic — what a band IS. This file is
+// Lives in src/styles/, not src/lib/scoreMath.ts, even though BAND_LABELS in
+// scoreMath.ts is a structurally identical Record<Band, string> and the
+// parallel is tempting. scoreMath.ts is domain logic — what a band IS. This is
 // presentation vocabulary — which CSS class a band renders as — and the
 // classes it names are declared in src/styles/base.css, its neighbour here.
-// Renaming a band class in base.css means changing this file, not score.ts.
-// Do not "tidy" this into score.ts: that would couple scoring to the
+// Renaming a band class in base.css means changing this file, not scoreMath.
+// Do not "tidy" this into scoreMath.ts: that would couple scoring to the
 // stylesheet.
 //
 // BAND_CLASSES is deliberately not exported: nothing outside this module
 // needs the raw mapping, only the string bandClassName produces. Keeping it
 // private is what makes the Record<Band, string> below a compile error the
-// moment a Band is added to score.ts without a matching entry here, rather
+// moment a Band is added to scoreMath.ts without a matching entry here, rather
 // than a mapping something else could reach around and use incorrectly.
 const BAND_CLASSES: Record<Band, string> = {
   healthy: 'band--healthy',

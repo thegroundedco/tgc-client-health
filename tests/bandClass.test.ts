@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { bandClassName } from '../src/styles/bandClass.ts'
-import type { Band } from '../src/lib/score.ts'
+import type { Band } from '../src/lib/scoreMath.ts'
 
 // bandClassName assembles its class string at runtime by string interpolation,
 // so a typo in any of the five names it can produce ("band", "band--healthy",
@@ -18,7 +18,7 @@ import type { Band } from '../src/lib/score.ts'
 const ROOT = join(import.meta.dirname, '..')
 
 // Every member of Band, derived from a Record rather than typed out by hand,
-// so that adding a Band to src/lib/score.ts is a compile error here too and
+// so that adding a Band to src/lib/scoreMath.ts is a compile error here too and
 // this test cannot silently go on covering only some of the bands.
 const ALL_BANDS: Record<Band, true> = {
   healthy: true,
