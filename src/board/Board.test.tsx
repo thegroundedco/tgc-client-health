@@ -200,7 +200,9 @@ describe('the board', () => {
 
   it('counts submissions in the progress line', () => {
     given({ submitted: 2 })
-    expect(screen.getByText('2 of 3 check-ins submitted this month')).toBeTruthy()
+    expect(
+      screen.getByText(`2 of 3 check-ins submitted for ${formatPeriod(defaultPeriod())}`),
+    ).toBeTruthy()
   })
 
   it('carries each card its own check-in, and names the viewer in the footer', () => {
@@ -415,7 +417,7 @@ describe('the show-archived toggle', () => {
     render(<Board profile={PROFILE} />)
 
     expect(screen.getByRole('status').textContent).toBe(
-      'All 1 check-ins submitted this month',
+      `All 1 check-ins submitted for ${formatPeriod(defaultPeriod())}`,
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
@@ -423,7 +425,7 @@ describe('the show-archived toggle', () => {
     // Unchanged by the toggle. This is the assertion that would fail if the
     // denominator were clients.length.
     expect(screen.getByRole('status').textContent).toBe(
-      'All 1 check-ins submitted this month',
+      `All 1 check-ins submitted for ${formatPeriod(defaultPeriod())}`,
     )
   })
 

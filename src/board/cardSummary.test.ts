@@ -174,14 +174,24 @@ describe('cardFooter', () => {
 
 describe('progressLine', () => {
   it('says no active clients when there are none', () => {
-    expect(progressLine(0, 0)).toBe('No active clients')
+    expect(progressLine(0, 0, '2026-07-01')).toBe('No active clients')
   })
 
   it('says all submitted when they are', () => {
-    expect(progressLine(10, 10)).toBe('All 10 check-ins submitted this month')
+    expect(progressLine(10, 10, '2026-08-01')).toBe('All 10 check-ins submitted for August 2026')
   })
 
   it('counts otherwise', () => {
-    expect(progressLine(3, 10)).toBe('3 of 10 check-ins submitted this month')
+    expect(progressLine(3, 10, '2026-08-01')).toBe('3 of 10 check-ins submitted for August 2026')
+  })
+
+  it('names the month it was given, not the month it is', () => {
+    // The defect this replaced: the sentence said "this month" while the board
+    // showed whichever month was selected. On 31 August 2026 the board opens on
+    // July, and the old wording claimed ten submitted August check-ins were
+    // zero submissions "this month". A number under the wrong month is worse
+    // than no number, because somebody acts on it.
+    expect(progressLine(0, 10, '2026-07-01')).toBe('0 of 10 check-ins submitted for July 2026')
+    expect(progressLine(0, 10, '2026-12-01')).toBe('0 of 10 check-ins submitted for December 2026')
   })
 })

@@ -1,7 +1,7 @@
 import { ALL_QUESTIONS, BUCKETS, type Bucket } from '../lib/buckets'
 import { answeredCount, requiredQuestions } from '../lib/scoreV2'
 import type { Answers } from '../lib/scoreV2'
-import { formatSavedAt } from '../lib/month'
+import { formatPeriod, formatSavedAt } from '../lib/month'
 
 // The six generated bucket columns. Named here rather than derived from the
 // bucket name, because the abbreviations are not derivable -- `finances` is
@@ -112,8 +112,18 @@ export function cardFooter(
   return `Draft, ${scored} of ${requiredQuestions(advocacyApplies).length} scored`
 }
 
-export function progressLine(submitted: number, total: number): string {
+// Names the month it is counting, rather than saying "this month".
+//
+// It said "this month" while the board could only ever show the current one.
+// Slice 4 step 4 made the period selectable and defaulted it to the month that
+// just closed, at which point the sentence became false the first time anybody
+// read it: on 31 August 2026 the board opens on July and this line would have
+// read "0 of 10 check-ins submitted this month" directly under the heading
+// "July 2026", while all ten August check-ins were in fact submitted. A count
+// that names the wrong month is worse than no count, because it is actionable.
+export function progressLine(submitted: number, total: number, period: string): string {
   if (total === 0) return 'No active clients'
-  if (submitted === total) return `All ${total} check-ins submitted this month`
-  return `${submitted} of ${total} check-ins submitted this month`
+  const month = formatPeriod(period)
+  if (submitted === total) return `All ${total} check-ins submitted for ${month}`
+  return `${submitted} of ${total} check-ins submitted for ${month}`
 }

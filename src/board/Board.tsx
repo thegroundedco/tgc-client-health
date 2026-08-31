@@ -199,7 +199,7 @@ export function Board({ profile }: Props) {
             empty states cannot drift apart in wording. activeTotal, not
             visible.length: this line is about the roster, not about what the
             toggle happens to be showing. */}
-        <h2 className="t-header">{progressLine(board.submitted, board.activeTotal)}</h2>
+        <h2 className="t-header">{progressLine(board.submitted, board.activeTotal, period)}</h2>
         {/* Always rendered, not one arm of a ternary with the toggle below:
             the sentence is how to get a working roster back, and that is
             exactly what somebody needs the moment they retire their last
@@ -249,7 +249,7 @@ export function Board({ profile }: Props) {
             check-in, so counting one here would make this sentence false, and
             pressing the toggle must not change what it says. */}
         <p className="t-caption" role="status">
-          {progressLine(board.submitted, board.activeTotal)}
+          {progressLine(board.submitted, board.activeTotal, period)}
         </p>
         {archiveToggle}
       </div>
