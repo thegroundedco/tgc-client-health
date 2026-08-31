@@ -61,7 +61,6 @@ export type Database = {
           del_quantity: number | null
           del_score: number | null
           del_we_are_proud: number | null
-          fin_on_terms: number | null
           fin_pays_on_time: number | null
           fin_rack_rate: number | null
           fin_rate_increased: number | null
@@ -105,7 +104,6 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
-          fin_on_terms?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
@@ -149,7 +147,6 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
-          fin_on_terms?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
