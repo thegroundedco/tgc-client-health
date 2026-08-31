@@ -33,19 +33,37 @@ export const BUCKET_SCORE_KEY: Record<Bucket, BucketScoreKey> = {
 // and `submitted_by` too, collapsing their types against number|boolean|null,
 // and `answeredCount(checkin, ...)` could not be called at all. One index
 // signature, admitting string, is the honest shape of a postgrest row.
+//
+// AMENDED again, task 4 fix round 1: the six bucket score columns are named
+// here explicitly, alongside the index signature, rather than left to it.
+// TypeScript allows a named property beside an index signature whenever the
+// property's type is assignable to the signature's, and `number | null` is --
+// so ClientCard.tsx can read `checkin?.[BUCKET_SCORE_KEY[bucket]]` and get
+// `number | null` back on its own, with no cast asserting what this type
+// already promises.
 export type CardCheckin = {
   client_id: number
   submitted_at: string | null
   submitted_by: string | null
+  comm_score?: number | null
+  growth_score?: number | null
+  fin_score?: number | null
+  rel_score?: number | null
+  del_score?: number | null
+  adv_score?: number | null
   [key: string]: number | boolean | string | null | undefined
 }
 
-// One literal, checked against the generated database types by supabase-js, so
-// a mistyped column fails `npm run build` rather than arriving at runtime as
-// undefined. Built from the rubric so it cannot drift from it -- the previous
-// version spelled five pillar names by hand and cardSummary.test.ts existed to
-// catch exactly that drift. Now the drift is impossible and the test proves the
-// construction instead.
+// Built from the rubric with .join(', '), so column drift against it is not
+// just caught but IMPOSSIBLE -- the previous version spelled five pillar names
+// by hand and cardSummary.test.ts existed to catch exactly that drift; now the
+// test instead proves the construction. The trade is the compile-time column
+// check the hand-spelled literal used to give for free: postgrest-js can only
+// parse a select() string into a row type when that string is a literal type,
+// and .join(', ') widens this one to plain `string`. cardSummary.test.ts is
+// therefore the only thing left pinning these column names -- a mistyped
+// column here fails a test, not `npm run build`. The read site in useBoard.ts
+// asserts the row type accordingly, with a comment pointing back here.
 export const CHECKIN_COLUMNS = [
   'client_id',
   'submitted_at',
