@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { currentPeriod, formatPeriod } from '../lib/month'
+import { canAdvance, defaultPeriod, formatPeriod, nextPeriod, previousPeriod } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import { CheckIn } from '../checkin/CheckIn'
 import { can } from '../lib/capabilities'
@@ -22,7 +22,12 @@ type Props = { profile: Profile }
 // fix. The first half was that a save gave no feedback; each card's footer is
 // now that feedback, and it survives a reload, which a toast would not.
 export function Board({ profile }: Props) {
-  const period = currentPeriod()
+  // One period for the whole board, and for the check-in it opens. The two must
+  // never disagree: a card summarising one month while its check-in edits
+  // another is the kind of quiet mismatch that makes a person stop trusting the
+  // number. Not persisted, like every other view state here -- a reload lands on
+  // last month, which is where the work is.
+  const [period, setPeriod] = useState(defaultPeriod())
 
   // §5.1: state-based navigation, in the board container. No router, therefore
   // no URL change, therefore a refresh returns here. A linkable check-in URL
@@ -215,7 +220,28 @@ export function Board({ profile }: Props) {
       {adminLink}
       {usersLink}
       <div className={styles.periodBar}>
-        <h2 className="t-header">{formatPeriod(period)}</h2>
+        <div className={styles.periodNav}>
+          <button
+            className="button button--quiet"
+            type="button"
+            onClick={() => setPeriod(previousPeriod(period))}
+          >
+            {/* An accessible name that says what it does, not "<". The visible
+                glyph is decoration and is hidden from the accessibility tree. */}
+            <span aria-hidden="true">&larr;</span>
+            <span className="visually-hidden">Previous month</span>
+          </button>
+          <h2 className="t-header">{formatPeriod(period)}</h2>
+          <button
+            className="button button--quiet"
+            type="button"
+            disabled={!canAdvance(period)}
+            onClick={() => setPeriod(nextPeriod(period))}
+          >
+            <span aria-hidden="true">&rarr;</span>
+            <span className="visually-hidden">Next month</span>
+          </button>
+        </div>
         {/* §6's progress line. role="status" because this number changes on the
             way back from a check-in -- the one moment somebody wants to hear
             that their submission counted.

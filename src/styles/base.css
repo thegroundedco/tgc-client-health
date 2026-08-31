@@ -387,6 +387,27 @@ a {
   padding: var(--space-7) var(--space-5);
 }
 
+/* Visible to a screen reader, invisible on screen. For an accessible name that
+   has to say more than a decorative glyph can carry -- the board's previous-
+   and next-month buttons show "&larr;"/"&rarr;" and need this for the text
+   that names what each one does. The standard clip-based recipe, not
+   `display: none` or `visibility: hidden`, which would also remove the text
+   from the accessibility tree; `position: absolute` takes it out of layout
+   so it adds no visible space next to the glyph it sits beside. Global
+   because it is app-wide vocabulary, not one screen's concern -- the next
+   screen after this one wants it too. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Numbered because the steps are genuinely a sequence: check the secret, then
    re-run the workflow. The counter is restored by hand because base.css above
    removes list markers globally. */

@@ -19,6 +19,16 @@
   gap: var(--space-3);
 }
 
+/* The month heading, with the previous/next controls flanking it. A flex row
+   of its own -- rather than folding the buttons into .periodBar directly --
+   so the heading stays centred between them regardless of what else
+   .periodBar wraps onto its own line (the progress line, the archive toggle). */
+.periodNav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* Cards on a responsive grid. auto-fill with a minimum, so eleven clients lay
    out sensibly on a laptop and on a wide monitor without a breakpoint. */
 .grid {

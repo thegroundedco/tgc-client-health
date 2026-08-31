@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
+import { defaultPeriod, formatPeriod, previousPeriod } from '../lib/month'
 import type { CardCheckin } from './cardSummary'
 import type { UseBoard } from './useBoard'
 
@@ -168,6 +169,33 @@ describe('the board', () => {
   it('names the month', () => {
     given()
     expect(screen.getByRole('heading', { level: 2 }).textContent).toMatch(/\w+ 20\d\d/)
+  })
+
+  it('opens on last month and can walk back', () => {
+    given()
+    expect(screen.getByRole('heading', { name: formatPeriod(defaultPeriod()) })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }))
+    expect(
+      screen.getByRole('heading', { name: formatPeriod(previousPeriod(defaultPeriod())) }),
+    ).toBeTruthy()
+  })
+
+  it('disables next on the current month', () => {
+    given()
+    fireEvent.click(screen.getByRole('button', { name: /next month/i }))
+    const next = screen.getByRole('button', { name: /next month/i }) as HTMLButtonElement
+    expect(next.disabled).toBe(true)
+  })
+
+  it('opens the check-in on the month the board is showing', () => {
+    // One period, never two. A card reading "Draft, 8 of 21" for one month while
+    // opening a check-in for another is what makes a person stop trusting the
+    // number.
+    given()
+    fireEvent.click(screen.getByRole('button', { name: /previous month/i }))
+    const shown = previousPeriod(defaultPeriod())
+    fireEvent.click(screen.getByRole('button', { name: /Colorfil/ }))
+    expect(screen.getByText(formatPeriod(shown))).toBeTruthy()
   })
 
   it('counts submissions in the progress line', () => {

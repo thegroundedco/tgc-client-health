@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { addMonths, formatPeriod, formatSavedAt, periodFor, previousPeriod } from './month'
+import {
+  addMonths,
+  canAdvance,
+  currentPeriod,
+  defaultPeriod,
+  formatPeriod,
+  formatSavedAt,
+  nextPeriod,
+  periodFor,
+  previousPeriod,
+} from './month'
 
 describe('periodFor', () => {
   it('normalises any date to the first of its month', () => {
@@ -38,6 +48,39 @@ describe('previousPeriod', () => {
 
   it('rolls the year over', () => {
     expect(previousPeriod('2026-01-01')).toBe('2025-12-01')
+  })
+})
+
+describe('defaultPeriod', () => {
+  it('defaults to last month, because a month is scored after it closes', () => {
+    // The owner's actual workflow: August is scored during September. Defaulting
+    // to the current month meant the board showed nothing but em dashes for the
+    // first three weeks of every month, and the month he wanted became
+    // unreachable the moment the calendar turned.
+    expect(defaultPeriod()).toBe(previousPeriod(currentPeriod()))
+  })
+})
+
+describe('canAdvance', () => {
+  it('will not advance past the current month', () => {
+    // You cannot score a month that has not started.
+    expect(canAdvance(previousPeriod(currentPeriod()))).toBe(true)
+    expect(canAdvance(currentPeriod())).toBe(false)
+  })
+})
+
+describe('nextPeriod', () => {
+  it('rolls the year in both directions', () => {
+    expect(nextPeriod('2026-12-01')).toBe('2027-01-01')
+    expect(previousPeriod('2027-01-01')).toBe('2026-12-01')
+  })
+})
+
+describe('previousPeriod without a floor', () => {
+  it('goes back without limit', () => {
+    // No floor: the query simply returns nothing for a month before the client
+    // existed, and a floor would need a per-client answer the board does not have.
+    expect(previousPeriod('2020-01-01')).toBe('2019-12-01')
   })
 })
 
