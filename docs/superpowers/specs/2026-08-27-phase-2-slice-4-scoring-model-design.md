@@ -25,7 +25,7 @@ reference calls. That gap is the reason §2 retires the old data instead of migr
 
 ## 2. What is in this slice, and what is not
 
-**In.** The 22 questions and their six buckets; the bucket-average and overall-score arithmetic; the
+**In.** The 21 questions and their six buckets (22 until "On terms" was removed 2026-08-31); the bucket-average and overall-score arithmetic; the
 90-day Advocacy gate; `clients.started_on`; the rewritten check-in screen; the board card's six
 bars; new bands; the rebuilt score verifier.
 
@@ -53,7 +53,9 @@ bars; new bands; the rebuilt score verifier.
 
 ## 3. The scoring model
 
-### 3.1 The six buckets and their 22 questions
+### 3.1 The six buckets and their 21 questions
+
+*Amended 2026-08-31: 22 became 21 when "On terms" was removed. See the Finances entry below.*
 
 Wording is the boss's, lightly normalised to statements. Column names are fixed here because §5
 turns them into a migration and §9 verifies them by name.
@@ -71,14 +73,29 @@ turns them into a migration and §9 verifies them by name.
   long term goals are defined, trackable and being met. Every prompt in this bucket therefore says
   "their goals", and the implementation was already correct where this spec was not.
 
-**Finances** — `fin_rack_rate`, `fin_pays_on_time`, `fin_rate_increased`, `fin_on_terms`
-  Paying rack rate / pays on time / increased rate over the last 90 days / is on terms.
+**Finances** — `fin_rack_rate`, `fin_pays_on_time`, `fin_rate_increased`
 
-  **"On terms" is deliberately undefined.** The source doc reads "On they on terms (3-month
-  commitment?)" — the boss's own question mark. An earlier implementation resolved that into "a
-  three-month commitment or longer", which is a definite claim about the agency's commercial terms
-  that nothing here supports. The owner ruled 2026-08-27 to drop it, so the prompt is bare "On
-  terms." and the scorer applies their own judgement until someone defines it.
+  Paying rack rate / pays on time / increased rate over the last 90 days.
+
+  **AMENDED 2026-08-31: "On terms" is REMOVED, and the column is DROPPED.** Finances is a
+  THREE-question bucket, and the model has 21 questions, not 22.
+
+  The question was never defined. The source doc read "On they on terms (3-month commitment?)" —
+  the boss's own question mark — and the 2026-08-27 ruling left the prompt as a bare "On terms."
+  for the scorer to interpret. Scoring one client's undefined question against another's is not
+  measurement, and after one real scoring round the owner ruled on 2026-08-31 to remove it rather
+  than define it.
+
+  **The consequences, which reach further than one prompt.** The overall is the mean of the
+  non-Advocacy answers, so its divisor falls from eighteen to **seventeen**; `required` falls from
+  22/18 to **21/17**; `fin_score` divides by three, not four; and §9.1's state space shrinks
+  because Finances becomes a 6³ bucket rather than a 6⁴ one.
+
+  **The column is dropped, not renamed**, on the owner's explicit instruction of 2026-08-31, given
+  after being shown that it destroys the one real answer that existed — Babaloo's August 2026
+  check-in, where `fin_on_terms` was 3. That check-in's Finances moves 3.25 → 3.33 and its overall
+  3.56 → 3.59, and its band stays Watch. This is the one place the project departs from §5.4's
+  rename-never-drop principle, and it does so by ruling, not by oversight.
 
 **Relationship** — `rel_collaborative`, `rel_respectful`, `rel_fun`, `rel_multi_threaded`
   Collaborative / respectful / do they have fun / are we and they multi-threaded (are we working
@@ -105,7 +122,7 @@ Three plus three plus four plus four plus four plus four is 22.
 
 **AMENDED 2026-08-28. The paragraph below records the superseded rule; read this block first.**
 
-The eighteen non-Advocacy questions are scored 1-5 and each bucket's score is the mean of its own
+The seventeen non-Advocacy questions are scored 1-5 and each bucket's score is the mean of its own
 questions, unchanged. Advocacy is now different in two ways, both ruled by the owner 2026-08-28:
 
 1. **Its four questions are yes/no**, and its bucket score is **`1 + the number of yeses`** — which
@@ -114,7 +131,7 @@ questions, unchanged. Advocacy is now different in two ways, both ruled by the o
    matrix's cell and the bands need no special case for it. A null in any of the four still yields a
    null bucket score, never a low one (§3.3).
 2. **Advocacy is excluded from the overall score entirely.** The overall is ALWAYS the mean of the
-   eighteen non-Advocacy answers, whether the gate is open or shut. The owner's reason: the matrix in
+   seventeen non-Advocacy answers, whether the gate is open or shut. The owner's reason: the matrix in
    Slice 5 compares clients side by side, and measuring one client on 22 questions and another on 18
    makes that comparison unfair — the more so because Advocacy is the hardest bucket to score well
    on. Every client's headline number is now on one basis.
@@ -148,6 +165,14 @@ adding a sixth would have moved the ceiling to 30 and silently rebased every thr
 
 **Every question weighs the same; buckets therefore do not.** *Amended 2026-08-28: the fractions
 below are restated over eighteen, not twenty-two, and Advocacy is out of this comparison entirely.*
+
+*Further amended 2026-08-31: the arithmetic in this subsection is left AS WRITTEN, over eighteen.
+It is an argument about how bucket size translates into weight, and it makes that argument with the
+numbers that were true when it was made. Removing "On terms" takes the divisor to seventeen and
+makes Finances a three-question bucket like Communication and Growth — which strengthens the
+conclusion rather than changing it, since there are now three three-question buckets and two
+four-question ones. Rewriting the worked figures would obscure that this was reasoned before the
+change, not after it.*
 A four-question bucket moves the overall score by a third more than a three-question bucket, because
 it owns four eighteenths of it against three. Communication and Growth are consequently the two
 quietest buckets that count, purely because they hold one question fewer.
@@ -268,8 +293,9 @@ the moment this ships.
 ### 5.2 The 22 answer columns
 
 **AMENDED 2026-08-28: eighteen smallints and four booleans, not twenty-two smallints.**
+**AMENDED 2026-08-31: SEVENTEEN smallints and four booleans — `fin_on_terms` is dropped.**
 
-The eighteen non-Advocacy answers are each nullable `smallint check between 1 and 5`, matching the
+The seventeen non-Advocacy answers are each nullable `smallint check between 1 and 5`, matching the
 existing pillar columns exactly. Nullable because a draft is a check-in with unanswered questions,
 and the check constraint rather than an enum because that is how `status` and `end_reason_code` are
 already stored on these tables.
@@ -344,14 +370,14 @@ select
   ch.rel_score, ch.del_score, ch.adv_score,
   (c.started_on is not null and ch.period >= c.started_on + 90) as advocacy_applies,
   -- AMENDED 2026-08-28 (§3.2): the case expression is GONE. The overall is always the
-  -- eighteen non-Advocacy answers, so there is one branch, not two.
-  (ch.comm_constructive + ch.comm_timely + ... + ch.del_we_are_proud)::numeric / 18
+  -- seventeen non-Advocacy answers (amended 2026-08-31), so one branch, not two.
+  (ch.comm_constructive + ch.comm_timely + ... + ch.del_we_are_proud)::numeric / 17
     as overall_score
 from public.checkins ch
 join public.clients c on c.id = ch.client_id;
 ```
 
-The sum is elided above for length; the migration writes all eighteen column names out in full.
+The sum is elided above for length; the migration writes all seventeen column names out in full.
 `advocacy_applies` stays in the view even though the overall no longer consults it — the check-in
 screen and the board both need to know whether the gate is open, and computing it once here keeps
 the database's answer and the TypeScript gate's answer comparable (tests/gateParity.test.ts). The `::numeric` cast is required for the same reason as §5.3 — without it Postgres divides
@@ -424,10 +450,11 @@ required-answer count from §4.4.
 null), computes each in TypeScript, then reads the live expression out of `pg_attrdef` and evaluates
 it against them — so it checks what is deployed rather than a copy of it.
 
-Extended naively to 22 questions that is 6^22 states and the check is dead. It survives because
+Extended naively to 21 questions that is 6^21 states and the check is dead. It survives because
 **each bucket's generated expression references only its own questions**, so the space decomposes
 per bucket: 6^3 = 216 states for each of the two three-question buckets, and 6^4 = 1,296 for each of
-the four four-question buckets. 432 + 5,184 = **5,616 states, fewer than the 7,776 checked today,
+the four-question buckets. **Amended 2026-08-31:** with Finances down to three questions and
+Advocacy on booleans, it is 3 x 6^3 + 2 x 6^4 + 3^4 = 648 + 2,592 + 81 = **3,321 states,
 and still exhaustive** — every reachable input to every deployed bucket expression.
 
 This property is the reason §5.4's shape was chosen over a normalised answers table or a `jsonb`
@@ -436,9 +463,10 @@ have replaced an exhaustive proof with a sample.
 
 ### 9.2 The view is verified separately
 
-*Amended 2026-08-28 for §3.2's ruling.* `overall_score` sums eighteen nullable answers in a single
+*Amended 2026-08-28 for §3.2's ruling, and 2026-08-31 for the removal of "On terms".*
+`overall_score` sums seventeen nullable answers in a single
 branch, so it cannot be enumerated exhaustively and is not pinned that way. Instead: for each of the
-eighteen answers, assert that nulling that one answer nulls the overall — eighteen cases, complete
+seventeen answers, assert that nulling that one answer nulls the overall — seventeen cases, complete
 coverage of the null behaviour that matters. Then assert the property the amendment introduced:
 **nulling any of the four Advocacy answers must NOT null the overall**, in either gate state — four
 more cases, and they are the ones that would catch a silent reversion to the old 22-divisor. Add
@@ -448,7 +476,7 @@ bucket-averaging fails loudly rather than drifting.
 
 The exhaustive bucket sweep in §9.1 shrinks too, and gets cheaper: Advocacy's four booleans have
 three states each (null, true, false) rather than six, so its arm is 3^4 = 81 rather than 6^4 = 1296.
-The total falls from 5,616 to 4,401.
+The total falls from 5,616 to 4,401 (2026-08-28), and to **3,321** (2026-08-31, "On terms" removed).
 
 The gate predicate is checked at its boundaries: 89, 90 and 91 days, and a null `started_on`.
 
