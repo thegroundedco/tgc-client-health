@@ -74,7 +74,6 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
       { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'scale' },
       { key: 'fin_pays_on_time', prompt: 'Pays on time.', kind: 'scale' },
       { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.', kind: 'scale' },
-      { key: 'fin_on_terms', prompt: 'On terms.', kind: 'scale' },
     ],
   },
   relationship: {
@@ -138,7 +137,7 @@ const YESNO_KEYS: readonly string[] = BUCKETS.flatMap((bucket) =>
     .map((question) => question.key),
 )
 
-// The eighteen the overall is the mean of. Spec §3.2 as amended: Advocacy is
+// The seventeen the overall is the mean of. Spec §3.2 as amended: Advocacy is
 // excluded whether the gate is open or shut, so unlike requiredQuestions() in
 // scoreV2 this takes no gate argument and never varies. Keeping the two apart
 // is the whole point -- they were one number before 2026-08-28 and are two now.

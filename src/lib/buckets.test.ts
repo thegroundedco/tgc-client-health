@@ -25,13 +25,13 @@ describe('the six buckets', () => {
     expect(BUCKETS[BUCKETS.length - 1]).toBe(GATED_BUCKET)
   })
 
-  it('holds 22 questions in total', () => {
-    expect(ALL_QUESTIONS).toHaveLength(22)
+  it('holds 21 questions in total', () => {
+    expect(ALL_QUESTIONS).toHaveLength(21)
   })
 
   it('holds the question counts the rubric specifies', () => {
     const counts = BUCKETS.map((bucket) => questionsFor(bucket).length)
-    expect(counts).toEqual([3, 3, 4, 4, 4, 4])
+    expect(counts).toEqual([3, 3, 3, 4, 4, 4])
   })
 })
 
@@ -83,6 +83,14 @@ describe('the question keys', () => {
       }
     }
   })
+
+  // The question the owner removed on 2026-08-31. It was never defined -- the
+  // source doc carried the boss's own question mark -- and scoring one client's
+  // undefined question against another's is not measurement.
+  it('no longer carries the retired "On terms" question', () => {
+    expect(ALL_QUESTIONS).not.toContain('fin_on_terms')
+    expect(questionsFor('finances')).toHaveLength(3)
+  })
 })
 
 describe('question kinds', () => {
@@ -100,11 +108,11 @@ describe('question kinds', () => {
     expect(isYesNo('not_a_question')).toBe(false)
   })
 
-  // The eighteen that make the overall. Spec §3.2 as amended: Advocacy is
+  // The seventeen that make the overall. Spec §3.2 as amended: Advocacy is
   // excluded whatever the gate says, so this list is fixed and does not take a
   // gate argument.
-  it('OVERALL_QUESTIONS is the 18 non-Advocacy keys, in rubric order', () => {
-    expect(OVERALL_QUESTIONS).toHaveLength(18)
+  it('OVERALL_QUESTIONS is the 17 non-Advocacy keys, in rubric order', () => {
+    expect(OVERALL_QUESTIONS).toHaveLength(17)
     expect(OVERALL_QUESTIONS.some((k) => isYesNo(k))).toBe(false)
     expect([...OVERALL_QUESTIONS]).toEqual(
       ALL_QUESTIONS.filter((k) => !isYesNo(k)),
