@@ -21,11 +21,24 @@ export type BoardClient = {
   started_on: string | null
 }
 
+// The view's answer to two questions the checkins row cannot answer: what the
+// headline number is, and whether Advocacy is being asked. Both belong to the
+// view because the overall cannot be a generated column (spec §6) and the gate
+// reads clients.started_on, which a generation expression may not touch.
+export type BoardScore = {
+  client_id: number
+  overall_score: number | null
+  advocacy_applies: boolean
+}
+
+export const SCORE_COLUMNS = 'client_id, overall_score, advocacy_applies'
+
 export type UseBoard = {
   status: 'loading' | 'ready' | 'error'
   loadError: string | null
   clients: BoardClient[]
   checkins: Map<number, CardCheckin>
+  scores: Map<number, BoardScore>
   submitted: number
   // The denominator of the progress line, and deliberately NOT clients.length.
   // See the count below.
@@ -38,6 +51,7 @@ export function useBoard(period: string): UseBoard {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [clients, setClients] = useState<BoardClient[]>([])
   const [checkins, setCheckins] = useState<Map<number, CardCheckin>>(new Map())
+  const [scores, setScores] = useState<Map<number, BoardScore>>(new Map())
 
   // `isCancelled` is a parameter, and the flag it closes over belongs to the
   // effect below -- the same shape as useCheckin and useProfile. It cannot be a
@@ -93,11 +107,30 @@ export function useBoard(period: string): UseBoard {
           byClient.set(row.client_id, row)
         }
 
+        const scoreResult = await supabase
+          .from('checkin_scores')
+          .select(SCORE_COLUMNS)
+          .eq('period', period)
+
+        if (isCancelled()) return
+
+        if (scoreResult.error) {
+          setLoadError(describeError(scoreResult.error))
+          setStatus('error')
+          return
+        }
+
+        const scoreByClient = new Map<number, BoardScore>()
+        for (const row of scoreResult.data) {
+          scoreByClient.set(row.client_id, row)
+        }
+
         // Never write after a failed read: everything below runs only because
-        // both queries succeeded.
+        // all three queries succeeded.
         setLoadError(null)
         setClients(clientResult.data)
         setCheckins(byClient)
+        setScores(scoreByClient)
         setStatus('ready')
       } catch (thrown) {
         if (isCancelled()) return
@@ -145,5 +178,5 @@ export function useBoard(period: string): UseBoard {
   const activeTotal = activeCount(clients)
 
   // A manual reload has nothing to be cancelled by, so it uses the default.
-  return { status, loadError, clients, checkins, submitted, activeTotal, reload: () => void load() }
+  return { status, loadError, clients, checkins, scores, submitted, activeTotal, reload: () => void load() }
 }

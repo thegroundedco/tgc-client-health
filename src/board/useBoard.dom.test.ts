@@ -15,27 +15,40 @@ const db = vi.hoisted(() => ({
   clientFilters: [] as [string, unknown][],
   clients: async (): Promise<Result> => ({ data: [], error: null }),
   checkins: async (): Promise<Result> => ({ data: [], error: null }),
+  scores: async (): Promise<Result> => ({ data: [], error: null }),
 }))
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
-    from: (table: string) =>
-      table === 'clients'
-        ? {
-            select: () => {
-              const chain = {
-                eq: (column: string, value: unknown) => {
-                  db.clientFilters.push([column, value])
-                  return chain
-                },
-                order: () => db.clients(),
-              }
-              return chain
-            },
-          }
-        : {
-            select: () => ({ eq: () => db.checkins() }),
+    from: (table: string) => {
+      if (table === 'clients') {
+        return {
+          select: () => {
+            const chain = {
+              eq: (column: string, value: unknown) => {
+                db.clientFilters.push([column, value])
+                return chain
+              },
+              order: () => db.clients(),
+            }
+            return chain
           },
+        }
+      }
+      if (table === 'checkins') {
+        return { select: () => ({ eq: () => db.checkins() }) }
+      }
+      if (table === 'checkin_scores') {
+        return { select: () => ({ eq: () => db.scores() }) }
+      }
+      // Unmocked table: throw rather than silently fall through to some other
+      // table's double. Before this branch existed, anything that was not
+      // 'clients' resolved to the checkins double -- a mistyped table name in
+      // useBoard.ts would have returned an empty success and the board would
+      // have rendered with no error and no scores, indistinguishable from a
+      // client with nothing to show.
+      throw new Error(`useBoard.dom.test.ts's fake Supabase does not know table '${table}'`)
+    },
   },
 }))
 
@@ -52,6 +65,7 @@ beforeEach(() => {
   db.clientFilters = []
   db.clients = async () => ({ data: ROSTER, error: null })
   db.checkins = async () => ({ data: [], error: null })
+  db.scores = async () => ({ data: [], error: null })
 })
 
 // An arrow, not a bare reference: useBoard takes the period argument, and
@@ -65,6 +79,29 @@ async function ready() {
   const rendered = renderHook(() => useBoard('2026-08-01'))
   await waitFor(() => expect(rendered.result.current.status).toBe('ready'))
   return rendered
+}
+
+// A second entry point, for the scores tests below: those fixtures name their
+// own clients/checkins/scores instead of relying on ROSTER and the
+// beforeEach defaults, and they need to reach 'error' as well as 'ready'.
+function renderUseBoard(fixtures: {
+  clients?: unknown[]
+  checkins?: unknown[]
+  scores?: unknown[]
+  scoresError?: { message: string }
+}) {
+  if (fixtures.clients !== undefined) {
+    db.clients = async () => ({ data: fixtures.clients, error: null })
+  }
+  if (fixtures.checkins !== undefined) {
+    db.checkins = async () => ({ data: fixtures.checkins, error: null })
+  }
+  if (fixtures.scoresError !== undefined) {
+    db.scores = async () => ({ data: null, error: fixtures.scoresError })
+  } else if (fixtures.scores !== undefined) {
+    db.scores = async () => ({ data: fixtures.scores, error: null })
+  }
+  return renderHook(() => useBoard('2026-08-01'))
 }
 
 describe('the board hook', () => {
@@ -119,5 +156,40 @@ describe('the board hook', () => {
     await waitFor(() => expect(rendered.result.current.status).toBe('error'))
     expect(rendered.result.current.loadError).toContain('permission denied')
     expect(rendered.result.current.clients).toEqual([])
+  })
+
+  it('exposes a score row per client, keyed by client_id', async () => {
+    const { result } = renderUseBoard({
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' }],
+      checkins: [{ client_id: 1, submitted_at: null, submitted_by: null, comm_score: 4 }],
+      scores: [{ client_id: 1, overall_score: 3.5, advocacy_applies: true }],
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.scores.get(1)?.overall_score).toBe(3.5)
+    expect(result.current.scores.get(1)?.advocacy_applies).toBe(true)
+  })
+
+  // A client with no check-in has no score row. The card must cope, and the map
+  // must not invent an entry.
+  it('has no score entry for a client with no check-in', async () => {
+    const { result } = renderUseBoard({
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+      checkins: [],
+      scores: [],
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.scores.get(1)).toBe(undefined)
+  })
+
+  // The view read failing must fail the board the same way the other two do --
+  // not leave a board rendering cards with no scores and no message.
+  it('reports an error when the view read fails', async () => {
+    const { result } = renderUseBoard({
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+      checkins: [],
+      scoresError: { message: 'permission denied for view checkin_scores' },
+    })
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).not.toBeNull()
   })
 })
