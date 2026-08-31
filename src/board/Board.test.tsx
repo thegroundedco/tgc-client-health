@@ -66,15 +66,20 @@ const CLIENTS = [
   { id: 3, name: 'Sno-Go', status: 'active', started_on: null },
 ]
 
+// REPAIR (task 4, not in its step list): this fixture used to be built from
+// total_score and the five retired pillar columns. Both are gone from
+// CardCheckin -- the six bucket score columns replaced them -- so it is
+// rebuilt from client_id, submitted_at, submitted_by and those six.
 const SUBMITTED: CardCheckin = {
-  total_score: 21,
+  client_id: 2,
   submitted_at: '2026-08-21T17:04:00.000Z',
   submitted_by: ME,
-  relationship: 5,
-  delivery: 4,
-  financial: 4,
-  sentiment: 4,
-  growth: 4,
+  comm_score: 5,
+  growth_score: 4,
+  fin_score: 4,
+  rel_score: 4,
+  del_score: 4,
+  adv_score: 4,
 }
 
 function board(overrides: Partial<UseBoard> = {}): UseBoard {
@@ -83,6 +88,10 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
     loadError: null,
     clients: CLIENTS,
     checkins: new Map(),
+    // REPAIR (task 4, not in its step list): task 2 added `scores` to
+    // UseBoard, so this helper stopped typechecking without it. `overrides`
+    // below replaces it exactly as it already does for the other fields.
+    scores: new Map(),
     submitted: 0,
     // All three of CLIENTS are active, so this is the same number as
     // clients.length here -- but it is a separate field, and overrides below
@@ -107,6 +116,9 @@ const READY = {
   loadError: null,
   clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
   checkins: new Map(),
+  // Same repair as board()'s, above: task 2 added `scores` to UseBoard, and
+  // this fixture is a second place it must exist for the file to typecheck.
+  scores: new Map(),
   submitted: 0,
   activeTotal: 1,
   reload: vi.fn(),
@@ -171,6 +183,25 @@ describe('the board', () => {
 
     expect(screen.getByText(/^Submitted .* by you$/)).toBeTruthy()
     expect(screen.getAllByText('Not started')).toHaveLength(2)
+  })
+
+  it('gives each card its own score row', () => {
+    // The other half of the wiring test above: useBoard's scores map has to
+    // reach the right card too, not just its checkins map. Acme is past 90
+    // days and draws six bars; Beta is inside the gate and draws five.
+    given({
+      clients: [
+        { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+        { id: 2, name: 'Beta', status: 'active', started_on: '2026-08-01' },
+      ],
+      activeTotal: 2,
+      scores: new Map([
+        [1, { client_id: 1, overall_score: 4.5, advocacy_applies: true }],
+        [2, { client_id: 2, overall_score: 2.0, advocacy_applies: false }],
+      ]),
+    })
+
+    expect(screen.getAllByTestId('bucket-bar')).toHaveLength(11)
   })
 
   it('says it is loading, and shows no list', () => {

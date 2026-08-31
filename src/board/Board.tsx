@@ -241,6 +241,7 @@ export function Board({ profile }: Props) {
             client={client}
             key={client.id}
             onOpen={() => setSelected(client)}
+            score={board.scores.get(client.id) ?? null}
             viewerId={profile.id}
           />
         ))}
