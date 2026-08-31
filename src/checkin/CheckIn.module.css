@@ -85,6 +85,15 @@
 /* Two pairs on one line where there is room. The scale is read once, at the
    top, and then not again -- so it is a caption-weight aside, not a panel. */
 .legend {
+  /* §7's one legend, pinned. It said the right thing in the wrong place: it
+     rendered once above the first bucket and scrolled away long before question
+     fourteen, so the owner asked in August 2026 for anchors that were already
+     there. Sticky rather than fixed, so it scrolls out with the section it
+     belongs to rather than floating over the whole app. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-page);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-5);

@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
 
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { YesNoRow } from './YesNoRow'
+import { ChoiceRow } from './ChoiceRow'
 import type { Question } from '../lib/buckets'
 
-// YesNoRow is QuestionRow's two-option sibling, for Advocacy's four yes/no
-// questions. It inherits QuestionRow's DOM-level tests unchanged -- the
-// flushSync-before-focus fix and the visually-hidden-input requirement are
-// the same fix for the same reason, just with two radios instead of five --
-// plus a set of its own for the property that only this control has: a
-// three-state value where `false` is an answer, not an absence of one.
+// ChoiceRow is QuestionRow's three-option sibling, for Finances' and
+// Advocacy's seven choice questions. It inherits QuestionRow's DOM-level
+// tests unchanged -- the flushSync-before-focus fix and the
+// visually-hidden-input requirement are the same fix for the same reason,
+// just with three radios instead of two or five -- plus a set of its own for
+// the properties that only this control has: a three-state value read from
+// CHOICE_OPTIONS, ordered worse-left to better-right.
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -21,17 +22,17 @@ afterEach(() => {
 const QUESTION: Question = {
   key: 'adv_left_review',
   prompt: 'They have left a review.',
-  kind: 'yesno',
+  kind: 'choice',
 }
 
-// YesNoRow is controlled, like QuestionRow: clearing is the parent deleting
+// ChoiceRow is controlled, like QuestionRow: clearing is the parent deleting
 // the answer and re-rendering. Testing focus behaviour without that round
 // trip would test a sequence the app never performs, so this harness is the
 // parent.
-function Harness({ initial }: { initial: boolean | undefined }) {
-  const [value, setValue] = useState<boolean | undefined>(initial)
+function Harness({ initial }: { initial: number | undefined }) {
+  const [value, setValue] = useState<number | undefined>(initial)
   return (
-    <YesNoRow
+    <ChoiceRow
       question={QUESTION}
       value={value}
       lastValue={null}
@@ -42,50 +43,61 @@ function Harness({ initial }: { initial: boolean | undefined }) {
   )
 }
 
-function renderRow(overrides: Partial<Parameters<typeof YesNoRow>[0]> = {}) {
-  const onChange = vi.fn()
-  const onClear = vi.fn()
-  render(
-    <YesNoRow
-      question={QUESTION}
-      value={undefined}
-      lastValue={null}
-      disabled={false}
-      onChange={onChange}
-      onClear={onClear}
-      {...overrides}
-    />,
-  )
-  return { onChange, onClear }
+function props(overrides: Partial<Parameters<typeof ChoiceRow>[0]> = {}) {
+  return {
+    question: QUESTION,
+    value: undefined,
+    lastValue: null,
+    disabled: false,
+    onChange: vi.fn(),
+    onClear: vi.fn(),
+    ...overrides,
+  }
+}
+
+function renderRow(overrides: Partial<Parameters<typeof ChoiceRow>[0]> = {}) {
+  const merged = props(overrides)
+  render(<ChoiceRow {...merged} />)
+  return { onChange: merged.onChange, onClear: merged.onClear }
 }
 
 const radios = () => screen.getAllByRole('radio') as HTMLInputElement[]
 const focusedValue = () => (document.activeElement as HTMLInputElement | null)?.value
 
-describe('a yes/no row in a real DOM', () => {
-  it('renders exactly two options, labelled Yes and No', () => {
-    renderRow()
-    expect(radios()).toHaveLength(2)
-    expect(screen.getByLabelText('Yes')).not.toBeNull()
-    expect(screen.getByLabelText('No')).not.toBeNull()
+describe('a choice row in a real DOM', () => {
+  it('renders the options worse-left to better-right', () => {
+    // Every control on this screen runs the same direction. A row that ran
+    // best-first would make the leftmost box mean the opposite of its neighbour
+    // fourteen rows up.
+    render(<ChoiceRow {...props()} />)
+    const labels = screen.getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)
+    expect(labels).toEqual(['1', '3', '5'])
   })
 
-  it('checks the radio matching value when it is true', () => {
-    renderRow({ value: true })
+  it('renders exactly three options, labelled No, Unsure and Yes', () => {
+    renderRow()
+    expect(radios()).toHaveLength(3)
+    expect(screen.getByLabelText('No')).not.toBeNull()
+    expect(screen.getByLabelText('Unsure')).not.toBeNull()
+    expect(screen.getByLabelText('Yes')).not.toBeNull()
+  })
+
+  it('checks the radio matching value when it is 5 (Yes)', () => {
+    renderRow({ value: 5 })
     const yes = screen.getByLabelText('Yes') as HTMLInputElement
     const no = screen.getByLabelText('No') as HTMLInputElement
     expect(yes.checked).toBe(true)
     expect(no.checked).toBe(false)
   })
 
-  // The case a truthiness check gets wrong: value === false must check "No",
-  // not leave both radios unchecked as if the question were still unanswered.
-  it('checks the radio matching value when it is false', () => {
-    renderRow({ value: false })
-    const yes = screen.getByLabelText('Yes') as HTMLInputElement
-    const no = screen.getByLabelText('No') as HTMLInputElement
-    expect(yes.checked).toBe(false)
+  it('shows a No as answered, and offers Clear for it', () => {
+    // === value, never truthiness: 1 is an answer. A truthy check would leave No
+    // unchecked and hide Clear from anyone who answered it, stranding them with
+    // no way back to unanswered.
+    render(<ChoiceRow {...props({ value: 1 })} />)
+    const no = screen.getByRole('radio', { name: 'No' }) as HTMLInputElement
     expect(no.checked).toBe(true)
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeTruthy()
   })
 
   it('checks neither radio when the question is unanswered', () => {
@@ -95,33 +107,31 @@ describe('a yes/no row in a real DOM', () => {
     }
   })
 
-  it('fires onChange with true when Yes is clicked', async () => {
+  it('fires onChange with 5 when Yes is clicked', async () => {
     const user = userEvent.setup()
     const { onChange } = renderRow()
 
     await user.click(screen.getByLabelText('Yes'))
 
-    expect(onChange).toHaveBeenCalledWith(true)
+    expect(onChange).toHaveBeenCalledWith(5)
   })
 
-  it('fires onChange with false when No is clicked', async () => {
+  it('fires onChange with 1 when No is clicked', async () => {
     const user = userEvent.setup()
     const { onChange } = renderRow()
 
     await user.click(screen.getByLabelText('No'))
 
-    expect(onChange).toHaveBeenCalledWith(false)
+    expect(onChange).toHaveBeenCalledWith(1)
   })
 
-  // The case a truthiness check gets wrong. A cleared control and a control
-  // answered No are different states, and only one of them offers Clear.
   it('offers Clear when the answer is No, not just when it is Yes', () => {
-    renderRow({ value: false })
+    renderRow({ value: 1 })
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeNull()
   })
 
   it('offers Clear when the answer is Yes', () => {
-    renderRow({ value: true })
+    renderRow({ value: 5 })
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeNull()
   })
 
@@ -130,8 +140,8 @@ describe('a yes/no row in a real DOM', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
   })
 
-  it('disables both options and Clear when disabled is set', () => {
-    renderRow({ value: true, disabled: true })
+  it('disables all three options and Clear when disabled is set', () => {
+    renderRow({ value: 5, disabled: true })
 
     for (const radio of radios()) {
       expect(radio.disabled).toBe(true)
@@ -146,16 +156,18 @@ describe('a yes/no row in a real DOM', () => {
     expect(screen.getByText('No answer last month')).not.toBeNull()
   })
 
-  it('shows "Yes" for last month when the prior answer was true', () => {
-    renderRow({ lastValue: true })
+  it('reads last month by its label, not its number', () => {
+    render(<ChoiceRow {...props({ lastValue: 3 })} />)
     const label = screen.getByText('Last month:')
-    expect(label.textContent).toBe('Last month: Yes')
+    expect(label.textContent).toBe('Last month: Unsure')
   })
 
-  it('shows "No" for last month when the prior answer was false', () => {
-    renderRow({ lastValue: false })
-    const label = screen.getByText('Last month:')
-    expect(label.textContent).toBe('Last month: No')
+  it('shows a legacy value that no control can write as a bare number', () => {
+    // August 2026's Finance answers contain 2s and 4s. Rendering one as a choice
+    // label would invent an answer nobody gave; rendering nothing would hide real
+    // history.
+    render(<ChoiceRow {...props({ lastValue: 4 })} />)
+    expect(screen.getByText(/4/)).toBeTruthy()
   })
 
   it('names the group by its prompt', () => {
@@ -175,7 +187,7 @@ describe('a yes/no row in a real DOM', () => {
 
   it('clears the answer, so the row is genuinely unanswered afterwards', async () => {
     const user = userEvent.setup()
-    render(<Harness initial={false} />)
+    render(<Harness initial={1} />)
 
     await user.click(screen.getByRole('button', { name: 'Clear' }))
 
@@ -183,24 +195,18 @@ describe('a yes/no row in a real DOM', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
   })
 
-  // Clear unmounts itself the instant it fires (it only renders while
-  // value !== undefined), taking focus with it. Without somewhere to send
-  // focus, an element detached while focused drops it to <body>. This is the
-  // same fix QuestionRow carries, reproduced here because a two-option group
-  // anchors its tab order to its checked radio exactly the same way a
-  // five-option one does.
-  it('moves focus to the first radio (Yes) after Clear', async () => {
-    const user = userEvent.setup()
-    render(<Harness initial={true} />)
-
-    await user.click(screen.getByRole('button', { name: 'Clear' }))
-
-    expect(focusedValue()).toBe('yes')
+  it('keeps focus in the row after Clear', () => {
+    // The flushSync ordering the owner reported against QuestionRow. Without it
+    // the group stays anchored to the radio about to be unchecked and the next
+    // Tab stops on the answer just cleared.
+    render(<ChoiceRow {...props({ value: 5 })} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'No' }))
   })
 
   it('moves focus only after the cleared answer has left the DOM', async () => {
     const user = userEvent.setup()
-    render(<Harness initial={true} />)
+    render(<Harness initial={5} />)
 
     let checkedWhenFocusArrived: string[] | null = null
     const first = radios()[0]
@@ -218,5 +224,6 @@ describe('a yes/no row in a real DOM', () => {
 
     expect(checkedWhenFocusArrived).not.toBeNull()
     expect(checkedWhenFocusArrived).toEqual([])
+    expect(focusedValue()).toBe('1')
   })
 })

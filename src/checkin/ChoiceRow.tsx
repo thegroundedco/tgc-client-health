@@ -1,28 +1,22 @@
 import { useRef } from 'react'
 import { flushSync } from 'react-dom'
+import { CHOICE_OPTIONS, choiceLabel } from '../lib/buckets'
 import type { Question } from '../lib/buckets'
-import styles from './YesNoRow.module.css'
+import styles from './ChoiceRow.module.css'
 
 type Props = {
   question: Question
-  value: boolean | undefined
-  lastValue: boolean | null
+  value: number | undefined
+  lastValue: number | null
   disabled: boolean
-  onChange: (value: boolean) => void
+  onChange: (value: number) => void
   onClear: () => void
 }
 
-const OPTIONS = [
-  { label: 'Yes', value: true },
-  { label: 'No', value: false },
-] as const
-
-// QuestionRow's two-option sibling, for Advocacy's four yes/no questions.
-// A checkbox would be the obvious control for a yes/no answer, but this
-// question has THREE states -- Yes, No, and unanswered -- and a checkbox has
-// only two. A radio group is the smallest control that can leave both
-// options unchecked, which is exactly the third state this needs.
-export function YesNoRow({ question, value, lastValue, disabled, onChange, onClear }: Props) {
+// QuestionRow's three-option sibling, for Finances' and Advocacy's seven
+// choice questions. A radio group is the smallest control that can leave
+// every option unchecked, which is exactly the unanswered state this needs.
+export function ChoiceRow({ question, value, lastValue, disabled, onChange, onClear }: Props) {
   // Derived from the question key so they are unique on a page rendering
   // several of these, and stable across renders.
   const labelId = `question-${question.key}-label`
@@ -65,19 +59,19 @@ export function YesNoRow({ question, value, lastValue, disabled, onChange, onCle
 
       <div className={styles.scale} role="radiogroup" aria-labelledby={labelId}>
         <div className={styles.options}>
-          {OPTIONS.map((option) => (
-            <label className={styles.option} key={String(option.value)}>
+          {CHOICE_OPTIONS.map((option) => (
+            <label className={styles.option} key={option.value}>
               <input
-                ref={option.value ? firstRadio : undefined}
+                ref={option.value === CHOICE_OPTIONS[0].value ? firstRadio : undefined}
                 className={styles.input}
                 type="radio"
                 // Scoped to the question key, as in QuestionRow: two questions
                 // sharing a name would merge into a single radio group, and
                 // answering one would silently unanswer the other.
                 name={`question-${question.key}`}
-                value={option.label.toLowerCase()}
-                // === true / === false, not a truthiness check: value can be
-                // false, and false is an answer, not an absence of one. A
+                value={option.value}
+                // === value, not a truthiness check: value can be the lowest
+                // option (No, 1), and 1 is an answer, not an absence of one. A
                 // truthy check here would leave "No" unchecked and read as
                 // unanswered.
                 checked={value === option.value}
@@ -90,9 +84,9 @@ export function YesNoRow({ question, value, lastValue, disabled, onChange, onCle
         </div>
 
         {/* Rendered whenever there is an answer to clear -- including when
-            that answer is false. `value ? … : …` or `if (value)` would hide
-            Clear from anyone who answered No, stranding them with no way to
-            get back to unanswered. */}
+            that answer is the lowest option (No). `value ? … : …` or
+            `if (value)` would hide Clear from anyone who answered No,
+            stranding them with no way to get back to unanswered. */}
         {value !== undefined && (
           <button
             className={`button button--quiet ${styles.clear}`}
@@ -105,14 +99,17 @@ export function YesNoRow({ question, value, lastValue, disabled, onChange, onCle
         )}
 
         {/* Last month, per question, as in QuestionRow. Absent rather than a
-            rendered "No" when there was no check-in last month -- printing an
-            answer would invent one for a month that never happened. */}
+            rendered answer when there was no check-in last month -- printing
+            one would invent an answer for a month that never happened. Read
+            through choiceLabel, falling back to the raw number for a value no
+            control can write -- a legacy 2 or 4 in a Finance column, which is
+            real data and must not be rendered as though it were a choice. */}
         <p className={`t-caption ${styles.last}`}>
           {lastValue === null ? (
             'No answer last month'
           ) : (
             <>
-              Last month: <span>{lastValue ? 'Yes' : 'No'}</span>
+              Last month: <span>{choiceLabel(lastValue) ?? lastValue}</span>
             </>
           )}
         </p>

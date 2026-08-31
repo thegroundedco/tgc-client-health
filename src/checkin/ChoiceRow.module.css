@@ -1,11 +1,11 @@
-/* One yes/no question: its prompt, the two-option group, Clear, and last
-   month's answer. Four of these sit inside Advocacy's bucket section on the
-   check-in screen, so -- like QuestionRow -- this row carries no border and
-   no background of its own; the section is the card. Verbatim reuse of
-   QuestionRow.module.css's layout classes, because this is the same control
-   with two options instead of five: same gaps, same hidden-input technique,
-   same states. Only .face changes, because "Yes" and "No" are wider than a
-   single digit and need room to say so. */
+/* One choice question: its prompt, the three-option group, Clear, and last
+   month's answer. Seven of these sit inside Finances' and Advocacy's bucket
+   sections on the check-in screen, so -- like QuestionRow -- this row carries
+   no border and no background of its own; the section is the card. Verbatim
+   reuse of QuestionRow.module.css's layout classes, because this is the same
+   control with three options instead of five: same gaps, same hidden-input
+   technique, same states. Only .face changes, because "Unsure" is wider than
+   a single digit and needs room to say so. */
 
 .row {
   display: flex;
@@ -13,7 +13,7 @@
   gap: var(--space-2);
 }
 
-/* Two gap sizes, as in QuestionRow: a tight one between the two radios, and a
+/* Two gap sizes, as in QuestionRow: a tight one between the radios, and a
    looser one between the whole group and Clear, so Clear reads as a separate
    action rather than a third option. Kept in two nested containers so every
    gap here comes from a container, with no per-element margin. */

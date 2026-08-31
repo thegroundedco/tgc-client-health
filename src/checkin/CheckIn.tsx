@@ -8,7 +8,7 @@ import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
-import { YesNoRow } from './YesNoRow'
+import { ChoiceRow } from './ChoiceRow'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
@@ -282,13 +282,13 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
               )}
 
               {questionsFor(bucket).map((question) =>
-                question.kind === 'yesno' ? (
-                  <YesNoRow
+                question.kind === 'choice' ? (
+                  <ChoiceRow
                     key={question.key}
                     question={question}
-                    value={draft.answers[question.key] as boolean | undefined}
+                    value={draft.answers[question.key] as number | undefined}
                     lastValue={
-                      (lastMonth?.[question.key as keyof CheckinRow] as boolean | null) ?? null
+                      (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
                     }
                     disabled={saving || !canEdit || shut}
                     onChange={(value) => checkin.setAnswer(question.key, value)}

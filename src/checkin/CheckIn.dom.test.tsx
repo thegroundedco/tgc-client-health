@@ -165,9 +165,9 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
     )
 
     const advocacy = within(screen.getByTestId('bucket-advocacy')).getAllByRole('radio')
-    // 4 yes/no questions x 2 options, now that Advocacy renders YesNoRow
+    // 4 choice questions x 3 options, now that Advocacy renders ChoiceRow
     // rather than QuestionRow's five-option scale.
-    expect(advocacy).toHaveLength(8)
+    expect(advocacy).toHaveLength(12)
     for (const radio of advocacy) expect((radio as HTMLInputElement).disabled).toBe(true)
 
     const communication = within(screen.getByTestId('bucket-communication')).getAllByRole('radio')
@@ -181,7 +181,7 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
 // mistake. Its own block, so a reader of either describe's name is told the
 // truth about what its tests cover.
 describe('CheckIn, the question controls per kind', () => {
-  it('renders Yes/No controls for Advocacy and 1-5 for the rest', () => {
+  it('renders choice controls for Advocacy and 1-5 for the rest', () => {
     hookState.current = mockCheckin({ advocacyApplies: true })
     render(
       <CheckIn
@@ -193,8 +193,46 @@ describe('CheckIn, the question controls per kind', () => {
     )
 
     const advocacy = within(screen.getByTestId('bucket-advocacy'))
-    expect(advocacy.getAllByRole('radio')).toHaveLength(8) // 4 questions x Yes/No
+    expect(advocacy.getAllByRole('radio')).toHaveLength(12) // 4 questions x No/Unsure/Yes
     const communication = within(screen.getByTestId('bucket-communication'))
     expect(communication.getAllByRole('radio')).toHaveLength(15) // 3 x 1-5
+  })
+
+  it('draws the choice control for Finances as well as Advocacy', () => {
+    hookState.current = mockCheckin({ advocacyApplies: true })
+    render(
+      <CheckIn
+        client={CLIENT}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+      />,
+    )
+
+    const rackRate = screen.getByRole('radiogroup', { name: /Paying rack rate/ })
+    expect(within(rackRate).getAllByRole('radio')).toHaveLength(3)
+  })
+
+  // The owner asked for anchored ends on 2026-08-31 and they were already
+  // there -- he had not seen them, because they scroll away above question
+  // fourteen. The fix is placement, and placement is CSS: CSS Modules are
+  // stubbed under jsdom, so getComputedStyle would report nothing here and a
+  // test asserting `position: sticky` would pass or fail for reasons unrelated
+  // to the stylesheet. What IS testable is that the copy survives the change,
+  // which is what a careless "fix" to the legend would break.
+  it('still states both anchors on one legend', () => {
+    hookState.current = mockCheckin({ advocacyApplies: true })
+    render(
+      <CheckIn
+        client={CLIENT}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+      />,
+    )
+
+    const legend = screen.getByTestId('scale-legend')
+    expect(legend.textContent).toContain('strongly disagree')
+    expect(legend.textContent).toContain('strongly agree')
   })
 })
