@@ -25,7 +25,7 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
   // value !== undefined), taking focus with it. An element detached while
   // focused hands focus to <body>, so without somewhere to send it the very
   // next Tab would restart at the top of the document instead of continuing in
-  // this row. The first radio (Yes) is never unmounted, so it is always a
+  // this row. The first radio (No) is never unmounted, so it is always a
   // valid target, and it is where the person is likely headed next: they just
   // cleared an answer and the next move is to pick one.
   const firstRadio = useRef<HTMLInputElement>(null)
@@ -83,10 +83,16 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
           ))}
         </div>
 
-        {/* Rendered whenever there is an answer to clear -- including when
-            that answer is the lowest option (No). `value ? … : …` or
-            `if (value)` would hide Clear from anyone who answered No,
-            stranding them with no way to get back to unanswered. */}
+        {/* Rendered whenever there is an ANSWER to clear, not whenever there
+            is a truthy one. Under this control's value domain -- 1, 3, 5 or
+            undefined -- no valid answer is falsy, so `value ? … : …` would
+            happen to behave identically today and no test can tell the two
+            apart. It is written `!== undefined` anyway, because the property
+            that matters is "answered", and the day a 0 becomes reachable the
+            truthy version hides Clear from whoever answered it and strands
+            them with no way back to unanswered. The predecessor of this row
+            stored booleans, where `false` made that failure live rather than
+            latent. */}
         {value !== undefined && (
           <button
             className={`button button--quiet ${styles.clear}`}
