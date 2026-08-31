@@ -14,8 +14,13 @@ const db = vi.hoisted(() => ({
   // Every filter the client query applied, in order. The point of the file.
   clientFilters: [] as [string, unknown][],
   clients: async (): Promise<Result> => ({ data: [], error: null }),
-  checkins: async (): Promise<Result> => ({ data: [], error: null }),
-  scores: async (): Promise<Result> => ({ data: [], error: null }),
+  // Both take the `.eq('period', …)` value, ignored by every test except the
+  // stale-response one below, which needs it to tell an old run's request
+  // apart from a new one that arrives while the old one is still in flight --
+  // call order alone cannot do that, because the old run may still be
+  // awaiting an earlier query when the new run starts making the same call.
+  checkins: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
+  scores: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
 }))
 
 vi.mock('../lib/supabase', () => ({
@@ -36,10 +41,10 @@ vi.mock('../lib/supabase', () => ({
         }
       }
       if (table === 'checkins') {
-        return { select: () => ({ eq: () => db.checkins() }) }
+        return { select: () => ({ eq: (_column: string, value: unknown) => db.checkins(value as string) }) }
       }
       if (table === 'checkin_scores') {
-        return { select: () => ({ eq: () => db.scores() }) }
+        return { select: () => ({ eq: (_column: string, value: unknown) => db.scores(value as string) }) }
       }
       // Unmocked table: throw rather than silently fall through to some other
       // table's double. Before this branch existed, anything that was not
@@ -191,5 +196,84 @@ describe('the board hook', () => {
     })
     await waitFor(() => expect(result.current.status).toBe('error'))
     expect(result.current.loadError).toContain('permission denied for view checkin_scores')
+  })
+
+  // The stale-response guard: `period` was hardcoded until Slice 4 step 4, so
+  // this branch could never run before now. A deferred promise per call lets
+  // the test choose resolution order independently of call order: the OLDER
+  // period's requests are started first but settle LAST, after the newer
+  // period's full read has already landed. If the effect's cancellation flag
+  // did not gate the writes below, the older read would overwrite the newer
+  // one with a stale roster and a stale score.
+  it('drops a stale response when period changes before the old one resolves', async () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void
+      const promise = new Promise<T>((r) => {
+        resolve = r
+      })
+      return { promise, resolve }
+    }
+
+    const oldClients = deferred<Result>()
+    const newClients = deferred<Result>()
+    const oldCheckins = deferred<Result>()
+    const newCheckins = deferred<Result>()
+    const oldScores = deferred<Result>()
+    const newScores = deferred<Result>()
+
+    const OLD_PERIOD = '2026-07-01'
+    const NEW_PERIOD = '2026-08-01'
+
+    // The clients query carries no period filter (see the comment on
+    // BoardClient.started_on and the test above pinning that), so it cannot be
+    // told apart by argument -- only by call order, which IS reliable here:
+    // the old run's clients call fires on first render, the new run's on
+    // rerender, strictly before either resolves.
+    let clientCalls = 0
+    db.clients = () => (clientCalls++ === 0 ? oldClients.promise : newClients.promise)
+    // checkins and scores DO carry the period, so they are told apart by that
+    // value rather than by call order -- the old run may still be awaiting
+    // its clients response when the new run reaches this same call.
+    db.checkins = (period) => (period === OLD_PERIOD ? oldCheckins.promise : newCheckins.promise)
+    db.scores = (period) => (period === OLD_PERIOD ? oldScores.promise : newScores.promise)
+
+    const { result, rerender } = renderHook(({ period }: { period: string }) => useBoard(period), {
+      initialProps: { period: OLD_PERIOD },
+    })
+
+    // The older period's run is in flight (its clients query has fired, and
+    // nothing has resolved yet). Switch to the newer period now -- this is
+    // the moment the old run's effect cleanup marks its flag cancelled.
+    rerender({ period: NEW_PERIOD })
+
+    // Resolve the NEWER period's chain fully, in order.
+    newClients.resolve({ data: [{ id: 1, name: 'Acme', status: 'active', started_on: null }], error: null })
+    await Promise.resolve()
+    newCheckins.resolve({ data: [], error: null })
+    await Promise.resolve()
+    newScores.resolve({ data: [{ client_id: 1, overall_score: 4.5, advocacy_applies: true }], error: null })
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.scores.get(1)?.overall_score).toBe(4.5)
+
+    // Only now resolve the OLDER period's chain -- last, and with a different
+    // roster and score. A guard that worked would have already marked this
+    // run cancelled, so none of this should reach state.
+    oldClients.resolve({ data: [{ id: 2, name: 'Zombie', status: 'active', started_on: null }], error: null })
+    await Promise.resolve()
+    oldCheckins.resolve({ data: [], error: null })
+    await Promise.resolve()
+    oldScores.resolve({ data: [{ client_id: 2, overall_score: 1.0, advocacy_applies: false }], error: null })
+
+    // A real macrotask delay, not just a microtask tick: enough for the old
+    // run's async function to finish unwinding and, if the guard were gone,
+    // for its setState calls to land -- so this proves absence, not merely
+    // that we didn't wait long enough to see it.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // The newer month's data must be what survives.
+    expect(result.current.clients.map((client) => client.id)).toEqual([1])
+    expect(result.current.scores.get(1)?.overall_score).toBe(4.5)
+    expect(result.current.scores.get(2)).toBe(undefined)
   })
 })
