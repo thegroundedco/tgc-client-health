@@ -102,8 +102,17 @@ export function useBoard(period: string): UseBoard {
           return
         }
 
+        // CHECKIN_COLUMNS is built with .join(', ') in cardSummary.ts on
+        // purpose (see the comment there), so its type is `string` rather than
+        // a literal -- and postgrest-js can only parse a literal into a row
+        // shape. Left alone, `checkinResult.data` types as a parser error, not
+        // as CardCheckin. `.returns()` would fix that the same way but calls a
+        // method the hand-rolled fake in useBoard.dom.test.ts does not carry;
+        // this is the same correction with no such runtime dependency.
+        const checkinRows = checkinResult.data as unknown as CardCheckin[]
+
         const byClient = new Map<number, CardCheckin>()
-        for (const row of checkinResult.data) {
+        for (const row of checkinRows) {
           byClient.set(row.client_id, row)
         }
 
@@ -122,7 +131,21 @@ export function useBoard(period: string): UseBoard {
 
         const scoreByClient = new Map<number, BoardScore>()
         for (const row of scoreResult.data) {
-          scoreByClient.set(row.client_id, row)
+          // The view's client_id is nullable in the generated types -- a view
+          // carries no NOT NULL constraint of its own -- but every real row
+          // joins from checkins.client_id, which is. A null here is a row with
+          // nothing to key the map by, so it is skipped rather than crashing
+          // the whole board's read over one unattributable score.
+          if (row.client_id === null) continue
+          // advocacy_applies is nullable for the same reason: no NOT NULL
+          // survives a view. A null gate defaults shut, the same side ClientCard
+          // already falls back to when score itself is null -- asking nobody is
+          // the safe failure, not asking everybody.
+          scoreByClient.set(row.client_id, {
+            ...row,
+            client_id: row.client_id,
+            advocacy_applies: row.advocacy_applies ?? false,
+          })
         }
 
         // Never write after a failed read: everything below runs only because

@@ -101,7 +101,12 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen }: Props) 
       <div className={styles.bars}>
         {drawnBuckets.map((bucket) => {
           const definition = BUCKET_DEFINITIONS[bucket]
-          const value = checkin?.[BUCKET_SCORE_KEY[bucket]] ?? null
+          // CardCheckin's index signature is `number | boolean | string | null
+          // | undefined` because it also covers the four boolean Advocacy
+          // answers -- but BUCKET_SCORE_KEY only ever names one of the six
+          // generated score columns, and every one of those is numeric. The
+          // cast says exactly that; the index signature itself cannot.
+          const value = (checkin?.[BUCKET_SCORE_KEY[bucket]] ?? null) as number | null
           return (
             <span
               aria-label={
