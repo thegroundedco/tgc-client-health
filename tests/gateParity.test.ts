@@ -48,7 +48,13 @@ describe('the screen agrees with the view about the gate', () => {
   // `>=`, not `>`. The difference is one day at the boundary, it is invisible in
   // every test that does not sit exactly on it, and gate.test.ts pins the
   // TypeScript side of the same boundary.
+  //
+  // The right-hand side's parens are optional in the pattern: the
+  // advocacy_smallint migration wrote `>= (c.started_on + 90)` rather than
+  // `>= c.started_on + 90` -- a no-op stylistic change, `+` already binds
+  // tighter than `>=` -- and a pattern that only matched the unparenthesized
+  // form would report a real predicate as absent.
   it('compares the period inclusively, as the TypeScript gate does', () => {
-    expect(sql).toMatch(/period\s*>=\s*c\.started_on\s*\+\s*90/)
+    expect(sql).toMatch(/period\s*>=\s*\(?c\.started_on\s*\+\s*90\)?/)
   })
 })
