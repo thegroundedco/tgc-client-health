@@ -3,8 +3,9 @@ import {
   ALL_QUESTIONS,
   BUCKETS,
   BUCKET_DEFINITIONS,
+  CHOICE_OPTIONS,
   GATED_BUCKET,
-  isYesNo,
+  OVERALL_EXCLUDED,
   OVERALL_QUESTIONS,
   questionsFor,
 } from './buckets'
@@ -93,35 +94,54 @@ describe('the question keys', () => {
   })
 })
 
-describe('question kinds', () => {
-  it('marks every Advocacy question yes/no and every other question scale', () => {
+describe('one answer type', () => {
+  it('offers exactly three choices, ascending, mapped to 1 / 3 / 5', () => {
+    // The mapping IS the losslessness argument in spec §3.2: a four-question
+    // bucket of 5s and 1s reproduces `1 + yeses` exactly. A different value
+    // here silently rescales Advocacy's whole history.
+    expect(CHOICE_OPTIONS.map((option) => option.value)).toEqual([1, 3, 5])
+    expect(CHOICE_OPTIONS.map((option) => option.label)).toEqual(['No', 'Unsure', 'Yes'])
+  })
+
+  it('gives Finances and Advocacy the choice control and nothing else', () => {
+    const choiceBuckets = BUCKETS.filter((bucket) =>
+      questionsFor(bucket).some((question) => question.kind === 'choice'),
+    )
+    expect(choiceBuckets).toEqual(['finances', 'advocacy'])
+  })
+
+  it('never mixes kinds inside one bucket', () => {
+    // score-parity.mjs no longer dispatches on kind, but CheckIn.tsx renders
+    // per question, so a mixed bucket would render fine and read oddly. Pinned
+    // because the rubric is the only place that could introduce one.
     for (const bucket of BUCKETS) {
-      for (const question of questionsFor(bucket)) {
-        expect(question.kind).toBe(bucket === GATED_BUCKET ? 'yesno' : 'scale')
-      }
+      const kinds = new Set(questionsFor(bucket).map((question) => question.kind))
+      expect(kinds.size).toBe(1)
     }
   })
 
-  it('isYesNo agrees with the definitions, and is false for an unknown key', () => {
-    expect(isYesNo('adv_left_review')).toBe(true)
-    expect(isYesNo('comm_timely')).toBe(false)
-    expect(isYesNo('not_a_question')).toBe(false)
-  })
-
-  // The seventeen that make the overall. Spec §3.2 as amended: Advocacy is
-  // excluded whatever the gate says, so this list is fixed and does not take a
-  // gate argument.
-  it('OVERALL_QUESTIONS is the 17 non-Advocacy keys, in rubric order', () => {
+  it('averages seventeen answers into the overall, excluding only Advocacy', () => {
+    // The number that broke before. OVERALL_QUESTIONS used to be derived from
+    // `kind === 'scale'`, so moving Finances to a choice control would have cut
+    // the divisor to 14 with nothing failing. This is the guard.
     expect(OVERALL_QUESTIONS).toHaveLength(17)
-    expect(OVERALL_QUESTIONS.some((k) => isYesNo(k))).toBe(false)
-    expect([...OVERALL_QUESTIONS]).toEqual(
-      ALL_QUESTIONS.filter((k) => !isYesNo(k)),
-    )
+    expect(ALL_QUESTIONS).toHaveLength(21)
+    expect(OVERALL_EXCLUDED).toBe('advocacy')
+    for (const question of questionsFor('finances')) {
+      expect(OVERALL_QUESTIONS).toContain(question.key)
+    }
+    for (const question of questionsFor('advocacy')) {
+      expect(OVERALL_QUESTIONS).not.toContain(question.key)
+    }
   })
 
-  it('the four yes/no keys are exactly the Advocacy bucket', () => {
-    expect(ALL_QUESTIONS.filter(isYesNo)).toEqual(
-      questionsFor(GATED_BUCKET).map((q) => q.key),
-    )
+  it('keeps every question on one smallint scale', () => {
+    // No question may declare a kind the scoring does not understand.
+    for (const bucket of BUCKETS) {
+      for (const question of questionsFor(bucket)) {
+        expect(['scale', 'choice']).toContain(question.kind)
+      }
+    }
+    expect(Object.keys(BUCKET_DEFINITIONS)).toHaveLength(6)
   })
 })

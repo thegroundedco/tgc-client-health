@@ -71,25 +71,3 @@ export function bandFor(overall: number | null): Band {
   if (overall >= WATCH_AT) return 'watch'
   return 'at_risk'
 }
-
-// 1 + the number of yeses. Mirrors the generated column's expression in
-// 20260828*_advocacy_yes_no.sql exactly, and `npm run verify:score` is what
-// proves they have not drifted.
-//
-// The offset of 1 is not decoration: it puts four Nos at 1.00 and four Yeses at
-// 5.00, which is the same range the other five buckets produce from a mean of
-// 1-5 answers. So a yes/no bucket needs no rescaling anywhere downstream -- the
-// board's bar, the matrix's cell and bandFor() all work on it unchanged.
-//
-// Null if ANY answer is missing, exactly as meanOrNull. Note what this makes
-// distinct: four Nos scores 1.00, and one blank scores nothing at all.
-export function yesNoScore(
-  values: readonly (boolean | null | undefined)[],
-): number | null {
-  let yeses = 0
-  for (const value of values) {
-    if (value === null || value === undefined) return null
-    if (value) yeses += 1
-  }
-  return 1 + yeses
-}

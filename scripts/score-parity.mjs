@@ -32,7 +32,7 @@ import { writeFileSync } from 'node:fs'
 // imports. See Global Constraints. Importing scoreV2.ts here would fail
 // ERR_MODULE_NOT_FOUND, because scoreV2.ts imports './buckets'.
 import { BUCKETS, questionsFor } from '../src/lib/buckets.ts'
-import { meanOrNull, yesNoScore } from '../src/lib/scoreMath.ts'
+import { meanOrNull } from '../src/lib/scoreMath.ts'
 
 export const OUT = 'scripts/.score-parity.generated.sql'
 

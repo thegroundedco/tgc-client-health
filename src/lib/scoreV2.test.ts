@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS, isYesNo, OVERALL_QUESTIONS, questionsFor } from './buckets'
+import { ALL_QUESTIONS, CHOICE_OPTIONS, OVERALL_QUESTIONS, questionsFor } from './buckets'
 import {
   answeredCount,
   bandFor,
@@ -60,20 +60,6 @@ describe('bucketScore', () => {
       comm_consistent: null,
     }
     expect(bucketScore(answers, 'communication')).toBeNull()
-  })
-
-  // Retired 2026-08-28: Advocacy's four questions became yes/no booleans, so
-  // this can no longer be a mean of 1-5 numbers. Replaced in place (not merged
-  // with the new yes/no test below) with the boolean equivalent: two Yeses and
-  // two Noes is 1 + 2 = 3, the same arithmetic yesNoScore.test.ts covers directly.
-  it('scores Advocacy with yes/no arithmetic, not a mean -- the gate is not its business', () => {
-    const answers: Answers = {
-      adv_left_review: true,
-      adv_case_study: true,
-      adv_would_refer: false,
-      adv_reference_check: false,
-    }
-    expect(bucketScore(answers, 'advocacy')).toBe(3)
   })
 })
 
@@ -192,10 +178,10 @@ describe('overallScore (amendment coverage)', () => {
     const seventeen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 4]))
     expect(overallScore(seventeen)).toBe(4)
     // Adding every Advocacy answer, either way, must not move it.
-    const withYes = { ...seventeen, adv_left_review: true, adv_case_study: true,
-                      adv_would_refer: true, adv_reference_check: true }
-    const withNo = { ...seventeen, adv_left_review: false, adv_case_study: false,
-                     adv_would_refer: false, adv_reference_check: false }
+    const withYes = { ...seventeen, adv_left_review: 5, adv_case_study: 5,
+                      adv_would_refer: 5, adv_reference_check: 5 }
+    const withNo = { ...seventeen, adv_left_review: 1, adv_case_study: 1,
+                     adv_would_refer: 1, adv_reference_check: 1 }
     expect(overallScore(withYes)).toBe(4)
     expect(overallScore(withNo)).toBe(4)
   })
@@ -216,16 +202,16 @@ describe('overallScore (amendment coverage)', () => {
 })
 
 describe('bucketScore (amendment coverage)', () => {
-  it('uses the yes/no arithmetic for Advocacy and the mean for the rest', () => {
-    expect(bucketScore({ adv_left_review: true, adv_case_study: true,
-                         adv_would_refer: false, adv_reference_check: false },
+  it('uses the same mean for Advocacy as for every other bucket', () => {
+    expect(bucketScore({ adv_left_review: 5, adv_case_study: 5,
+                         adv_would_refer: 1, adv_reference_check: 1 },
                        'advocacy')).toBe(3)
     expect(bucketScore({ comm_constructive: 2, comm_timely: 4,
                          comm_consistent: 3 }, 'communication')).toBe(3)
   })
 
   it('is null for a bucket with any unanswered question, either kind', () => {
-    expect(bucketScore({ adv_left_review: true }, 'advocacy')).toBeNull()
+    expect(bucketScore({ adv_left_review: 5 }, 'advocacy')).toBeNull()
     expect(bucketScore({ comm_constructive: 2 }, 'communication')).toBeNull()
   })
 })
@@ -239,11 +225,85 @@ describe('requiredQuestions and answeredCount (amendment coverage)', () => {
     expect(requiredQuestions(false)).toHaveLength(17)
   })
 
-  // false is an ANSWER. Counting it as unanswered would make a complete
+  // A 1 ("No") is an ANSWER. Counting it as unanswered would make a complete
   // check-in permanently unsubmittable for a client with nothing to advocate.
   it('counts a No as answered', () => {
-    const answers = Object.fromEntries(requiredQuestions(true).map(
-      (k) => [k, isYesNo(k) ? false : 3]))
+    const answers = Object.fromEntries(requiredQuestions(true).map((k) => [k, 1]))
     expect(answeredCount(answers, true)).toBe(21)
+  })
+})
+
+const YES = 5
+const UNSURE = 3
+const NO = 1
+
+function advocacy(yeses: number): Answers {
+  const keys = questionsFor('advocacy').map((question) => question.key)
+  const answers: Answers = {}
+  keys.forEach((key, index) => {
+    answers[key] = index < yeses ? YES : NO
+  })
+  return answers
+}
+
+describe('the mean replaces yesNoScore without changing a number', () => {
+  // Spec §3.2's equivalence table, executed. If this drifts, every Advocacy bar
+  // on the board silently rescales against twelve months of history.
+  it.each([
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+  ])('scores %i yeses as %i, exactly as 1 + yeses did', (yeses, expected) => {
+    expect(bucketScore(advocacy(yeses), 'advocacy')).toBe(expected)
+  })
+
+  it('gives a three-question choice bucket the full 1-5 range', () => {
+    // The reason `1 + yeses` had to go: on three questions it caps at 4 and the
+    // Finances bar could never fill.
+    const keys = questionsFor('finances').map((question) => question.key)
+    const all = (value: number): Answers =>
+      Object.fromEntries(keys.map((key) => [key, value]))
+    expect(bucketScore(all(NO), 'finances')).toBe(1)
+    expect(bucketScore(all(YES), 'finances')).toBe(5)
+    expect(bucketScore({ ...all(NO), [keys[0]]: YES }, 'finances')).toBe(2.33)
+  })
+
+  it('reads an Unsure as the middle, not as a No and not as unanswered', () => {
+    const keys = questionsFor('finances').map((question) => question.key)
+    const answers = Object.fromEntries(keys.map((key) => [key, UNSURE]))
+    expect(bucketScore(answers, 'finances')).toBe(3)
+  })
+
+  it('still nulls a bucket when any of its answers is missing', () => {
+    // The safety property, restated for a choice bucket: a No is 1 and scores;
+    // a blank scores nothing at all.
+    const keys = questionsFor('advocacy').map((question) => question.key)
+    const answers: Answers = Object.fromEntries(keys.map((key) => [key, NO]))
+    expect(bucketScore(answers, 'advocacy')).toBe(1)
+    answers[keys[0]] = null
+    expect(bucketScore(answers, 'advocacy')).toBeNull()
+  })
+
+  it('leaves Advocacy out of the overall in both gate states', () => {
+    const answers: Answers = {}
+    for (const key of requiredQuestions(true)) answers[key] = 3
+    expect(overallScore(answers)).toBe(3)
+    for (const question of questionsFor('advocacy')) {
+      answers[question.key] = YES
+    }
+    // Four Yeses must not move the headline number by a hundredth.
+    expect(overallScore(answers)).toBe(3)
+  })
+
+  it('counts 21 required answers gate-open and 17 gate-shut', () => {
+    // required and the divisor are DIFFERENT numbers (spec §3.2). 21 != 17.
+    expect(requiredQuestions(true)).toHaveLength(21)
+    expect(requiredQuestions(false)).toHaveLength(17)
+  })
+
+  it('exports the choice values the control writes', () => {
+    expect(CHOICE_OPTIONS.map((option) => option.value)).toEqual([NO, UNSURE, YES])
   })
 })

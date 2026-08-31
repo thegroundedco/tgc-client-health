@@ -71,12 +71,11 @@ describe('the generated SQL', () => {
   })
 
   it('states a total that matches the number of states it actually generated', () => {
-    // 3*6^3 (Communication, Growth, Finances) + 2*6^4 (Relationship, Delivery)
-    // + 3^4 (Advocacy, yes/no since spec §3.1/§3.2 amended 2026-08-28)
-    // = 648 + 2,592 + 81 = 3,321. Asserted explicitly, not just echoed from
-    // `total`, so a miscount in the generator (e.g. Advocacy silently reverting
-    // to 6^4) fails this test loudly instead of shrinking the proof silently.
-    expect(total).toBe(3321)
+    // 3 x 6^3 (Communication, Growth, Finances) + 3 x 6^4 (Relationship,
+    // Delivery, Advocacy) = 648 + 3,888 = 4,536. Asserted explicitly, not
+    // echoed from the generator, so that a change to the rubric has to be
+    // acknowledged here rather than silently absorbed.
+    expect(total).toBe(4536)
     expect(sql).toContain(
       `score parity PASSED: all ${total} states agree, across ${BUCKETS.length} buckets`,
     )

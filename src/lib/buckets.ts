@@ -23,18 +23,21 @@ export type Bucket = (typeof BUCKETS)[number]
 // written as the string at each call site, so the gate has one definition.
 export const GATED_BUCKET: Bucket = 'advocacy'
 
-export type QuestionKind = 'scale' | 'yesno'
+export type QuestionKind = 'scale' | 'choice'
 
 export type Question = {
   // The column on public.checkins. Also the key in an Answers object.
   key: string
   prompt: string
-  // How it is answered, and therefore what column type holds it. 'scale' is a
-  // 1-5 smallint; 'yesno' is a boolean. Carried per question rather than per
-  // bucket, even though today every yesno question happens to be in Advocacy:
-  // the rubric is the one place that knows what a question IS, and a consumer
-  // asking "is this bucket Advocacy?" to decide how to render a control would
-  // be reading identity where it means to read type.
+  // Which CONTROL the check-in screen draws, and nothing more. Every answer,
+  // whatever its kind, is a nullable smallint 1-5 in the same shape of column
+  // and is scored by the same mean (spec §3.2, amended 2026-08-31). 'scale'
+  // draws five numbered radios; 'choice' draws the three in CHOICE_OPTIONS.
+  //
+  // This USED to decide how a bucket was scored and, through a filter on it,
+  // which questions the overall averaged. Both of those were wrong: the first
+  // capped a three-question yes/no bucket at 4.00, and the second meant that
+  // changing a question's control silently changed the headline divisor.
   kind: QuestionKind
 }
 
@@ -71,9 +74,9 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     label: 'Finances',
     initial: 'F',
     questions: [
-      { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'scale' },
-      { key: 'fin_pays_on_time', prompt: 'Pays on time.', kind: 'scale' },
-      { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.', kind: 'scale' },
+      { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'choice' },
+      { key: 'fin_pays_on_time', prompt: 'Pays on time.', kind: 'choice' },
+      { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.', kind: 'choice' },
     ],
   },
   relationship: {
@@ -105,13 +108,13 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     label: 'Advocacy',
     initial: 'A',
     questions: [
-      { key: 'adv_left_review', prompt: 'They have left a review.', kind: 'yesno' },
-      { key: 'adv_case_study', prompt: 'We could use them for a case study.', kind: 'yesno' },
-      { key: 'adv_would_refer', prompt: 'They would refer us without being prompted.', kind: 'yesno' },
+      { key: 'adv_left_review', prompt: 'They have left a review.', kind: 'choice' },
+      { key: 'adv_case_study', prompt: 'We could use them for a case study.', kind: 'choice' },
+      { key: 'adv_would_refer', prompt: 'They would refer us without being prompted.', kind: 'choice' },
       {
         key: 'adv_reference_check',
         prompt: 'We could send leads to them as a reference check.',
-        kind: 'yesno',
+        kind: 'choice',
       },
     ],
   },
@@ -127,22 +130,48 @@ export const ALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
 
 export type QuestionKey = (typeof ALL_QUESTIONS)[number]
 
-export function isYesNo(key: string): boolean {
-  return YESNO_KEYS.includes(key)
+// The three answers a `choice` question offers, and the value each writes.
+//
+// Ascending, so that every control on the check-in screen runs worse-left to
+// better-right -- the same direction as QuestionRow's 1 through 5. The old
+// two-option row read Yes then No, against that direction; on a screen where 14
+// rows run one way and 7 the other, the leftmost box is a trap.
+//
+// The values are the losslessness argument of spec §3.2, not a preference: a
+// four-question bucket answered in 5s and 1s produces exactly what the retired
+// `1 + yeses` produced, so no Advocacy score moves. Changing them rescales
+// history.
+export const CHOICE_OPTIONS = [
+  { label: 'No', value: 1 },
+  { label: 'Unsure', value: 3 },
+  { label: 'Yes', value: 5 },
+] as const
+
+// The label a `choice` answer reads as, for the "last month" line. Undefined for
+// a value no control can write -- a legacy 2 or 4 in a Finance column, which is
+// real data (August 2026) and must not be rendered as though it were a choice.
+export function choiceLabel(value: number): string | undefined {
+  return CHOICE_OPTIONS.find((option) => option.value === value)?.label
 }
 
-const YESNO_KEYS: readonly string[] = BUCKETS.flatMap((bucket) =>
-  questionsFor(bucket)
-    .filter((question) => question.kind === 'yesno')
-    .map((question) => question.key),
-)
+// The one bucket the headline number leaves out. Named apart from GATED_BUCKET
+// even though both are Advocacy today, because they are two unrelated facts
+// that coincide: the gate is about a client being too new to judge, and this is
+// the owner's ruling that Advocacy must not move the number clients are
+// compared on (spec §3.2). Deriving one from the other would mean that changing
+// the gate silently changed the divisor.
+export const OVERALL_EXCLUDED: Bucket = 'advocacy'
 
-// The seventeen the overall is the mean of. Spec §3.2 as amended: Advocacy is
-// excluded whether the gate is open or shut, so unlike requiredQuestions() in
-// scoreV2 this takes no gate argument and never varies. Keeping the two apart
-// is the whole point -- they were one number before 2026-08-28 and are two now.
-export const OVERALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
-  questionsFor(bucket)
-    .filter((question) => question.kind === 'scale')
-    .map((question) => question.key),
-)
+// The seventeen the overall is the mean of: every question except Advocacy's,
+// whether the gate is open or shut. Unlike requiredQuestions() in scoreV2 this
+// takes no gate argument and never varies.
+//
+// This filtered on `kind === 'scale'` until 2026-08-31, which gave the right
+// answer for the wrong reason -- it excluded Advocacy BECAUSE Advocacy was
+// answered with booleans. The moment Finances moved to the same control, that
+// filter would have dropped Finances out of the headline score too: divisor 17
+// to 14, every client's number moved, and nothing failing. buckets.test.ts pins
+// the count at seventeen.
+export const OVERALL_QUESTIONS: readonly string[] = BUCKETS.filter(
+  (bucket) => bucket !== OVERALL_EXCLUDED,
+).flatMap((bucket) => questionsFor(bucket).map((question) => question.key))
