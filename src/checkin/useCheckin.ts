@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { previousPeriod } from '../lib/month'
-import { ALL_QUESTIONS, isYesNo } from '../lib/buckets'
+import { ALL_QUESTIONS } from '../lib/buckets'
 import { advocacyApplies as gateApplies } from '../lib/gate'
 import { answeredCount, overallScore, requiredQuestions } from '../lib/scoreV2'
 import type { Profile } from '../auth/useProfile'
@@ -43,7 +43,7 @@ export type UseCheckin = {
   storedByYou: boolean
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
-  setAnswer: (key: string, value: number | boolean | null) => void
+  setAnswer: (key: string, value: number | null) => void
   setNotes: (notes: string) => void
   reload: () => void
   submit: () => void
@@ -60,25 +60,12 @@ function draftFromRow(row: CheckinRow | null): Draft {
   const answers: QuestionScores = {}
   for (const key of ALL_QUESTIONS) {
     const value = row[key as keyof CheckinRow]
-    // Validated against the rubric's OWN kind for this key, not merely "is it
-    // a number or a boolean" -- the same discipline draftCache.ts's
-    // validAnswer() applies to untrusted storage. A bare `number ||
-    // boolean` check would wave a stray number through for an adv_* column
-    // on a database where this migration has not yet run (production,
-    // today): the draft would hold a number where YesNoRow expects a
-    // boolean, its `checked={value === option.value}` would be false for
-    // both options, the question would render blank while answeredCount
-    // still counted it, and a resubmit would write that number straight
-    // back into a boolean column. Excluding `id`, `client_id` and the
-    // retired legacy/pillar columns is still done by iterating
-    // ALL_QUESTIONS rather than the row's own keys -- see the file comment
-    // above -- not by this per-key type check, which only guards the shape
-    // of a value already known to belong to a real question.
-    if (isYesNo(key)) {
-      if (typeof value === 'boolean') answers[key] = value
-    } else if (typeof value === 'number') {
-      answers[key] = value
-    }
+    // "a number", not "a truthy value" and not "not undefined". The row also
+    // carries client_id, the submitted fields, six generated bucket scores and
+    // six legacy_* columns; iterating ALL_QUESTIONS rather than the row's own
+    // keys is what keeps those out. A 1 is an answer and must survive, which a
+    // truthiness check would silently drop.
+    if (typeof value === 'number') answers[key] = value
   }
   return { answers, notes: row.notes ?? '' }
 }
@@ -243,7 +230,7 @@ export function useCheckin(
   )
 
   const setAnswer = useCallback(
-    (key: string, value: number | boolean | null) => {
+    (key: string, value: number | null) => {
       const answers: QuestionScores = { ...draft.answers }
       // Deleted, not set to null. An unanswered question is an absent key
       // everywhere else in this code -- draftCache validates on that basis, and

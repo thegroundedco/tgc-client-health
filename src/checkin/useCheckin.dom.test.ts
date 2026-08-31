@@ -165,21 +165,21 @@ describe('useCheckin: the local overall', () => {
 })
 
 describe('useCheckin: restoring stored answers', () => {
-  // The bug this task exists to fix: draftFromRow filtered stored values by
-  // `typeof value === 'number'`, which drops every boolean -- so a saved
-  // Advocacy answer vanished the moment the screen reloaded. Seeds a stored
-  // row with boolean Advocacy answers, including a `false` (the case a
-  // careless `if (value)`-shaped fix would still drop), and proves they
-  // arrive in the draft -- present as `false`, not merely non-crashing.
-  it('restores boolean Advocacy answers from a stored row, including false', async () => {
+  // The bug this task originally existed to fix, one type later: draftFromRow
+  // must filter stored values by `typeof value === 'number'` -- a truthiness
+  // check would drop nothing here, because every valid answer (1-5) is
+  // truthy, but the filter itself is what is under test. Seeds a stored row
+  // with Advocacy answers including a No (1, the smallest valid value), and
+  // proves they arrive in the draft.
+  it('restores stored Advocacy answers from a row, including a No', async () => {
     db.checkins = async () => ({
       data: [
         {
           client_id: 1,
           period: '2026-08-01',
           notes: null,
-          adv_left_review: false,
-          adv_case_study: true,
+          adv_left_review: 1,
+          adv_case_study: 5,
           adv_would_refer: null,
           adv_reference_check: null,
         },
@@ -191,32 +191,30 @@ describe('useCheckin: restoring stored answers', () => {
       period: '2026-08-01',
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    expect(result.current.draft.answers.adv_left_review).toBe(false)
-    expect(result.current.draft.answers.adv_case_study).toBe(true)
+    expect(result.current.draft.answers.adv_left_review).toBe(1)
+    expect(result.current.draft.answers.adv_case_study).toBe(5)
     // Unanswered means absent, not a stored null carried through as a key.
     expect(result.current.draft.answers).not.toHaveProperty('adv_would_refer')
     expect(result.current.draft.answers).not.toHaveProperty('adv_reference_check')
   })
 
-  // Fix round 1, Important 1: the filter must be validated against each
-  // key's OWN kind, not merely "is it a number or a boolean" -- a bare
-  // `number || boolean` check would wave a stray NUMBER through for an
-  // adv_* column on a database where this migration has not yet run
-  // (production, today). That number would reach YesNoRow, whose
-  // `checked={value === option.value}` is false for both Yes and No, so the
-  // question would render blank while answeredCount kept counting it as
-  // answered -- and a resubmit would write that same number straight back
-  // into a boolean column.
-  it('drops a number stored in a yes/no column, rather than admitting it', async () => {
+  // The mirror image of the bug above, now that the columns are number.
+  // Production has not run this migration yet, so a boolean can still turn up
+  // in an adv_* column today. That boolean must be dropped, not admitted as a
+  // number-ish value -- admitting it would let it reach the choice control's
+  // `checked={value === option.value}`, which is false for every option, so
+  // the question would render blank while answeredCount kept counting it as
+  // answered.
+  it('drops a boolean stored in an answer column, rather than admitting it', async () => {
     db.checkins = async () => ({
       data: [
         {
           client_id: 1,
           period: '2026-08-01',
           notes: null,
-          // The pre-migration shape: a 1-5 score sitting in a column that is
-          // now boolean.
-          adv_left_review: 4,
+          // The pre-migration shape, still live on production today: a
+          // boolean sitting in a column that is now smallint.
+          adv_left_review: true,
         },
       ],
       error: null,
@@ -249,7 +247,7 @@ describe('useCheckin: restoring stored answers', () => {
           // surface as one.
           relationship: 3,
           comm_timely: 4,
-          adv_left_review: true,
+          adv_left_review: 5,
         },
       ],
       error: null,
@@ -283,19 +281,21 @@ describe('useCheckin: submit', () => {
     expect(payload.adv_left_review).toBeNull()
   })
 
-  // The coercion trap. `false ?? null` is false and `false || null` is null,
-  // and the two look identical at a glance. Getting it wrong writes null for
-  // every No and silently turns four answered Nos into an unanswered bucket.
-  it('sends a No to the database as false, not as null', async () => {
+  // The smallest valid value is the one most at risk of being coerced away.
+  // `1 ?? null` and `1 || null` happen to agree, but a stray `if (value)`
+  // guard anywhere upstream of the payload would not: it would treat this No
+  // as unset and silently turn an answered Advocacy question into an
+  // unanswered one.
+  it('sends a No to the database as 1, not as null', async () => {
     const { result, upsert } = renderCheckin({
       client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
       period: '2026-08-01',
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    act(() => result.current.setAnswer('adv_left_review', false))
+    act(() => result.current.setAnswer('adv_left_review', 1))
     act(() => result.current.submit())
     await waitFor(() => expect(upsert).toHaveBeenCalled())
-    expect(upsert.mock.calls[0][0].adv_left_review).toBe(false)
+    expect(upsert.mock.calls[0][0].adv_left_review).toBe(1)
   })
 
   // The submitted marker tracks the REQUIRED count, so a gated-out check-in can

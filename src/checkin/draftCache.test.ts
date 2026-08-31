@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS, isYesNo } from '../lib/buckets'
+import { ALL_QUESTIONS } from '../lib/buckets'
 import {
   DRAFT_KEY_PREFIX,
   DRAFT_VERSION,
@@ -143,12 +143,11 @@ describe('the versioned key', () => {
 
 describe('the 21 answers', () => {
   it('round-trips every question key the rubric defines', () => {
-    // Each key gets a value matching its own kind -- a scale question gets a
-    // 1-5 score, a yes/no question gets a boolean -- because the rubric mixes
-    // both kinds now, and a value valid for one is exactly what the other must
-    // reject.
+    // Every key gets a 1-5 score -- there is only one kind of answer now, and
+    // this proves it holds for all 21 keys, not just the ones a hand-picked
+    // example would happen to cover.
     const answers = Object.fromEntries(
-      ALL_QUESTIONS.map((key, index) => [key, isYesNo(key) ? index % 2 === 0 : (index % 5) + 1]),
+      ALL_QUESTIONS.map((key, index) => [key, (index % 5) + 1]),
     )
     const { store } = memoryStore()
     expect(writeDraft(7, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
@@ -333,14 +332,29 @@ describe('draftsDiffer', () => {
   })
 })
 
-describe('the version bump to v3', () => {
-  it('carries v3 in the key', () => {
-    expect(DRAFT_VERSION).toBe('v3')
-    expect(draftKey(7, '2026-08-01')).toBe(`${DRAFT_KEY_PREFIX}:v3:7:2026-08-01`)
+describe('the version bump to v4', () => {
+  it('carries v4 in the key', () => {
+    expect(DRAFT_VERSION).toBe('v4')
+    expect(draftKey(7, '2026-08-01')).toBe(`${DRAFT_KEY_PREFIX}:v4:7:2026-08-01`)
   })
 
-  // The new instance of the old failure: a v2 draft holds a NUMBER against an
-  // Advocacy key, and those columns are booleans now.
+  // The same failure v3 was created for, one type later. A v3 draft holds
+  // `true`/`false` against the four adv_* keys; restoring one into a screen
+  // that now expects 5/3/1 would render an answered question as blank, over a
+  // draft the person believes is saved.
+  it('refuses a v3 draft, whose Advocacy answers are booleans', () => {
+    const v3Key = `${DRAFT_KEY_PREFIX}:v3:7:2026-08-01`
+    const { store, map } = memoryStore({
+      [v3Key]: JSON.stringify({ answers: { adv_left_review: true }, notes: 'kept' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)).toBeNull()
+    expect(map.has(v3Key)).toBe(false)
+  })
+
+  // The new instance of the old failure, one version further back: a v2 draft
+  // holds a NUMBER against an Advocacy key, and those columns were booleans in
+  // v3 -- and are numbers again in v4, but not this stored one, which is still
+  // two shapes stale either way.
   it('ignores and deletes a v2 draft', () => {
     const v2Key = `${DRAFT_KEY_PREFIX}:v2:7:2026-08-01`
     const { store, map } = memoryStore({
@@ -351,7 +365,8 @@ describe('the version bump to v3', () => {
   })
 
   // Still. A browser that has not opened this tool since before the six-bucket
-  // change holds one of these, and it is two shapes out of date rather than one.
+  // change holds one of these, and it is three shapes out of date rather than
+  // one.
   it('still ignores and deletes a v1 draft', () => {
     const v1Key = `${DRAFT_KEY_PREFIX}:7:2026-08-01`
     const { store, map } = memoryStore({
@@ -361,7 +376,7 @@ describe('the version bump to v3', () => {
     expect(map.has(v1Key)).toBe(false)
   })
 
-  it('a throwing removeItem on either old key cannot break the read', () => {
+  it('a throwing removeItem on any old key cannot break the read', () => {
     const store: StorageLike = {
       getItem: () => null,
       setItem: () => {},
@@ -371,49 +386,26 @@ describe('the version bump to v3', () => {
   })
 })
 
-describe('boolean answers', () => {
-  it('round-trips true and false against the yes/no keys', () => {
-    const { store } = memoryStore()
-    const answers = { adv_left_review: true, adv_case_study: false, comm_timely: 3 }
-    expect(writeDraft(7, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
-    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual(answers)
-  })
-
-  // false is a real answer and must survive. An earlier draft of this module
-  // would have treated it as empty.
-  it('a draft of nothing but a single false is not empty', () => {
-    const draft = { answers: { adv_left_review: false }, notes: '' }
-    expect(isDraftEmpty(draft)).toBe(false)
-    const { store } = memoryStore()
-    expect(writeDraft(7, '2026-08-01', draft, store)).toBe(true)
-    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual({ adv_left_review: false })
-  })
-
-  // Type discipline per key, both ways round.
-  it('drops a number against a yes/no key and a boolean against a scale key', () => {
+describe('a boolean answer under the current key', () => {
+  // Untrusted storage can hold anything, including the exact shape a v3
+  // draft wrote, sitting under a v4 key by coincidence or hand-editing. It
+  // must be rejected the same as it would be read from a v3 key.
+  it('rejects a boolean answer even under the current key', () => {
     const { store } = memoryStore({
-      [draftKey(7, '2026-08-01')]: JSON.stringify({
-        answers: { adv_left_review: 4, comm_timely: true, comm_constructive: 3 },
+      [draftKey(1, '2026-08-01')]: JSON.stringify({
+        answers: { adv_left_review: true, comm_timely: 4 },
         notes: '',
       }),
     })
-    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual({ comm_constructive: 3 })
-  })
-})
-
-describe('draftsDiffer with booleans', () => {
-  it('sees true against false', () => {
-    expect(draftsDiffer(
-      { answers: { adv_left_review: true }, notes: '' },
-      { answers: { adv_left_review: false }, notes: '' },
-    )).toBe(true)
+    const draft = readDraft(1, '2026-08-01', store)
+    expect(draft?.answers.adv_left_review).toBeUndefined()
+    expect(draft?.answers.comm_timely).toBe(4)
   })
 
-  // The one that would silently discard work: false is present, absent is not.
-  it('sees false against unanswered', () => {
-    expect(draftsDiffer(
-      { answers: { adv_left_review: false }, notes: '' },
-      { answers: {}, notes: '' },
-    )).toBe(true)
+  it('accepts every value the choice control writes', () => {
+    const { store } = memoryStore()
+    const answers = { adv_left_review: 5, adv_case_study: 3, adv_would_refer: 1 }
+    expect(writeDraft(1, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
+    expect(readDraft(1, '2026-08-01', store)?.answers).toEqual(answers)
   })
 })

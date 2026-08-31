@@ -43,13 +43,17 @@ export type Database = {
           },
         ]
       }
+      // Hand-maintained. The four adv_* columns became smallint on 2026-08-31 (spec
+      // §5.2); they are `number | null` here for the same reason every other answer
+      // is. `advocacy_applies` on checkin_scores stays boolean -- it is the gate's
+      // verdict, not somebody's answer.
       checkins: {
         Row: {
-          adv_case_study: boolean | null
-          adv_left_review: boolean | null
-          adv_reference_check: boolean | null
+          adv_case_study: number | null
+          adv_left_review: number | null
+          adv_reference_check: number | null
           adv_score: number | null
-          adv_would_refer: boolean | null
+          adv_would_refer: number | null
           client_id: number
           comm_consistent: number | null
           comm_constructive: number | null
@@ -88,11 +92,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          adv_case_study?: boolean | null
-          adv_left_review?: boolean | null
-          adv_reference_check?: boolean | null
+          adv_case_study?: number | null
+          adv_left_review?: number | null
+          adv_reference_check?: number | null
           adv_score?: number | null
-          adv_would_refer?: boolean | null
+          adv_would_refer?: number | null
           client_id: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -131,11 +135,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          adv_case_study?: boolean | null
-          adv_left_review?: boolean | null
-          adv_reference_check?: boolean | null
+          adv_case_study?: number | null
+          adv_left_review?: number | null
+          adv_reference_check?: number | null
           adv_score?: number | null
-          adv_would_refer?: boolean | null
+          adv_would_refer?: number | null
           client_id?: number
           comm_consistent?: number | null
           comm_constructive?: number | null

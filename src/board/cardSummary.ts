@@ -24,14 +24,14 @@ export const BUCKET_SCORE_KEY: Record<Bucket, BucketScoreKey> = {
 // selects exactly these, and a type admitting the whole row would let a future
 // edit read a column nothing fetched.
 //
-// The answers are typed `number | boolean | null` because the four Advocacy
-// columns are boolean and the other seventeen are smallint. `false` is an
-// ANSWER; only null and absence mean unanswered.
+// The answers are typed `number | null` because every one of the 21 questions
+// is a nullable smallint 1-5, Advocacy's four included (spec §5.2, amended
+// 2026-08-31). A 1 is an ANSWER; only null and absence mean unanswered.
 // AMENDED 2026-08-28 during the pre-flight scan. An earlier draft of this plan
-// wrote this as an intersection with `Partial<Record<string, number | boolean |
-// null>>`. That does not typecheck: the index signature covers `submitted_at`
-// and `submitted_by` too, collapsing their types against number|boolean|null,
-// and `answeredCount(checkin, ...)` could not be called at all. One index
+// wrote this as an intersection with `Partial<Record<string, number | null>>`.
+// That does not typecheck: the index signature covers `submitted_at` and
+// `submitted_by` too, collapsing their types against number|null, and
+// `answeredCount(checkin, ...)` could not be called at all. One index
 // signature, admitting string, is the honest shape of a postgrest row.
 //
 // AMENDED again, task 4 fix round 1: the six bucket score columns are named
@@ -51,7 +51,7 @@ export type CardCheckin = {
   rel_score?: number | null
   del_score?: number | null
   adv_score?: number | null
-  [key: string]: number | boolean | string | null | undefined
+  [key: string]: number | string | null | undefined
 }
 
 // Built from the rubric with .join(', '), so column drift against it is not
@@ -94,15 +94,15 @@ export function cardFooter(
   }
 
   // Iterate the rubric, not the row's own keys. The row also carries
-  // client_id, the submitted fields, the six generated bucket scores and — once
-  // the rename lands — six legacy_* columns, none of which are answers. This
-  // mirrors useCheckin.ts's draftFromRow exactly, including the typeof filter:
-  // a `false` is an ANSWER and must survive, which a truthiness check would
-  // silently drop. Step 2.5's review proved that filter lethal by mutation.
+  // client_id, the submitted fields, the six generated bucket scores and six
+  // legacy_* columns, none of which are answers. This mirrors useCheckin.ts's
+  // draftFromRow exactly, including the typeof filter: a 1 is an ANSWER and
+  // must survive, which a truthiness check would silently drop. Step 2.5's
+  // review proved that filter lethal by mutation.
   const answers: Answers = {}
   for (const key of ALL_QUESTIONS) {
     const value = checkin[key]
-    if (typeof value === 'number' || typeof value === 'boolean') answers[key] = value
+    if (typeof value === 'number') answers[key] = value
   }
 
   const scored = answeredCount(answers, advocacyApplies)

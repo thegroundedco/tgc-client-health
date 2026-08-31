@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS, BUCKETS, isYesNo, questionsFor } from '../lib/buckets'
+import { ALL_QUESTIONS, BUCKETS, questionsFor } from '../lib/buckets'
 import { BUCKET_SCORE_KEY, CHECKIN_COLUMNS, cardFooter, progressLine } from './cardSummary'
+import type { CardCheckin } from './cardSummary'
 
 describe('CHECKIN_COLUMNS', () => {
   // The literal is typed by supabase-js, so a mistyped column fails the build
@@ -69,6 +70,11 @@ function seventeenAnswered(): Record<string, number> {
   return answers
 }
 
+// A row with no answers at all -- the shape of a check-in nobody has touched.
+function blankCheckin(): CardCheckin {
+  return { client_id: 1, submitted_at: null, submitted_by: null }
+}
+
 describe('cardFooter', () => {
   const VIEWER = 'viewer-uuid'
 
@@ -96,12 +102,27 @@ describe('cardFooter', () => {
 
   // A No is an ANSWER. Counting it as unanswered would leave the card
   // permanently one short for the client most likely to answer No.
-  it('counts a false Advocacy answer as scored', () => {
+  it('counts a No Advocacy answer as scored', () => {
     const row = {
       client_id: 1, submitted_at: null, submitted_by: null,
-      ...seventeenAnswered(), adv_left_review: false,
+      ...seventeenAnswered(), adv_left_review: 1,
     }
     expect(cardFooter(row, VIEWER, true)).toBe('Draft, 18 of 21 scored')
+  })
+
+  // A 1 is an answer. Counting it as missing would leave any client with
+  // nothing yet to advocate permanently short of complete -- and that is
+  // precisely the client most likely to answer No four times.
+  it('counts a No as answered', () => {
+    const checkin = blankCheckin()
+    for (const key of ALL_QUESTIONS) checkin[key] = 1
+    expect(cardFooter(checkin, 'someone', true)).toBe('Draft, 21 of 21 scored')
+  })
+
+  it('ignores a stray boolean left in a row', () => {
+    const checkin = blankCheckin()
+    checkin.adv_left_review = true as unknown as number
+    expect(cardFooter(checkin, 'someone', true)).toBe('Not started')
   })
 
   it('names you when you submitted it, with the "Submitted" prefix', () => {
@@ -121,10 +142,10 @@ describe('cardFooter', () => {
   // cover the gate, since that is now a third axis a blank string could hide
   // behind.
   it('never returns an empty string, in any combination', () => {
-    function answeredPrefix(count: number): Record<string, number | boolean> {
-      const answers: Record<string, number | boolean> = {}
+    function answeredPrefix(count: number): Record<string, number> {
+      const answers: Record<string, number> = {}
       for (const key of ALL_QUESTIONS.slice(0, count)) {
-        answers[key] = isYesNo(key) ? true : 3
+        answers[key] = 3
       }
       return answers
     }
