@@ -133,6 +133,16 @@ describe('one answer type', () => {
     for (const question of questionsFor('advocacy')) {
       expect(OVERALL_QUESTIONS).not.toContain(question.key)
     }
+    // The length and containment checks above pass even if OVERALL_QUESTIONS
+    // drops a real question and gains a key that is not in the rubric at all
+    // -- overallScore would then be null for every client, forever, and
+    // nothing above would notice. Exact, ordered equality against the rubric
+    // itself is what closes that gap.
+    expect([...OVERALL_QUESTIONS]).toEqual(
+      ALL_QUESTIONS.filter(
+        (key) => !questionsFor('advocacy').some((question) => question.key === key),
+      ),
+    )
   })
 
   it('keeps every question on one smallint scale', () => {

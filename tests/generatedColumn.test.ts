@@ -74,12 +74,22 @@ describe('the per-bucket enumeration the verifier rests on', () => {
     }
   })
 
-  it("covers each question's full value set -- {null,1,2,3,4,5}", () => {
+  // Cardinality alone is not enough: a typo'd SCALE_VALUES that repeats one
+  // number and substitutes another (e.g. an out-of-range 0 in place of 4)
+  // still has size 6, still leaves the all-null/all-5s/all-1s checks above
+  // green, and would leave verify:score silently checking an unreachable
+  // value while never checking a real one. So both the count AND the
+  // membership of the exact expected set are asserted here.
+  it("covers each question's full, distinct value set -- {null,1,2,3,4,5}", () => {
     for (const bucket of BUCKETS) {
       const states: Record<string, number | null>[] = enumerateBucketStates(bucket)
       for (const question of questionsFor(bucket)) {
+        const label = `${bucket}.${question.key}`
         const seen = new Set(states.map((state) => state[question.key]))
-        expect(seen.size, `${bucket}.${question.key}`).toBe(6)
+        expect(seen.size, label).toBe(6)
+        for (const value of [null, 1, 2, 3, 4, 5]) {
+          expect(seen.has(value), `${label} should reach ${value}`).toBe(true)
+        }
       }
     }
   })

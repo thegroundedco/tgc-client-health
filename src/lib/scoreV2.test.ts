@@ -268,6 +268,8 @@ describe('the mean replaces yesNoScore without changing a number', () => {
     expect(bucketScore(all(NO), 'finances')).toBe(1)
     expect(bucketScore(all(YES), 'finances')).toBe(5)
     expect(bucketScore({ ...all(NO), [keys[0]]: YES }, 'finances')).toBe(2.33)
+    // Two Yeses and one No: (5+5+1)/3 = 3.67.
+    expect(bucketScore({ ...all(YES), [keys[0]]: NO }, 'finances')).toBe(3.67)
   })
 
   it('reads an Unsure as the middle, not as a No and not as unanswered', () => {
