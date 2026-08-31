@@ -190,6 +190,6 @@ describe('the board hook', () => {
       scoresError: { message: 'permission denied for view checkin_scores' },
     })
     await waitFor(() => expect(result.current.status).toBe('error'))
-    expect(result.current.loadError).not.toBeNull()
+    expect(result.current.loadError).toContain('permission denied for view checkin_scores')
   })
 })
