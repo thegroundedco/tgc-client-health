@@ -59,7 +59,7 @@ If you do it the other way round, the failure is immediate and total. Doing it i
 
 ## Step 1 — Deploy
 
-Eleven commits are waiting on `slice-4-scoring-model`. From Terminal.app (not from inside Claude Code — it cannot reach your keychain):
+Nineteen commits are waiting on `slice-4-scoring-model`. From Terminal.app (not from inside Claude Code — it cannot reach your keychain):
 
 ```bash
 cd /Users/josh/Downloads/CLAUDE/tgc-client-health
@@ -78,9 +78,12 @@ Watch it: https://github.com/thegroundedco/tgc-client-health/actions
 Open the site. You should see:
 
 - Every client card present, with the **band** and the client name.
-- **Em dashes** where the scores were, and "Not scored". This is expected — see the warning above.
-- **Six bar slots** per card for clients past 90 days; **five bars and "Advocacy begins at 90 days"** for LoFli Balls, Remi and Polar Divide.
+- **Real scores**, not em dashes — Colorfil, LoFli Balls and Gibs Grooming at 5.00, down to York at 3.00. Sno-Go is paused and shows nothing; Test Client is a former client.
+- **Six bars** per card for clients past 90 days; **five bars and "Advocacy begins at 90 days"** for LoFli Balls, Remi and Polar Divide.
+- Bands: six Healthy, four Watch.
 - No error banner.
+
+At this point the scores are still out of **eighteen** — step 4 has not run yet — so they match the left column of the table at the top of this document, not the right. Babaloo reads 3.56 here and 3.59 after step 4.
 
 **If the board does not render, stop here.** Do not proceed to step 3. A broken board before the rename is recoverable by reverting the deploy; a broken board after it is a broken board with two possible causes instead of one.
 
