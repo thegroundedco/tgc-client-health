@@ -30,7 +30,9 @@ Today is the single day where the new default looks wrong, because you scored Au
 3. Migrate         -> the columns accept 5/3/1
 ```
 
-Deploying first is safe: the board reads `adv_score`, not the raw answers, and `adv_score` keeps working throughout. Migrating first would break the check-in screen's Advocacy rows for anyone who opened one in the gap. **Do not open a check-in between step 1 and step 3** — a save in that window would try to write a 5 into a boolean column and fail.
+Deploying first is safe, though not for the reason it first appears: the board DOES select the four raw `adv_*` columns (`cardSummary.ts` builds its column list from every question), it simply discards anything that is not a number, so pre-migration booleans fall away and the six bars keep drawing from `adv_score` throughout.
+
+Migrating first would break the check-in screen's Advocacy rows for anyone who opened one in the gap. **Do not open a check-in between step 1 and step 3** — a save in that window would try to write a 5 into a boolean column and fail. The only cosmetic effect during the gap: an unsubmitted draft's card would read "17 of 21" rather than counting its Advocacy answers.
 
 ---
 
@@ -67,7 +69,7 @@ Ask me to put its **contents** on your clipboard — not its filename. That mist
 
 **`db push` is not a safe route to production.** Its migration history was recorded under regenerated timestamps that do not match the repo's filenames, so the CLI would try to replay migrations that are already applied. Staging does not have this problem; production does.
 
-If it fails with `column "adv_left_review" is of type smallint`, it has already been applied — the safe failure, no partial state.
+If it has already been applied, the second run fails at the first `case adv_left_review when true` with **`operator does not exist: smallint = boolean`**. That is the safe failure and it leaves nothing behind: every statement sits inside `begin;` / `commit;`, and Postgres DDL is transactional, so the `drop view` and `drop column adv_score` roll back with it. There is no partial state to clean up and no unrecoverable half-migration.
 
 ## Step 4 — Verify
 

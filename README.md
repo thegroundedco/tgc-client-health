@@ -584,17 +584,23 @@ before every deploy that touches a migration.
 
 Proves the six bucket scores on screen and the six bucket scores in the
 database are the same numbers. Generates every state across all six buckets —
-2 × 6³ for the two three-question scale buckets, plus 3 × 6⁴ for the three
-four-question scale buckets, plus 3⁴ for the four-question Advocacy bucket
-(each of its four questions is yes/no, so it has only 3 reachable states —
-unanswered, yes, no — not 6), **4,401 states** in total — computes each
-expected bucket mean with `meanOrNull()` from `src/lib/scoreMath.ts`, except
-Advocacy, which goes through `yesNoScore()` instead, both from
-`src/lib/scoreMath.ts`, applied to the bucket's own question keys from
+3 × 6³ for the three three-question buckets, plus 3 × 6⁴ for the three
+four-question buckets, **4,536 states** in total — computes each expected
+bucket mean with `meanOrNull()` from `src/lib/scoreMath.ts`, applied to the
+bucket's own question keys from
 `questionsFor()` in `src/lib/buckets.ts`, then reads the **six live `*_score`
 expressions** (`comm_score`, `growth_score`, `fin_score`, `rel_score`,
 `del_score`, `adv_score`) out of Postgres's catalogue via `pg_attrdef` and
-evaluates each against its own state space. `score.ts` is never loaded — see
+evaluates each against its own state space. There is no second formula and no
+dispatch: since 2026-08-31 every question is a smallint 1-5 and every bucket is
+one mean, so `yesNoScore()` is gone.
+
+The sweep enumerates six values per question — including the 2s and 4s that no
+current control can write, because Finances and Advocacy answer No/Unsure/Yes
+and write only 1, 3 and 5. That is deliberate. Restricting it to what the UI
+writes would be smaller and would verify the UI's habits rather than the
+column's contract; August 2026's real Finance answers contain 2s and 4s.
+`score.ts` is never loaded — see
 `scripts/score-parity.mjs` for why the generator can only import leaf
 modules. Any disagreement raises an exception naming the **bucket**.
 
@@ -624,7 +630,7 @@ asserts six properties of the generated SQL string itself — the `round()`
 wrapper, `is distinct from` rather than a bare `<>`, that it inserts, updates
 and deletes nothing, that it raises one named exception per bucket naming that
 bucket's own column, that each bucket's values-list alias names that bucket's
-own question keys, and that the state total it prints (4,401) matches the
+own question keys, and that the state total it prints (4,536) matches the
 number of states it actually generated — because dropping any of these would
 pass the whole suite silently until `verify:score` is run against a live
 database.
@@ -674,7 +680,7 @@ only `started_on` moved to isolate the boundary:
   90 and at 91 — checked as three separate assertions rather than one, because a
   boundary bug is almost always off by a day in one direction, not absent
   entirely. A null `started_on` must never open the gate either.
-- **Null propagation, 44 cases.** Nulling any one of the 18 core answers must
+- **Null propagation, 42 cases.** Nulling any one of the 17 core answers must
   null `overall_score` — checked in **both** gate states, because "in either
   gate state" is the whole point and a fix that only special-cased one would
   still pass a check that looked only at the other. Nulling any one of the 4
@@ -687,8 +693,12 @@ only `started_on` moved to isolate the boundary:
   `coalesce(.., 0)` would return a different, non-null number — 2.59, not
   the unchanged 3.00 — and pass a weaker check that only asked "is it still
   non-null".
+
+  Since 2026-08-31 there is one more case: **a 3 in every Advocacy column gives
+  `adv_score` 3.00 and leaves `overall_score` non-null.** An Unsure is the
+  middle of the scale, and it is an answer — not an absence of one.
 - **The arithmetic**, including the vector from spec §3.2 that catches a
-  revert to averaging the five remaining bucket means instead of the 18 core
+  revert to averaging the five remaining bucket means instead of the 17 core
   answers (Advocacy already excludes itself from both, so this vector no
   longer touches it): Communication all 5s and the other 15 core questions
   all 2s gives 2.50 under the correct question-weighted mean and 2.60 under

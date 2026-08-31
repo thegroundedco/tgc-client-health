@@ -241,7 +241,8 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </p>
       )}
 
-      {/* §7: one legend for 17 questions, not three anchors on each. The
+      {/* §7: one legend for the fourteen scale questions, not three anchors on
+          each -- Finances and Advocacy answer No/Unsure/Yes and need no scale. The
           questions are already specific statements, so an agreement scale
           carries them -- and the alternative is 51 pieces of copy nobody has
           written. A definition list because that is what it is: two scores and

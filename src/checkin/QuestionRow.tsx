@@ -15,13 +15,14 @@ type Props = {
 
 // One question. Lighter than the PillarRow it replaces: no hint (buckets.ts's
 // Question carries a prompt and nothing else) and no per-question anchors (§7 --
-// one legend for the screen, because 17 questions times three anchors is 51
-// pieces of copy nobody has written, and the questions are already specific
-// statements). The bucket section is the bordered card; this is a plain row
-// inside it, because 17 bordered cards is a scroll rather than a screen.
+// one legend for the screen, because fourteen scale questions times three
+// anchors is 42 pieces of copy nobody has written, and the questions are
+// already specific statements). The bucket section is the bordered card; this
+// is a plain row inside it, because 21 bordered cards is a scroll rather than
+// a screen.
 export function QuestionRow({ question, value, lastValue, disabled, onChange, onClear }: Props) {
-  // Derived from the question key so they are unique on a page rendering 17 of
-  // these, and stable across renders.
+  // Derived from the question key so they are unique on a page rendering
+  // fourteen of these, and stable across renders.
   const labelId = `question-${question.key}-label`
 
   // Clear's button unmounts the instant it fires (it only renders while
@@ -56,8 +57,8 @@ export function QuestionRow({ question, value, lastValue, disabled, onChange, on
     // arrow-key navigation and the "3 of 5" announcement come from the native
     // radios either way.
     <section className={styles.row}>
-      {/* The prompt is the group's accessible name. On a screen with 17 of
-          these, a group named anything less specific is unnavigable. */}
+      {/* The prompt is the group's accessible name. On a screen with 21 rows,
+          a group named anything less specific is unnavigable. */}
       <p className="t-body" id={labelId}>
         {question.prompt}
       </p>
@@ -103,7 +104,7 @@ export function QuestionRow({ question, value, lastValue, disabled, onChange, on
         {/* Last month, per question. §5.2: a score compared is a judgment and a
             score alone is a guess. Absent rather than zero when there was no
             check-in last month -- printing a 0 would invent a bad month. On the
-            same line as the scale rather than below it, because 17 rows each
+            same line as the scale rather than below it, because 21 rows each
             carrying their own trailing line is a third of the screen's height
             spent on a value that is context, not the task. */}
         <p className={`t-caption ${styles.last}`}>

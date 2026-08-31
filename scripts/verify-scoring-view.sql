@@ -253,7 +253,7 @@ begin
   end if;
 
   -- Three Yeses and one unanswered: null propagates through adv_score exactly
-  -- as it does through overall_score for the eighteen.
+  -- as it does through overall_score for the seventeen.
   update public.checkins
      set adv_left_review = 5, adv_case_study = 5, adv_would_refer = 5,
          adv_reference_check = null

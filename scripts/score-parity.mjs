@@ -3,8 +3,8 @@
 // per-bucket generated columns. Slice 4 step 1, extended in step 2.5,
 // reunified in the one-answer-type step.
 //
-// Extended naively from five pillars to 22 questions, an exhaustive check
-// would need 6^22 states -- dead on arrival. It survives because each
+// Extended naively from five pillars to 21 questions, an exhaustive check
+// would need 6^21 states -- dead on arrival. It survives because each
 // bucket's generated expression references only its own questions, so the
 // space decomposes per bucket.
 //
