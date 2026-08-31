@@ -205,9 +205,14 @@ describe.runIf(url && key)('RLS with no session', () => {
   })
 
   it('refuses an unauthenticated insert on checkins', async () => {
+    // legacy_relationship, not relationship: any real column will do here, the
+    // payload is incidental to the grant-layer probe, but it must name a column
+    // that actually exists post-rename (20260831155318) or PostgREST answers
+    // PGRST204 "column not found" before ever reaching the grant check, which
+    // would make this pass for the wrong reason.
     const { data, error } = await client()
       .from('checkins')
-      .insert({ client_id: 1, period: '2026-08-01', relationship: 5 })
+      .insert({ client_id: 1, period: '2026-08-01', legacy_relationship: 5 })
       .select()
     expectGrantLayerDenial(error)
     expect(data).toBeNull()
@@ -231,7 +236,7 @@ describe.runIf(url && key)('RLS with no session', () => {
   it('refuses an unauthenticated update on checkins', async () => {
     const { data, error } = await client()
       .from('checkins')
-      .update({ relationship: 5 })
+      .update({ legacy_relationship: 5 })
       .eq('id', ABSENT_CLIENT_ID)
       .select()
     expectGrantLayerDenial(error)

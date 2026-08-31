@@ -61,19 +61,22 @@ export type Database = {
           del_quantity: number | null
           del_score: number | null
           del_we_are_proud: number | null
-          delivery: number | null
           fin_on_terms: number | null
           fin_pays_on_time: number | null
           fin_rack_rate: number | null
           fin_rate_increased: number | null
           fin_score: number | null
-          financial: number | null
-          growth: number | null
           growth_goals_defined: number | null
           growth_hitting_goals: number | null
           growth_progress_trackable: number | null
           growth_score: number | null
           id: number
+          legacy_delivery: number | null
+          legacy_financial: number | null
+          legacy_growth: number | null
+          legacy_relationship: number | null
+          legacy_sentiment: number | null
+          legacy_total_score: number | null
           notes: string | null
           period: string
           rel_collaborative: number | null
@@ -81,11 +84,8 @@ export type Database = {
           rel_multi_threaded: number | null
           rel_respectful: number | null
           rel_score: number | null
-          relationship: number | null
-          sentiment: number | null
           submitted_at: string | null
           submitted_by: string | null
-          total_score: number | null
           updated_at: string
         }
         Insert: {
@@ -105,19 +105,22 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
-          delivery?: number | null
           fin_on_terms?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
           fin_score?: number | null
-          financial?: number | null
-          growth?: number | null
           growth_goals_defined?: number | null
           growth_hitting_goals?: number | null
           growth_progress_trackable?: number | null
           growth_score?: number | null
           id?: never
+          legacy_delivery?: number | null
+          legacy_financial?: number | null
+          legacy_growth?: number | null
+          legacy_relationship?: number | null
+          legacy_sentiment?: number | null
+          legacy_total_score?: number | null
           notes?: string | null
           period: string
           rel_collaborative?: number | null
@@ -125,11 +128,8 @@ export type Database = {
           rel_multi_threaded?: number | null
           rel_respectful?: number | null
           rel_score?: number | null
-          relationship?: number | null
-          sentiment?: number | null
           submitted_at?: string | null
           submitted_by?: string | null
-          total_score?: number | null
           updated_at?: string
         }
         Update: {
@@ -149,19 +149,22 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
-          delivery?: number | null
           fin_on_terms?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
           fin_score?: number | null
-          financial?: number | null
-          growth?: number | null
           growth_goals_defined?: number | null
           growth_hitting_goals?: number | null
           growth_progress_trackable?: number | null
           growth_score?: number | null
           id?: never
+          legacy_delivery?: number | null
+          legacy_financial?: number | null
+          legacy_growth?: number | null
+          legacy_relationship?: number | null
+          legacy_sentiment?: number | null
+          legacy_total_score?: number | null
           notes?: string | null
           period?: string
           rel_collaborative?: number | null
@@ -169,11 +172,8 @@ export type Database = {
           rel_multi_threaded?: number | null
           rel_respectful?: number | null
           rel_score?: number | null
-          relationship?: number | null
-          sentiment?: number | null
           submitted_at?: string | null
           submitted_by?: string | null
-          total_score?: number | null
           updated_at?: string
         }
         Relationships: [
