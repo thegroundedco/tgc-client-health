@@ -1,24 +1,23 @@
-// Generates the SQL that proves meanOrNull() and yesNoScore() -- the
-// arithmetic primitives scoreV2.ts's bucketScore() is built from -- agree
-// with the six per-bucket generated columns. Slice 4 step 1, extended in
-// step 2.5.
+// Generates the SQL that proves meanOrNull() -- the arithmetic primitive
+// scoreV2.ts's bucketScore() is built from -- agrees with the six
+// per-bucket generated columns. Slice 4 step 1, extended in step 2.5,
+// reunified in the one-answer-type step.
 //
 // Extended naively from five pillars to 22 questions, an exhaustive check
 // would need 6^22 states -- dead on arrival. It survives because each
 // bucket's generated expression references only its own questions, so the
 // space decomposes per bucket.
 //
-// Advocacy's four questions became yes/no booleans (spec §3.1/§3.2, amended
-// 2026-08-28): each has THREE reachable states -- unanswered, yes, no --
-// rather than six, so its arm is checked through yesNoScore() over 3^4 = 81
-// states rather than through meanOrNull() over 6^4 = 1,296. The other five
-// buckets are unchanged: 6^3 = 216 states for each of the three
-// three-question buckets, and 6^4 = 1,296 for each of the two
-// four-question scale buckets. 3*6^3 (Communication, Growth, Finances) +
-// 2*6^4 (Relationship, Delivery) + 3^4 (Advocacy) = 648 + 2,592 + 81 = 3,321
-// states -- fewer than the 5,616 the pre-step-2.5 version checked, and
-// still exhaustive -- every reachable input to every deployed bucket
-// expression.
+// Every question is a smallint 1-5 (spec §3.2, amended 2026-08-31), so the
+// sweep is uniform: 6 values per question, 3 x 6^3 + 3 x 6^4 = 648 + 3,888 =
+// 4,536 states.
+//
+// That is MORE than the 3,321 the boolean version checked, and deliberately.
+// Enumerating only the values the new controls can write -- null, 5, 3, 1 --
+// would be smaller and would be a verifier that checks the UI's habits rather
+// than the database's contract. The columns accept any smallint 1 to 5, and
+// August 2026's Finance answers contain 2s and 4s that no current control can
+// produce. This enumerates what the column can hold.
 //
 // The SQL side does not hard-code any expression: it reads the live one out
 // of pg_attrdef, per bucket, and evaluates it with dynamic SQL. So this
@@ -36,32 +35,20 @@ import { meanOrNull } from '../src/lib/scoreMath.ts'
 
 export const OUT = 'scripts/.score-parity.generated.sql'
 
-// The expected bucket score, composed here from the same meanOrNull /
-// yesNoScore the application uses -- a line-for-line recomposition of
-// scoreV2.ts's own bucketScore(), which cannot be imported directly (see
-// above). Dispatch is on the QUESTION's kind, never on the bucket's name:
-// today only Advocacy holds yesno questions, but the rubric -- not this
-// file -- is what knows that. Neither primitive is a reimplementation: both
-// are the shipped functions, imported unchanged. bucketScore() is pinned
-// separately, against these same primitives, by scoreV2.test.ts -- this
-// file does not re-prove that.
+// The expected bucket score, composed from the same meanOrNull the
+// application uses -- a recomposition of scoreV2.ts's bucketScore(), which
+// cannot be imported directly because it imports './buckets' extensionlessly.
+// There is no dispatch on kind any more: every bucket is one mean over one
+// column type. meanOrNull() is not a reimplementation: it is the shipped
+// function, imported unchanged. bucketScore() is pinned separately, against
+// this same primitive, by scoreV2.test.ts -- this file does not re-prove
+// that.
 function expectedBucketScore(state, bucket) {
-  const questions = questionsFor(bucket)
-  const values = questions.map((question) => state[question.key])
-  // A bucket's questions share one kind today (buckets.test.ts pins that),
-  // so the first question's kind decides which primitive the whole bucket
-  // uses.
-  return questions[0].kind === 'yesno' ? yesNoScore(values) : meanOrNull(values)
+  return meanOrNull(questionsFor(bucket).map((question) => state[question.key]))
 }
 
-// The values a scale question can hold: unanswered, or 1 through 5. A yesno
-// question holds only three: unanswered, yes, no.
+// The values any question can hold: unanswered, or 1 through 5.
 const SCALE_VALUES = [null, 1, 2, 3, 4, 5]
-const YESNO_VALUES = [null, true, false]
-
-function valuesFor(question) {
-  return question.kind === 'yesno' ? YESNO_VALUES : SCALE_VALUES
-}
 
 // Every combination of values across one bucket's own questions. This is the
 // whole reason the check survives 21 questions: a bucket's generated
@@ -71,9 +58,8 @@ export function enumerateBucketStates(bucket) {
   const questions = questionsFor(bucket)
   let states = [{}]
   for (const question of questions) {
-    const values = valuesFor(question)
     states = states.flatMap((state) =>
-      values.map((value) => ({ ...state, [question.key]: value })),
+      SCALE_VALUES.map((value) => ({ ...state, [question.key]: value })),
     )
   }
   return states
@@ -99,8 +85,7 @@ function bucketCheckSql(bucket) {
       const expected = expectedBucketScore(state, bucket)
       const values = questions.map((question) => {
         const value = state[question.key]
-        const sqlType = question.kind === 'yesno' ? 'boolean' : 'smallint'
-        return value === null ? `null::${sqlType}` : `${value}::${sqlType}`
+        return value === null ? 'null::smallint' : `${value}::smallint`
       })
       values.push(expected === null ? 'null::numeric' : `${expected}::numeric`)
       return `(${values.join(', ')})`
@@ -134,7 +119,7 @@ begin
   ) into v_bad;
 
   if v_bad > 0 then
-    raise exception 'score parity FAILED for ${column}: % of ${states.length} states disagree between scoreMath.ts''s meanOrNull()/yesNoScore() and the deployed expression', v_bad;
+    raise exception 'score parity FAILED for ${column}: % of ${states.length} states disagree between scoreMath.ts''s meanOrNull() and the deployed expression', v_bad;
   end if;
 
   raise notice 'score parity ok for ${column}: ${states.length} states';
