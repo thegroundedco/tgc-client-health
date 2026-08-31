@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { OVERALL_QUESTIONS } from './buckets'
 import { advocacyApplies, advocacyGate, advocacyOpensAt } from './gate'
 
 describe('advocacyApplies', () => {
@@ -91,5 +92,22 @@ describe('advocacyGate', () => {
       if (gate.open) continue
       expect(gate.reason.trim().length).toBeGreaterThan(0)
     }
+  })
+
+  // The copy states how many questions the check-in is scored out of. Deriving it
+  // means the sentence cannot go stale the next time the rubric changes -- which
+  // it just did, twice in four days.
+  it('states the real non-Advocacy count, not a literal', () => {
+    const shut = advocacyGate('2026-08-01', '2026-08-01')
+    expect(shut.open).toBe(false)
+    if (shut.open) return
+    expect(shut.reason).toContain(`other ${OVERALL_QUESTIONS.length} questions`)
+  })
+
+  it('says the same for a client with no start date', () => {
+    const none = advocacyGate(null, '2026-08-01')
+    expect(none.open).toBe(false)
+    if (none.open) return
+    expect(none.reason).toContain(`other ${OVERALL_QUESTIONS.length} questions`)
   })
 })

@@ -1,4 +1,9 @@
+import { OVERALL_QUESTIONS } from './buckets.ts'
 import { formatPeriod } from './month.ts'
+
+// Derived rather than written: this count feeds two sentences of user-facing
+// prose below, and a literal here went stale within four days of the rubric
+// changing twice.
 
 // The 90-day Advocacy gate, spec §4. This is the second copy of a rule that
 // also lives in SQL, as the predicate on public.checkin_scores.advocacy_applies:
@@ -65,7 +70,7 @@ export function advocacyGate(startedOn: string | null, period: string): Advocacy
       open: false,
       reason:
         'This client has no start date, so Advocacy is not scored and this ' +
-        'check-in is scored out of the other 18 questions. Adding the date on ' +
+        `check-in is scored out of the other ${OVERALL_QUESTIONS.length} questions. Adding the date on ` +
         'the client admin screen opens this section.',
     }
   }
@@ -74,7 +79,7 @@ export function advocacyGate(startedOn: string | null, period: string): Advocacy
     open: false,
     reason:
       `This client is still inside their first ${GATE_DAYS} days, so Advocacy ` +
-      `is not scored yet and this check-in is scored out of the other 18 ` +
+      `is not scored yet and this check-in is scored out of the other ${OVERALL_QUESTIONS.length} ` +
       `questions. It opens with the ${formatPeriod(advocacyOpensAt(startedOn))} ` +
       `check-in — a check-in covers a whole month, so the gate opens with the ` +
       `first month that begins on or after day ${GATE_DAYS}, not on day ` +
