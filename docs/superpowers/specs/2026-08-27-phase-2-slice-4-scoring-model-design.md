@@ -57,6 +57,10 @@ bars; new bands; the rebuilt score verifier.
 
 *Amended 2026-08-31: 22 became 21 when "On terms" was removed. See the Finances entry below.*
 
+*Amended 2026-08-31 (step 4): the count is unchanged at 21, but the ANSWER TYPES collapse to one.
+Every question — all 21 — is a nullable smallint 1-5. What varies is only the control the check-in
+screen draws over it. See §3.2.*
+
 Wording is the boss's, lightly normalised to statements. Column names are fixed here because §5
 turns them into a migration and §9 verifies them by name.
 
@@ -97,6 +101,18 @@ turns them into a migration and §9 verifies them by name.
   3.56 → 3.59, and its band stays Watch. This is the one place the project departs from §5.4's
   rename-never-drop principle, and it does so by ruling, not by oversight.
 
+  **AMENDED 2026-08-31 (step 4): all three are answered Yes / Unsure / No.** The owner ruled it
+  after the first real scoring round, and his own data is the argument. Of the ten August 2026
+  check-ins, SEVEN answered `fin_rack_rate` as 3. Nobody pays 60% of rack rate. That 3 was not a
+  measurement, it was a refusal to commit to a question with only two honest answers — the same
+  failure "On terms" was removed for, in a milder form.
+
+  **No migration, and no score moves.** These three columns are already
+  `smallint check between 1 and 5`. Yes writes 5, Unsure writes 3, No writes 1, and August's
+  recorded values stay exactly as they are. A legacy 2 or 4 remains a valid, correctly scored answer
+  that the new control simply cannot produce. This is the whole reason the model collapses to one
+  answer type rather than growing a second one (§3.2).
+
 **Relationship** — `rel_collaborative`, `rel_respectful`, `rel_fun`, `rel_multi_threaded`
   Collaborative / respectful / do they have fun / are we and they multi-threaded (are we working
   with their partners, are they working with ours).
@@ -116,16 +132,74 @@ turns them into a migration and §9 verifies them by name.
   later write a 3 into it. §3.2 gives the bucket arithmetic that keeps the result on the same
   1.00-5.00 scale as the other five buckets.
 
-Three plus three plus four plus four plus four plus four is 22.
+  **AMENDED 2026-08-31 (step 4): they gain an UNSURE, and are therefore no longer booleans.** The
+  owner asked for it after the first round, and the reason it is not a nicety: "would they refer us
+  without being prompted?" is a claim about someone else's intent, and "I don't know" is a different
+  claim from "no". Recording an unsure as a No understates the client. Recording it as unanswered
+  makes the check-in permanently unsubmittable, because §3.3 counts a null as missing.
+
+  So the column type changes from `boolean` to the same `smallint check between 1 and 5` every other
+  answer uses, with Yes = 5, Unsure = 3, No = 1. **This is the one migration in step 4.** It is
+  lossless: `true` becomes 5, `false` becomes 1, null stays null, and §3.2 proves the resulting
+  bucket scores are identical to what `1 + yeses` produced — so not one Advocacy bar moves.
+
+  The 2026-08-28 reasoning for `boolean` — "the column states what it is and nobody can later write
+  a 3 into it" — is what this reverses, and it is worth being honest that it was a good argument
+  that the Unsure requirement simply defeats. A 3 is now a meaningful answer.
+
+Three plus three plus three plus four plus four plus four is **21**. *Corrected 2026-08-31 (step
+4): this sentence still read "three plus three plus four plus four plus four plus four is 22" after
+"On terms" was removed earlier the same day. The count in the section heading was updated and the
+sentence that proves it was not.*
 
 ### 3.2 The arithmetic, and the property that makes it work
+
+**AMENDED 2026-08-31 (step 4). Read this block first. The 2026-08-28 block below it is superseded
+in one respect and stands in the other.**
+
+**There is now ONE scoring formula and ONE answer type.** Every question, in every bucket, is a
+nullable smallint 1-5. Every bucket score is the mean of its own questions. `yesNoScore` — the
+`1 + the number of yeses` rule introduced 2026-08-28 — is deleted.
+
+**This changes no number.** For a four-question bucket, mapping Yes to 5 and No to 1 and taking the
+mean is arithmetically identical to `1 + yeses` at every one of its five reachable points:
+
+| yeses | `1 + yeses` | mean of 5s and 1s |
+|---|---|---|
+| 0 | 1.00 | (1+1+1+1)/4 = 1.00 |
+| 1 | 2.00 | (5+1+1+1)/4 = 2.00 |
+| 2 | 3.00 | (5+5+1+1)/4 = 3.00 |
+| 3 | 4.00 | (5+5+5+1)/4 = 4.00 |
+| 4 | 5.00 | (5+5+5+5)/4 = 5.00 |
+
+So the mean is not an approximation of the old rule, it is a generalisation of it — and it is the
+generalisation that made Finances possible. `1 + yeses` only lands on 1.00-5.00 for a bucket of
+exactly FOUR questions. Applied to three-question Finances it would have produced 1, 2, 3 and 4, and
+Finances' bar could never have filled. The mean produces 1.00, 2.33, 3.67 and 5.00 — the full range,
+for any bucket size.
+
+**`Question.kind` stops meaning "how is this scored" and means only "what control is drawn".** A
+`scale` question renders five numbered radios; a `choice` question renders three labelled ones that
+write 5, 3 and 1. Nothing downstream of the answer knows the difference, which is the point.
+
+**The latent defect this fixes, which would have bitten on the very next change.** Before this
+amendment the overall's question list was built by filtering `kind === 'scale'` — so it excluded
+Advocacy *because Advocacy was answered with booleans*, which is not the reason Advocacy is
+excluded. Advocacy is excluded because the owner ruled it out of the headline number (below).
+Changing Finances to a yes/no control would therefore have silently dropped Finances out of the
+overall as well: divisor 17 to 14, every client's score moved, and nothing failing. The exclusion is
+now an explicit named list of one bucket, and a test asserts the overall counts seventeen answers.
+
+---
 
 **AMENDED 2026-08-28. The paragraph below records the superseded rule; read this block first.**
 
 The seventeen non-Advocacy questions are scored 1-5 and each bucket's score is the mean of its own
 questions, unchanged. Advocacy is now different in two ways, both ruled by the owner 2026-08-28:
 
-1. **Its four questions are yes/no**, and its bucket score is **`1 + the number of yeses`** — which
+1. *(Point 1 superseded 2026-08-31 step 4: the questions are three-way and the bucket score is a
+   mean. The numbers it produces are unchanged — see the table above.)*
+   **Its four questions are yes/no**, and its bucket score is **`1 + the number of yeses`** — which
    lands on exactly 1.00, 2.00, 3.00, 4.00, 5.00 for zero through four yeses. That is deliberate:
    it puts Advocacy on the identical 1.00-5.00 scale as the other five, so the board's bar, the
    matrix's cell and the bands need no special case for it. A null in any of the four still yields a
@@ -139,7 +213,10 @@ questions, unchanged. Advocacy is now different in two ways, both ruled by the o
 **The consequence to carry everywhere: `required` and the overall's divisor have DECOUPLED.** They
 were the same number until this ruling and are now two. `required` — how many answers a check-in
 needs before it counts as complete, and what every count on screen reads against — is still 22 when
-the gate is open and 18 when it is shut. The overall's divisor is 18, always. A gate-open check-in
+the gate is open and 18 when it is shut. The overall's divisor is 18, always. *(Corrected
+2026-08-31: after "On terms" was removed these are 21 gate-open and 17 gate-shut, and the divisor is
+17. The figures are left as written because the DECOUPLING is this paragraph's point, and it
+survives every change to the counts.)* A gate-open check-in
 therefore asks four questions that do not move the headline number, and that is intended: they feed
 the Advocacy bucket, the board's sixth bar and the matrix's A column.
 
@@ -294,6 +371,9 @@ the moment this ships.
 
 **AMENDED 2026-08-28: eighteen smallints and four booleans, not twenty-two smallints.**
 **AMENDED 2026-08-31: SEVENTEEN smallints and four booleans — `fin_on_terms` is dropped.**
+**AMENDED 2026-08-31 (step 4): TWENTY-ONE smallints and no booleans at all.** §3.2 collapsed the
+model to one answer type, so `adv_left_review`, `adv_case_study`, `adv_would_refer` and
+`adv_reference_check` change from `boolean` to `smallint check between 1 and 5`.
 
 The seventeen non-Advocacy answers are each nullable `smallint check between 1 and 5`, matching the
 existing pillar columns exactly. Nullable because a draft is a check-in with unanswered questions,
@@ -304,10 +384,20 @@ The four Advocacy answers are each nullable `boolean` (§3.1). Null still means 
 means answered No, and the two must never be conflated — a false read as a null would make a
 complete check-in look incomplete, and a null read as a false would invent an answer nobody gave.
 
+*Superseded 2026-08-31 (step 4): the four Advocacy answers are nullable `smallint` like every other
+answer, holding 5 (Yes), 3 (Unsure) or 1 (No). The conflation warning above survives the type change
+unaltered, and is if anything sharper — null still means unanswered, 1 still means answered No, and
+a 1 read as a null would still make a complete check-in look incomplete.*
+
 **This amendment is only cheap while production is unmigrated.** These columns exist on staging
 alone and hold no real answers, so today this is an edit to an unapplied migration. Once §5's
 migration has run on production and one scoring round has happened, the same change becomes a data
 migration on real answers.
+
+**That warning came due.** Production is migrated and one real scoring round has happened, so step
+4's boolean-to-smallint change IS a data migration on real answers — seven August check-ins with
+Advocacy answered, four of them all-No. It is lossless (§3.1) and it is the only migration in step
+4, but it is no longer an edit to an unapplied file.
 
 ### 5.3 The six bucket columns
 
@@ -322,6 +412,21 @@ comm_score numeric(3,2) generated always as
 and the same shape for the other four 1-5 buckets. The explicit `::numeric` cast is required:
 without it Postgres does integer division on the smallints and 4 + 4 + 5 becomes 4 instead of 4.33.
 
+**AMENDED 2026-08-31 (step 4): Advocacy no longer differs.** With its inputs on the same smallint
+scale as every other answer, `adv_score` takes the identical shape as its five siblings:
+
+```sql
+adv_score numeric(3,2) generated always as
+  ((adv_left_review + adv_case_study
+      + adv_would_refer + adv_reference_check)::numeric / 4) stored
+```
+
+Null propagation is unchanged, and now arrives by the same mechanism as everywhere else — null
+through `+` is null — rather than through a boolean-to-int cast. §3.2's table proves the values are
+identical to what the superseded expression below produced. **All six bucket columns now have one
+shape**, which is what lets §9.1's verifier drop its per-bucket dispatch.
+
+*Superseded 2026-08-31 (step 4), retained because §3.2's proof of equivalence refers to it:*
 **Advocacy differs, per §3.2's amendment.** Its four inputs are booleans, so its generated column
 counts yeses and offsets by one:
 
@@ -427,6 +532,44 @@ retired pillars. The cache key gains a version segment and old entries are disca
 is the same failure that produced ruling 16 — a value that means one thing being read as though it
 means another.
 
+**AMENDED 2026-08-31 (step 4): the period is chosen, not assumed.**
+
+`Board.tsx` computed the period as `currentPeriod()` and offered no way to change it. The owner's
+real workflow is that **August is scored during September** — a month has to close before it can be
+judged — so the tool as built could only ever score a month that was not finished, and the previous
+month became unreachable the moment the calendar turned.
+
+The board owns one `period` in state, defaulting to `previousPeriod(currentPeriod())`, with previous
+and next controls beside the month heading it already renders. The check-in screen inherits that
+period and repeats the control in its own header, so the month being scored is visible at the moment
+of scoring rather than remembered from two screens ago.
+
+**One period, never two.** The board and the check-in screen must not show different months. A card
+reading "Draft, 8 of 21" for one month while opening a check-in for another is the kind of quiet
+mismatch that makes a person stop trusting the number.
+
+**Forward is capped at the current month; backward is not capped.** You cannot score a month that
+has not started. Going back needs no limit — the query simply returns nothing for a month before the
+client existed.
+
+**The gate is already correct under backdating**, for free: `advocacyGate(startedOn, period)` takes
+the period, so scoring August during September correctly shuts Advocacy for a client whose 90th day
+fell in September. Nothing in §4 changes.
+
+**The default follows the owner's ruling of 2026-08-31, taken against a recommendation.** The
+alternative offered was "the most recent unsubmitted month", which needs no clicking in either
+direction; he chose the simpler and more predictable rule. The cost he accepted: once August is
+submitted, working on September takes one click forward, every time. It is also the better default
+for the board, which under `currentPeriod()` showed nothing but em dashes for the first three weeks
+of every month.
+
+**The scale legend already says what it should, and is in the wrong place.** §7's one-legend ruling
+produced `1 — strongly disagree / 5 — strongly agree`, which is exactly the anchoring the owner
+asked for on 2026-08-31 — he asked for it because he had not seen it. It renders once, above the
+first bucket, and scrolls out of view long before question fourteen. **The fix is placement, not
+copy:** the legend becomes sticky within the scrolling region. This is not a new decision, it is
+§10's decision 3 failing in practice for a reason that decision did not anticipate.
+
 ## 8. The board
 
 Each card grows from five bars to six, keeping the per-bar initial letters added in `befc08f`.
@@ -457,6 +600,17 @@ the four-question buckets. **Amended 2026-08-31:** with Finances down to three q
 Advocacy on booleans, it is 3 x 6^3 + 2 x 6^4 + 3^4 = 648 + 2,592 + 81 = **3,321 states,
 and still exhaustive** — every reachable input to every deployed bucket expression.
 
+**Amended 2026-08-31 (step 4):** with every question a smallint 1-5, the verifier loses its
+per-bucket dispatch and enumerates six values for every question uniformly:
+3 x 6^3 + 3 x 6^4 = 648 + 3,888 = **4,536 states**.
+
+That total goes UP, and deliberately. The obvious alternative is to enumerate only the values the
+new controls can write — null, 5, 3 and 1 — giving 4^3 and 4^4 and a smaller sweep. That would be a
+verifier that checks the UI's habits rather than the database's contract. The columns accept any
+smallint 1 to 5, and **August 2026's Finance answers contain 2s and 4s that no current control can
+produce**. A restricted sweep would stop verifying values that are actually in the table. The sweep
+enumerates what the column can hold, not what the screen can write.
+
 This property is the reason §5.4's shape was chosen over a normalised answers table or a `jsonb`
 column. Neither has a per-bucket expression in the catalogue to read and evaluate, so both would
 have replaced an exhaustive proof with a sample.
@@ -476,7 +630,9 @@ bucket-averaging fails loudly rather than drifting.
 
 The exhaustive bucket sweep in §9.1 shrinks too, and gets cheaper: Advocacy's four booleans have
 three states each (null, true, false) rather than six, so its arm is 3^4 = 81 rather than 6^4 = 1296.
-The total falls from 5,616 to 4,401 (2026-08-28), and to **3,321** (2026-08-31, "On terms" removed).
+The total falls from 5,616 to 4,401 (2026-08-28), and to **3,321** (2026-08-31, "On terms"
+removed). *Amended 2026-08-31 (step 4): and rises to **4,536**, which is the right direction — §9.1
+says why.*
 
 The gate predicate is checked at its boundaries: 89, 90 and 91 days, and a null `started_on`.
 
@@ -509,6 +665,21 @@ fill in.
 5. **Questions live in code, not a table**, consistent with the ruling that deferred
    `pillar_definitions`. Costs a migration per question change — and unlike the five pillars, which
    changed zero times in a year, this list is three days old. If it moves twice more, revisit.
+6. **One answer type and one scoring formula** (§3.2), ruled 2026-08-31. Costs the ability to let a
+   column state its own domain: a `boolean` could not hold a 3, whereas a smallint holds anything
+   1-5 and only a check constraint and the UI stop it. Bought: the Unsure the owner asked for, a
+   Finances bucket that can reach 5.00 on three questions, one code path instead of two, and the
+   removal of a defect that derived the overall's divisor from how questions were rendered.
+   Reversing it is a data migration now, not a code change.
+7. **Yes = 5, Unsure = 3, No = 1** (§3.1, §3.2). This mapping is what makes the collapse lossless
+   and the existing numbers stable. Cost if wrong: an Unsure sits at the exact centre of the range
+   and is therefore never neutral in effect — it pulls a strong client down and a weak client up.
+   The alternative considered was dropping Unsure from its bucket's divisor, which makes "I don't
+   know" free and lets a scorer dodge every hard question without penalty. Revisit after one round
+   in which Unsure is actually used.
+8. **The board defaults to the previous month** (§7), ruled by the owner 2026-08-31 against a
+   recommendation of "most recent unsubmitted". Cheap to change — one expression in `Board.tsx` —
+   and worth revisiting after a month of clicking forward.
 
 ## 11. Open items carried forward
 
@@ -537,3 +708,9 @@ fill in.
    churns rather than a confirmed gap. Adding a code is a one-line constraint change.
 5. **`Test Client` (production id 2)** is still `active` and will render a twelfth card with six
    empty bars. Offered to the owner three times, still unanswered.
+6. **Whether an Unsure needs to stay distinguishable downstream.** A 3 written by a three-way
+   control and a 3 written by a five-point scale are indistinguishable in the column, by design.
+   Nothing today needs to tell them apart. If a future screen wants to show "three questions unsure"
+   as something other than "three questions middling", that distinction does not exist in the data
+   and recovering it is a migration. Flagged now because it is cheap to notice and expensive to
+   retrofit.
