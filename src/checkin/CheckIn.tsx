@@ -241,9 +241,9 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </p>
       )}
 
-      {/* §7: one legend for 22 questions, not three anchors on each. The
+      {/* §7: one legend for 17 questions, not three anchors on each. The
           questions are already specific statements, so an agreement scale
-          carries them -- and the alternative is 66 pieces of copy nobody has
+          carries them -- and the alternative is 51 pieces of copy nobody has
           written. A definition list because that is what it is: two scores and
           what each one means, with 2, 3 and 4 reading as between them. */}
       <dl className={styles.legend} data-testid="scale-legend">
@@ -271,7 +271,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
 
               {/* Shown, not hidden -- §7, "so the scorer learns the bucket
                   exists". A hidden section is a screen that silently asks for
-                  18 questions one month and 22 the next with nothing to
+                  17 questions one month and 21 the next with nothing to
                   explain the change. The reason distinguishes the two shut
                   cases, because one is a missing fact somebody can go and
                   enter and the other is a client who is simply new. */}

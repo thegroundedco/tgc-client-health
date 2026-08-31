@@ -217,7 +217,7 @@ describe('a question row in a real DOM', () => {
     expect(focusedValue()).not.toBe('2')
   })
 
-  it('names the group by its prompt, so 22 groups on one screen are distinguishable', () => {
+  it('names the group by its prompt, so 21 groups on one screen are distinguishable', () => {
     renderRow()
     expect(screen.getByRole('radiogroup', { name: 'They are respectful.' })).not.toBeNull()
   })

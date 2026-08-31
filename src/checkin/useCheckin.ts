@@ -31,7 +31,7 @@ export type UseCheckin = {
   draft: Draft
   saveState: SaveState
   // The gate, and the count that follows from it. §4.4: every count on screen is
-  // against this number, never a hardcoded 22.
+  // against this number, never a hardcoded 21.
   advocacyApplies: boolean
   required: number
   scored: number
@@ -274,8 +274,8 @@ export function useCheckin(
     dispatch({ type: 'submitted' })
 
     void (async () => {
-      // Against the REQUIRED count, not 22. A gated-out check-in is complete at
-      // 18, and marking it submitted only at 22 would make a complete check-in
+      // Against the REQUIRED count, not 21. A gated-out check-in is complete at
+      // 17, and marking it submitted only at 21 would make a complete check-in
       // permanently unsubmittable for every client inside their first 90 days.
       const complete = answeredCount(draft.answers, applies) === required
       const now = new Date().toISOString()

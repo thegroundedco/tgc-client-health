@@ -27,11 +27,12 @@ export type Answers = Partial<Record<string, number | boolean | null>>
 
 // UNCHANGED by the 2026-08-28 amendment, and deliberately so. This is about
 // COMPLETENESS -- how many answers a check-in needs before it may be submitted,
-// and what every count on screen reads against. It is still 22 when the gate is
-// open. What changed is the OVERALL's divisor, which is now always 18 and lives
-// in OVERALL_QUESTIONS. These were one number until the amendment and are two
-// now; collapsing them back would either make a gate-open check-in submittable
-// four answers short, or make Advocacy count toward the headline number again.
+// and what every count on screen reads against. It is 21 when the gate is
+// open, 17 when it is shut. What changed is the OVERALL's divisor, which is
+// now always 17 and lives in OVERALL_QUESTIONS. These were one number until
+// the amendment and are two now; collapsing them back would either make a
+// gate-open check-in submittable four answers short, or make Advocacy count
+// toward the headline number again.
 export function requiredQuestions(advocacyApplies: boolean): readonly string[] {
   const buckets = advocacyApplies
     ? BUCKETS
@@ -54,9 +55,9 @@ export function bucketScore(answers: Answers, bucket: Bucket): number | null {
   )
 }
 
-// The mean of the eighteen non-Advocacy answers. Always -- there is no gate
+// The mean of the seventeen non-Advocacy answers. Always -- there is no gate
 // parameter, and that absence is the API doing its job: there is no way to ask
-// for the retired 22-divisor behaviour by accident. Spec §3.2, amended
+// for the retired 21-divisor behaviour by accident. Spec §3.2, amended
 // 2026-08-28. Reversing it means changing this function and the view's
 // expression, and nothing else.
 export function overallScore(answers: Answers): number | null {

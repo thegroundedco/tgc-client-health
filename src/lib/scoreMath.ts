@@ -41,8 +41,8 @@ export const BAND_LABELS: Record<Band, string> = {
 // view's round(x, 2) produces. Computed from the integer sum and divisor rather
 // than by rounding a float, so the two implementations cannot drift.
 //
-// No half-way case is reachable for the divisors this model uses (3, 4, 18 and
-// 22): reaching one requires `sum * 100 / divisor` to be an odd half-integer,
+// No half-way case is reachable for the divisors this model uses (3, 4, 17 and
+// 21): reaching one requires `sum * 100 / divisor` to be an odd half-integer,
 // which for each of those divisors requires `sum` to be a multiple of the
 // divisor -- and every such multiple yields an even numerator. So the rounding
 // direction on a tie is never exercised, and the two implementations cannot

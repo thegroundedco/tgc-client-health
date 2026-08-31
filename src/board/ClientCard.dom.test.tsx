@@ -103,7 +103,7 @@ describe('a client card', () => {
     expect(bars()[0].getAttribute('aria-label')).toMatch(/Communication: 5 of 5/)
     expect(bars()[1].getAttribute('aria-label')).toMatch(/Growth: 1 of 5/)
     expect(bars()[2].getAttribute('aria-label')).toMatch(/Finances: not scored/)
-    expect(screen.getByText('Draft, 2 of 22 scored')).toBeTruthy()
+    expect(screen.getByText('Draft, 2 of 21 scored')).toBeTruthy()
   })
 
   it('keeps the bars in rubric order, not in the order the row happens to arrive', () => {

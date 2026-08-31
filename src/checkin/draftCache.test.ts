@@ -141,7 +141,7 @@ describe('the versioned key', () => {
   })
 })
 
-describe('the 22 answers', () => {
+describe('the 21 answers', () => {
   it('round-trips every question key the rubric defines', () => {
     // Each key gets a value matching its own kind -- a scale question gets a
     // 1-5 score, a yes/no question gets a boolean -- because the rubric mixes
@@ -294,7 +294,7 @@ describe('draftsDiffer', () => {
     ).toBe(false)
   })
 
-  it('is true when any one of the 22 differs', () => {
+  it('is true when any one of the 21 differs', () => {
     for (const key of ALL_QUESTIONS) {
       expect(draftsDiffer({ answers: {}, notes: '' }, { answers: { [key]: 3 }, notes: '' })).toBe(
         true,

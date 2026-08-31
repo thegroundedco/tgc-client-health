@@ -60,7 +60,7 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
     draft: { answers: { comm_constructive: 4 }, notes: 'Renewal conversation went well.' },
     saveState: { kind: 'dirty' },
     advocacyApplies: true,
-    required: 22,
+    required: 21,
     scored: 1,
     localOverall: null,
     storedOverall: null,
@@ -153,8 +153,8 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
   // client's start date via advocacyGate(). Rendering the real component
   // tree (rather than the string-based CheckIn.test.tsx) is what lets this
   // count radios by section rather than by text.
-  it('disables every Advocacy radio and leaves the other 18 enabled', () => {
-    hookState.current = mockCheckin({ advocacyApplies: false, required: 18, scored: 0, draft: { answers: {}, notes: '' }, hasContent: false, saveState: { kind: 'clean' } })
+  it('disables every Advocacy radio and leaves the other 17 enabled', () => {
+    hookState.current = mockCheckin({ advocacyApplies: false, required: 17, scored: 0, draft: { answers: {}, notes: '' }, hasContent: false, saveState: { kind: 'clean' } })
     render(
       <CheckIn
         client={{ ...CLIENT, started_on: null }}

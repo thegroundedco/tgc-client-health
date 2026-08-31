@@ -100,27 +100,27 @@ function renderCheckin(opts: {
 describe('useCheckin: the gate, through the hook', () => {
   // The gate, through the hook. The screen's whole shape depends on this boolean
   // and it is the one value here that is computed rather than fetched.
-  it('is gated out for a client with no start date, and requires 18', async () => {
+  it('is gated out for a client with no start date, and requires 17', async () => {
     const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.advocacyApplies).toBe(false)
-    expect(result.current.required).toBe(18)
+    expect(result.current.required).toBe(17)
   })
 
-  it('is gated in past 90 days, and requires 22', async () => {
+  it('is gated in past 90 days, and requires 21', async () => {
     const { result } = renderCheckin({
       client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
       period: '2026-04-01',
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.advocacyApplies).toBe(true)
-    expect(result.current.required).toBe(22)
+    expect(result.current.required).toBe(21)
   })
 })
 
 describe('useCheckin: the local overall', () => {
-  // §3.3: a missing answer must never read as a low score. 17 of 18 is null, not
-  // a mean of the 17.
+  // §3.3: a missing answer must never read as a low score. 16 of 17 is null, not
+  // a mean of the 16.
   it('has no local overall until every required question is answered', async () => {
     const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
@@ -141,15 +141,15 @@ describe('useCheckin: the local overall', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'))
     for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))
     expect(result.current.localOverall).toBe(3)
-    expect(result.current.scored).toBe(18)
+    expect(result.current.scored).toBe(17)
   })
 
   // Spec §3.2 amended, through the hook. `required` (completeness) and the
-  // overall's divisor (always the 18) are different numbers now -- this proves
-  // both at once, with the gate open: the overall reads only the 18 while
-  // `required` still asks for 22 and `scored` still stops at 18 with every
+  // overall's divisor (always the 17) are different numbers now -- this proves
+  // both at once, with the gate open: the overall reads only the 17 while
+  // `required` still asks for 21 and `scored` still stops at 17 with every
   // Advocacy answer blank.
-  it('has an overall from the 18 even with every Advocacy answer blank', async () => {
+  it('has an overall from the 17 even with every Advocacy answer blank', async () => {
     const { result } = renderCheckin({
       client: { id: 1, name: 'Acme', started_on: '2026-01-01' },
       period: '2026-08-01',
@@ -158,9 +158,9 @@ describe('useCheckin: the local overall', () => {
     expect(result.current.advocacyApplies).toBe(true)
     for (const key of OVERALL_QUESTIONS) act(() => result.current.setAnswer(key, 4))
     expect(result.current.localOverall).toBe(4)
-    // ...and still 22 required, so it is not yet complete.
-    expect(result.current.required).toBe(22)
-    expect(result.current.scored).toBe(18)
+    // ...and still 21 required, so it is not yet complete.
+    expect(result.current.required).toBe(21)
+    expect(result.current.scored).toBe(17)
   })
 })
 
@@ -270,7 +270,7 @@ describe('useCheckin: submit', () => {
   // only the answered ones would leave a cleared answer at its old value in the
   // database, and the bucket columns are generated from those columns -- so the
   // bar on the board would be the one nobody chose.
-  it('sends all 22 answer columns on save, unanswered ones as null', async () => {
+  it('sends all 21 answer columns on save, unanswered ones as null', async () => {
     const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     act(() => result.current.setAnswer('comm_timely', 5))
@@ -299,9 +299,9 @@ describe('useCheckin: submit', () => {
   })
 
   // The submitted marker tracks the REQUIRED count, so a gated-out check-in can
-  // be submitted at 18. Marking it only at 22 would make a complete check-in
+  // be submitted at 17. Marking it only at 21 would make a complete check-in
   // permanently unsubmittable for every client inside their first 90 days.
-  it('marks a gated-out check-in submitted at 18 answers', async () => {
+  it('marks a gated-out check-in submitted at 17 answers', async () => {
     const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))

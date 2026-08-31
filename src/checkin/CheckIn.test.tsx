@@ -74,7 +74,6 @@ function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
     fin_rack_rate: null,
     fin_pays_on_time: null,
     fin_rate_increased: null,
-    fin_on_terms: null,
     rel_collaborative: null,
     rel_respectful: null,
     rel_fun: null,
@@ -110,7 +109,7 @@ function defaultHook(): UseCheckin {
     draft: { answers: {}, notes: '' },
     saveState: { kind: 'clean' },
     advocacyApplies: true,
-    required: 22,
+    required: 21,
     scored: 0,
     localOverall: null,
     storedOverall: null,
@@ -281,13 +280,13 @@ describe('CheckIn', () => {
       saveState: { kind: 'clean' },
       hasContent: true,
       scored: 3,
-      required: 22,
+      required: 21,
       stored: storedRow({ submitted_at: null, submitted_by: null }),
       storedSubmitted: false,
     })
     const text = extractSaveStatusText(markup)
     expect(text).toMatch(/draft saved/i)
-    expect(text).toContain('3 of 22 questions scored')
+    expect(text).toContain('3 of 21 questions scored')
   })
 
   it('Critical 2: a blocked dirty press still says why', () => {
@@ -366,12 +365,12 @@ describe('CheckIn', () => {
 
   // §7: nothing collapses. A collapsed section hides unanswered work, and
   // §3.3's whole point is that unanswered work is impossible to miss.
-  it('renders every one of the 22 questions at once', () => {
+  it('renders every one of the 21 questions at once', () => {
     const markup = render()
-    expect(markup.match(/role="radiogroup"/g)).toHaveLength(22)
+    expect(markup.match(/role="radiogroup"/g)).toHaveLength(21)
   })
 
-  // §7: one legend, not 66 anchors.
+  // §7: one legend, not 51 anchors.
   it('states the scale once', () => {
     const markup = render()
     expect(extractAllByTestId(markup, 'dl', 'scale-legend')).toHaveLength(1)
@@ -388,7 +387,7 @@ describe('CheckIn', () => {
     // against a prop that does not exist and would pass whatever the screen
     // rendered.
     it('still renders the Advocacy section, and names the missing start date', () => {
-      const markup = render({ advocacyApplies: false, required: 18, startedOn: null })
+      const markup = render({ advocacyApplies: false, required: 17, startedOn: null })
       expect(markup).toContain('data-testid="bucket-advocacy"')
       const reason = extractByTestId(markup, 'p', 'advocacy-gate')
       expect(reason).toContain('no start date')
@@ -397,7 +396,7 @@ describe('CheckIn', () => {
     it('names the month the gate opens for a client inside their first 90 days', () => {
       const markup = render({
         advocacyApplies: false,
-        required: 18,
+        required: 17,
         startedOn: '2026-01-15',
         period: '2026-03-01',
       })
@@ -416,9 +415,9 @@ describe('CheckIn', () => {
     // beside it are what a screen reader gets, since an em dash announces as
     // nothing on its own.
     it('shows an em dash and the count when there is no overall', () => {
-      const markup = render({ storedOverall: null, localOverall: null, scored: 7, required: 18 })
+      const markup = render({ storedOverall: null, localOverall: null, scored: 7, required: 17 })
       expect(extractByTestId(markup, 'span', 'overall-value')).toBe('—')
-      expect(extractByTestId(markup, 'span', 'overall-caption')).toBe('not scored · 7 of 18 answered')
+      expect(extractByTestId(markup, 'span', 'overall-caption')).toBe('not scored · 7 of 17 answered')
     })
 
     it('shows two decimals out of 5 when there is one', () => {

@@ -121,7 +121,7 @@ describe('saveReducer', () => {
 
 describe('submitLabel', () => {
   it('reads Save draft below the required count and Submit check-in at it', () => {
-    // Kept distinct from the 18/22 sweep below (§4.4's two real required
+    // Kept distinct from the 17/21 sweep below (§4.4's two real required
     // values): this pins the plain boundary -- below, at, and one below the
     // required count -- against an arbitrary required value, so the property
     // is proven independently of which two numbers the gate happens to use.
@@ -130,14 +130,14 @@ describe('submitLabel', () => {
     expect(submitLabel(5, 5)).toBe('Submit check-in')
   })
 
-  // 18 gated out, 22 gated in. A label that said "Submit" at 22 for a gated-out
-  // client would never appear, and one that said it at 18 for a gated-in client
+  // 17 gated out, 21 gated in. A label that said "Submit" at 21 for a gated-out
+  // client would never appear, and one that said it at 17 for a gated-in client
   // would promise a complete check-in that is four answers short.
   it('offers submit only when every REQUIRED question is answered', () => {
-    expect(submitLabel(18, 18)).toBe('Submit check-in')
-    expect(submitLabel(17, 18)).toBe('Save draft')
-    expect(submitLabel(18, 22)).toBe('Save draft')
-    expect(submitLabel(22, 22)).toBe('Submit check-in')
+    expect(submitLabel(17, 17)).toBe('Submit check-in')
+    expect(submitLabel(16, 17)).toBe('Save draft')
+    expect(submitLabel(17, 21)).toBe('Save draft')
+    expect(submitLabel(21, 21)).toBe('Submit check-in')
   })
 })
 
@@ -367,7 +367,7 @@ describe('saveStatus', () => {
     // from it), so there is nothing left for this function to vary on.
     // `required` is fixed at an arbitrary value here -- this sweep's own
     // dimension is hasContent, not required. The dedicated sweep across both
-    // real required values (18 and 22) lives in its own describe below,
+    // real required values (17 and 21) lives in its own describe below,
     // "saveStatus counts against the required number", rather than folded in
     // here as a third nested loop.
     for (const state of ALL_STATES) {
@@ -546,10 +546,10 @@ describe('saveStatus counts against the required number', () => {
       state: { kind: 'clean' },
       block: { blocked: false },
       scored: 7,
-      required: 18,
+      required: 17,
       storedUpdatedAt: '2026-08-01T10:00:00Z',
     })
-    expect(lines[0].text).toContain('7 of 18 questions scored')
+    expect(lines[0].text).toContain('7 of 17 questions scored')
   })
 
   it('names the required total in the saved-draft line', () => {
@@ -557,10 +557,10 @@ describe('saveStatus counts against the required number', () => {
       state: { kind: 'saved', at: '2026-08-01T10:00:00Z', by: 'you', complete: false },
       block: { blocked: false },
       scored: 9,
-      required: 22,
+      required: 21,
       storedUpdatedAt: null,
     })
-    expect(lines[0].text).toContain('9 of 22 questions scored')
+    expect(lines[0].text).toContain('9 of 21 questions scored')
   })
 
   // The property the whole function exists for: never zero lines, never an
@@ -579,7 +579,7 @@ describe('saveStatus counts against the required number', () => {
     const blocks: SubmitBlock[] = [{ blocked: false }, { blocked: true, reason: 'because' }]
     for (const state of states) {
       for (const block of blocks) {
-        for (const required of [18, 22]) {
+        for (const required of [17, 21]) {
           const lines = saveStatus({ state, block, scored: 3, required, storedUpdatedAt: null })
           expect(lines.length).toBeGreaterThan(0)
           for (const line of lines) expect(line.text.trim()).not.toBe('')

@@ -25,7 +25,7 @@ export const BUCKET_SCORE_KEY: Record<Bucket, BucketScoreKey> = {
 // edit read a column nothing fetched.
 //
 // The answers are typed `number | boolean | null` because the four Advocacy
-// columns are boolean and the other eighteen are smallint. `false` is an
+// columns are boolean and the other seventeen are smallint. `false` is an
 // ANSWER; only null and absence mean unanswered.
 // AMENDED 2026-08-28 during the pre-flight scan. An earlier draft of this plan
 // wrote this as an intersection with `Partial<Record<string, number | boolean |
@@ -78,7 +78,7 @@ export const CHECKIN_COLUMNS = [
 //
 // `advocacyApplies` is a parameter rather than something read off the row: the
 // gate lives on the client's start date, not on the check-in, and the view is
-// what answers it. Without it this line would say "of 22" for a client whose
+// what answers it. Without it this line would say "of 21" for a client whose
 // Advocacy questions are not being asked, and the person would hunt for four
 // questions that are not on the screen.
 export function cardFooter(
@@ -106,7 +106,7 @@ export function cardFooter(
   }
 
   const scored = answeredCount(answers, advocacyApplies)
-  // A row can exist with notes and no answers. "Draft, 0 of 22" would send the
+  // A row can exist with notes and no answers. "Draft, 0 of 21" would send the
   // reader looking for scores that were never entered.
   if (scored === 0) return 'Not started'
   return `Draft, ${scored} of ${requiredQuestions(advocacyApplies).length} scored`

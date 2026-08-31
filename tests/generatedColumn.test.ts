@@ -24,7 +24,7 @@ import { enumerateBucketStates } from '../scripts/score-parity.mjs'
 // the same way meanOrNull() does -- nothing without a database can. That is
 // `npm run verify:score`, which reads the six live *_score expressions out of
 // the catalogue and checks them against meanOrNull()/yesNoScore(), across
-// 4,401 states decomposed per bucket (see the next describe block below).
+// 3,321 states decomposed per bucket (see the next describe block below).
 const MIGRATION = 'supabase/migrations/20260821021840_create_clients_and_checkins.sql'
 
 const EXPECTED = `total_score smallint generated always as (
@@ -51,12 +51,12 @@ describe('the per-bucket enumeration the verifier rests on', () => {
     }
   })
 
-  it('totals 4,401 states across all six buckets: 2*6^3 + 3*6^4 + 3^4', () => {
+  it('totals 3,321 states across all six buckets: 3*6^3 + 2*6^4 + 3^4', () => {
     const total = BUCKETS.reduce(
       (sum, bucket) => sum + enumerateBucketStates(bucket).length,
       0,
     )
-    expect(total).toBe(4401)
+    expect(total).toBe(3321)
   })
 
   it('includes the all-null state and the all-max state for every bucket (all-5s for scale, all-yes for yesno)', () => {

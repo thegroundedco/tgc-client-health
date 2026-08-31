@@ -15,13 +15,13 @@ function allAt(value: number): Answers {
 }
 
 describe('requiredQuestions', () => {
-  it('is all 22 when Advocacy applies', () => {
-    expect(requiredQuestions(true)).toHaveLength(22)
+  it('is all 21 when Advocacy applies', () => {
+    expect(requiredQuestions(true)).toHaveLength(21)
   })
 
-  it('is 18 when it does not, and excludes every Advocacy question', () => {
+  it('is 17 when it does not, and excludes every Advocacy question', () => {
     const required = requiredQuestions(false)
-    expect(required).toHaveLength(18)
+    expect(required).toHaveLength(17)
     for (const question of questionsFor('advocacy')) {
       expect(required).not.toContain(question.key)
     }
@@ -79,10 +79,10 @@ describe('bucketScore', () => {
 
 describe('overallScore', () => {
   // Retitled 2026-08-28: the signature lost its gate parameter, because the
-  // divisor is now always 18 regardless of the gate. Value is unchanged from
-  // before the amendment only because allAt(3) happens to set the 18 scale
+  // divisor is now always 17 regardless of the gate. Value is unchanged from
+  // before the amendment only because allAt(3) happens to set the 17 scale
   // answers to 3 as well; the "when Advocacy applies" framing is what's retired.
-  it('is the mean of the 18 scale answers', () => {
+  it('is the mean of the 17 scale answers', () => {
     expect(overallScore(allAt(3))).toBe(3)
   })
 
@@ -90,7 +90,7 @@ describe('overallScore', () => {
   // counterpart of the test just above, and with the gate parameter gone the
   // two calls are now identical. Kept rather than merged, per this project's
   // rule against folding tests together, even though they now overlap exactly.
-  it('is the mean of the 18 non-Advocacy answers', () => {
+  it('is the mean of the 17 non-Advocacy answers', () => {
     expect(overallScore(allAt(3))).toBe(3)
   })
 
@@ -103,12 +103,14 @@ describe('overallScore', () => {
   })
 
   // This is the test that fails loudly if anyone reverts to averaging the six
-  // bucket means. Spec §3.2 and §10 decision 2, amended 2026-08-28: the divisor
-  // dropped from 22 to 18 when Advocacy left it, so the arithmetic below is
-  // recomputed against the 18. Communication is all 5s (3 questions) and the
-  // other four non-Advocacy buckets are all 2s (15 questions); Advocacy itself
-  // is irrelevant here since overallScore never reads it.
-  //   question-equal: (3*5 + 15*2) / 18 = 45 / 18 = 2.50
+  // bucket means. Spec §3.2 and §10 decision 2, amended 2026-08-28, and Task 2
+  // of the On-Terms removal: the divisor dropped from 22 to 18 when Advocacy
+  // left it, then from 18 to 17 when fin_on_terms was removed, so the
+  // arithmetic below is recomputed against the 17. Communication is all 5s (3
+  // questions) and the other four non-Advocacy buckets are all 2s (14
+  // questions); Advocacy itself is irrelevant here since overallScore never
+  // reads it.
+  //   question-equal: (3*5 + 14*2) / 17 = 43 / 17 = 2.53
   //   bucket-equal:   (5 + 2 + 2 + 2 + 2) / 5 = 13 / 5 = 2.60
   it('weighs every question equally, not every bucket', () => {
     const answers: Answers = {
@@ -117,7 +119,7 @@ describe('overallScore', () => {
       comm_timely: 5,
       comm_consistent: 5,
     }
-    expect(overallScore(answers)).toBe(2.5)
+    expect(overallScore(answers)).toBe(2.53)
     expect(overallScore(answers)).not.toBe(2.6)
   })
 
@@ -147,17 +149,17 @@ describe('overallScore', () => {
 })
 
 describe('answeredCount', () => {
-  it('counts only required questions, so a gated-out sheet cannot exceed 18', () => {
-    expect(answeredCount(allAt(3), false)).toBe(18)
+  it('counts only required questions, so a gated-out sheet cannot exceed 17', () => {
+    expect(answeredCount(allAt(3), false)).toBe(17)
   })
 
-  it('counts all 22 when the gate is open', () => {
-    expect(answeredCount(allAt(3), true)).toBe(22)
+  it('counts all 21 when the gate is open', () => {
+    expect(answeredCount(allAt(3), true)).toBe(21)
   })
 
   it('ignores stray keys, because a restored draft is arbitrary JSON', () => {
     const answers = { ...allAt(3), not_a_question: 5 }
-    expect(answeredCount(answers, true)).toBe(22)
+    expect(answeredCount(answers, true)).toBe(21)
   })
 })
 
@@ -185,14 +187,14 @@ describe('bandFor', () => {
 describe('overallScore (amendment coverage)', () => {
   // Spec §3.2 amended: Advocacy never counts. The signature has no gate
   // parameter at all, which is the point -- there is no way to ask for the old
-  // 22-divisor behaviour by accident.
-  it('is the mean of the 18, and ignores Advocacy entirely', () => {
-    const eighteen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 4]))
-    expect(overallScore(eighteen)).toBe(4)
+  // 21-divisor behaviour by accident.
+  it('is the mean of the 17, and ignores Advocacy entirely', () => {
+    const seventeen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 4]))
+    expect(overallScore(seventeen)).toBe(4)
     // Adding every Advocacy answer, either way, must not move it.
-    const withYes = { ...eighteen, adv_left_review: true, adv_case_study: true,
+    const withYes = { ...seventeen, adv_left_review: true, adv_case_study: true,
                       adv_would_refer: true, adv_reference_check: true }
-    const withNo = { ...eighteen, adv_left_review: false, adv_case_study: false,
+    const withNo = { ...seventeen, adv_left_review: false, adv_case_study: false,
                      adv_would_refer: false, adv_reference_check: false }
     expect(overallScore(withYes)).toBe(4)
     expect(overallScore(withNo)).toBe(4)
@@ -200,11 +202,11 @@ describe('overallScore (amendment coverage)', () => {
 
   // The regression that would signal a reversion to the old model.
   it('still has an overall when every Advocacy answer is blank', () => {
-    const eighteen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 3]))
-    expect(overallScore(eighteen)).toBe(3)
+    const seventeen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 3]))
+    expect(overallScore(seventeen)).toBe(3)
   })
 
-  it('is null when any one of the 18 is missing', () => {
+  it('is null when any one of the 17 is missing', () => {
     for (const key of OVERALL_QUESTIONS) {
       const answers = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 3]))
       delete answers[key]
@@ -230,11 +232,11 @@ describe('bucketScore (amendment coverage)', () => {
 
 describe('requiredQuestions and answeredCount (amendment coverage)', () => {
   // UNCHANGED by the amendment. required is about COMPLETENESS -- how many
-  // answers before a check-in may be submitted -- and is still 22 gate-open.
+  // answers before a check-in may be submitted -- and is still 21 gate-open.
   // Only the overall's divisor moved. Keeping these two apart is the point.
-  it('still requires 22 when the gate is open and 18 when it is shut', () => {
-    expect(requiredQuestions(true)).toHaveLength(22)
-    expect(requiredQuestions(false)).toHaveLength(18)
+  it('still requires 21 when the gate is open and 17 when it is shut', () => {
+    expect(requiredQuestions(true)).toHaveLength(21)
+    expect(requiredQuestions(false)).toHaveLength(17)
   })
 
   // false is an ANSWER. Counting it as unanswered would make a complete
@@ -242,6 +244,6 @@ describe('requiredQuestions and answeredCount (amendment coverage)', () => {
   it('counts a No as answered', () => {
     const answers = Object.fromEntries(requiredQuestions(true).map(
       (k) => [k, isYesNo(k) ? false : 3]))
-    expect(answeredCount(answers, true)).toBe(22)
+    expect(answeredCount(answers, true)).toBe(21)
   })
 })

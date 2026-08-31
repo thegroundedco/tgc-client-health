@@ -6,7 +6,7 @@ describe('CHECKIN_COLUMNS', () => {
   // The literal is typed by supabase-js, so a mistyped column fails the build
   // rather than surfacing at runtime -- but only the build knows that. This
   // test is what catches the literal drifting from the rubric.
-  it('names every one of the 22 answers', () => {
+  it('names every one of the 21 answers', () => {
     const named = CHECKIN_COLUMNS.split(',').map((c) => c.trim())
     for (const key of ALL_QUESTIONS) expect(named).toContain(key)
   })
@@ -59,8 +59,8 @@ describe('BUCKET_SCORE_KEY', () => {
   })
 })
 
-// Fills every question in the 18 non-Advocacy buckets, leaving Advocacy blank.
-function eighteenAnswered(): Record<string, number> {
+// Fills every question in the 17 non-Advocacy buckets, leaving Advocacy blank.
+function seventeenAnswered(): Record<string, number> {
   const answers: Record<string, number> = {}
   for (const bucket of BUCKETS) {
     if (bucket === 'advocacy') continue
@@ -81,17 +81,17 @@ describe('cardFooter', () => {
     expect(cardFooter(row, VIEWER, true)).toBe('Not started')
   })
 
-  // Gate open: the denominator is 22, not 18. This is the number that decides
+  // Gate open: the denominator is 21, not 17. This is the number that decides
   // whether the person thinks they are finished.
-  it('counts against 22 when the gate is open', () => {
-    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...eighteenAnswered() }
-    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 18 of 22 scored')
+  it('counts against 21 when the gate is open', () => {
+    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...seventeenAnswered() }
+    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 17 of 21 scored')
   })
 
-  // Same row, gate shut: the same eighteen answers are a COMPLETE check-in.
-  it('counts against 18 when the gate is shut', () => {
-    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...eighteenAnswered() }
-    expect(cardFooter(row, VIEWER, false)).toBe('Draft, 18 of 18 scored')
+  // Same row, gate shut: the same seventeen answers are a COMPLETE check-in.
+  it('counts against 17 when the gate is shut', () => {
+    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...seventeenAnswered() }
+    expect(cardFooter(row, VIEWER, false)).toBe('Draft, 17 of 17 scored')
   })
 
   // A No is an ANSWER. Counting it as unanswered would leave the card
@@ -99,9 +99,9 @@ describe('cardFooter', () => {
   it('counts a false Advocacy answer as scored', () => {
     const row = {
       client_id: 1, submitted_at: null, submitted_by: null,
-      ...eighteenAnswered(), adv_left_review: false,
+      ...seventeenAnswered(), adv_left_review: false,
     }
-    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 19 of 22 scored')
+    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 18 of 21 scored')
   })
 
   it('names you when you submitted it, with the "Submitted" prefix', () => {

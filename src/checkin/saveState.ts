@@ -87,8 +87,8 @@ export function saveReducer(state: SaveState, event: SaveEvent): SaveState {
 // §5.4: one control, whose label reflects the state it is in. The label is the
 // only place the draft/submitted distinction is visible before the press.
 //
-// `required`, not a constant: §4.4, a gated-out check-in requires 18 answers and
-// a gated-in one 22, and a label promising a submit at the wrong number is a
+// `required`, not a constant: §4.4, a gated-out check-in requires 17 answers and
+// a gated-in one 21, and a label promising a submit at the wrong number is a
 // promise the save path will not keep.
 export function submitLabel(scored: number, required: number): string {
   return scored === required ? 'Submit check-in' : 'Save draft'
