@@ -70,16 +70,24 @@
      ever added. */
   table-layout: fixed;
   inline-size: 100%;
-  min-inline-size: 70rem;
+  min-inline-size: 79rem;
 }
 
-/* 70rem total, less these two, leaves 42rem for the six -- 7rem each. */
+/* 79rem total, less these three, leaves 42rem for the six SCORE columns --
+   7rem each, which is what keeps Advocacy's score the same width as the five
+   whole-bucket columns beside it. Context is named because it holds a sentence
+   rather than a number, and is the one column that would otherwise starve the
+   rest. */
 .colClient {
   inline-size: 20rem;
 }
 
+.colContext {
+  inline-size: 10rem;
+}
+
 .colOverall {
-  inline-size: 8rem;
+  inline-size: 7rem;
 }
 
 /* The last cell in every row, and every cell in the last row group, yield their
@@ -158,6 +166,23 @@
 .cell {
   text-align: end;
   white-space: nowrap;
+}
+
+/* The Advocacy context cell. The only cell in the table that holds a sentence,
+   so the only one allowed to wrap and the only one set left -- a list read
+   right-aligned looks like a number that failed to be one. Wrapping is what
+   lets .colContext stay narrow enough that the six score columns keep their
+   7rem; "Review, Case study and Referral" takes two lines on a client who has
+   three, and one line on nearly everybody. */
+.context {
+  text-align: start;
+  white-space: normal;
+}
+
+/* The Advocacy header, spanning its two sub-columns. Centred over the pair, so
+   it reads as their parent rather than as a label for the first of them. */
+.headGroup {
+  text-align: center;
 }
 
 /* The band fills. Background and ink only -- the border above is the grid's,

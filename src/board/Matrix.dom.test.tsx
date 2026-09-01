@@ -71,13 +71,15 @@ describe('the matrix table', () => {
     expect(table.querySelector('caption')?.textContent).toContain('August 2026')
   })
 
-  it('heads every bucket column with its full name, and ends at Overall', () => {
+  it('heads every bucket column with its full name, and splits Advocacy in two', () => {
     // The full word, not the card's initial: a table has a column and a
     // scroller to spend width on. And no Band column -- the band reads beside
-    // the client's name instead. Owner's call, 2026-09-01.
+    // the client's name instead. Owner's calls, 2026-09-01.
+    //
+    // Advocacy is the one bucket with sub-columns, so it appears once in the
+    // first header row and its Score and Context appear in the second.
     renderMatrix()
-    const heads = screen.getAllByRole('columnheader')
-    expect(heads.map((head) => head.textContent)).toEqual([
+    expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual([
       'Client',
       'Communication',
       'Growth',
@@ -86,25 +88,52 @@ describe('the matrix table', () => {
       'Delivery',
       'Advocacy',
       'Overall',
+      'Score',
+      'Context',
     ])
+  })
+
+  it('files Score and Context under Advocacy rather than beside it', () => {
+    // scope="colgroup" is the difference between a screen reader saying
+    // "Advocacy, Context, Review and Case study" and reading Context as a
+    // seventh bucket. The two sub-headers are plain columns within it.
+    renderMatrix()
+    const advocacy = screen.getByRole('columnheader', { name: 'Advocacy' })
+    expect(advocacy.getAttribute('scope')).toBe('colgroup')
+    expect((advocacy as HTMLTableCellElement).colSpan).toBe(2)
+    for (const name of ['Score', 'Context']) {
+      expect(screen.getByRole('columnheader', { name }).getAttribute('scope')).toBe('col')
+    }
+    // Every other column spans both header rows, so the header is one block
+    // rather than a row of labels above a row of blanks.
+    expect((screen.getByRole('columnheader', { name: 'Client' }) as HTMLTableCellElement).rowSpan)
+      .toBe(2)
+    expect((screen.getByRole('columnheader', { name: 'Overall' }) as HTMLTableCellElement).rowSpan)
+      .toBe(2)
   })
 
   it('gives every row exactly as many cells as the header has columns', () => {
     // The check a colSpan gets wrong silently. A footer that spans one column
     // too many or too few shifts the whole Average row sideways under headings
     // that no longer describe it, and nothing else in this file would notice.
+    //
+    // Width is the FIRST header row's spans summed, not a count of <th> -- the
+    // header is two rows now and counting elements would give ten for a
+    // nine-column table.
     renderMatrix({
       clients: [client(1, 'A'), client(2, 'B')],
       checkins: [[1, checkin(1, { comm_score: 4 })]],
     })
     const table = screen.getByTestId('matrix-table')
-    const width = table.querySelectorAll('thead th').length
-    for (const row of table.querySelectorAll('tbody tr, tfoot tr')) {
-      const spanned = [...row.children].reduce(
+    const spanOf = (row: Element) =>
+      [...row.children].reduce(
         (total, cell) => total + ((cell as HTMLTableCellElement).colSpan || 1),
         0,
       )
-      expect(spanned).toBe(width)
+    const width = spanOf(table.querySelector('thead tr')!)
+    expect(width).toBe(9)
+    for (const row of table.querySelectorAll('tbody tr, tfoot tr')) {
+      expect(spanOf(row)).toBe(width)
     }
   })
 
@@ -112,7 +141,8 @@ describe('the matrix table', () => {
     renderMatrix()
     const table = screen.getByTestId('matrix-table')
     for (const head of table.querySelectorAll('thead th')) {
-      expect(head.getAttribute('scope')).toBe('col')
+      // colgroup for Advocacy, which parents two sub-columns; col for the rest.
+      expect(['col', 'colgroup']).toContain(head.getAttribute('scope'))
     }
     for (const head of table.querySelectorAll('tbody th')) {
       expect(head.getAttribute('scope')).toBe('row')
@@ -292,5 +322,76 @@ describe('the matrix table', () => {
     renderMatrix({ clients: [client(1, 'Gone', { status: 'churned' })] })
     expect(screen.queryByTestId('matrix-table')).toBeNull()
     expect(screen.getByText(/No active clients/)).toBeTruthy()
+  })
+
+  describe("Advocacy's context cell", () => {
+    // The half of the column that says WHICH advocacy a client has. "2.00" does
+    // not. Owner's design, 2026-09-01.
+    const context = () => screen.getByTestId('matrix-context').textContent
+
+    it('lists what the client has, in rubric order', () => {
+      renderMatrix({
+        checkins: [
+          [
+            1,
+            checkin(1, {
+              adv_score: 3,
+              adv_would_refer: 5,
+              adv_left_review: 5,
+              adv_case_study: 1,
+              adv_reference_check: 1,
+            }),
+          ],
+        ],
+      })
+      expect(context()).toBe('Review and Referral')
+    })
+
+    it('reads None yet when the bucket is scored and nothing is a Yes', () => {
+      renderMatrix({
+        checkins: [
+          [
+            1,
+            checkin(1, {
+              adv_score: 1,
+              adv_left_review: 1,
+              adv_case_study: 1,
+              adv_would_refer: 1,
+              adv_reference_check: 1,
+            }),
+          ],
+        ],
+      })
+      expect(context()).toBe('None yet')
+    })
+
+    it('reads an em dash when the bucket is not scored, like the score beside it', () => {
+      // The distinction the whole model rests on: four answered Nos say "None
+      // yet", four unasked questions say nothing at all. If these two ever
+      // render the same, a gated client reads as a client with no advocacy.
+      renderMatrix({ clients: [client(1, 'Babaloo')] })
+      expect(context()).toContain('—')
+      expect(context()).not.toContain('None yet')
+    })
+
+    it('is not banded, because a sentence has no place on a 1-5 scale', () => {
+      renderMatrix({
+        checkins: [[1, checkin(1, { adv_score: 5, adv_left_review: 5 })]],
+      })
+      expect(screen.getByTestId('matrix-context').getAttribute('data-band')).toBeNull()
+    })
+
+    it('leaves the Advocacy score, and its column average, in place', () => {
+      // The reason the column was SPLIT rather than replaced: the vertical scan
+      // is what the matrix exists for, and a column of sentences cannot average.
+      renderMatrix({
+        clients: [client(1, 'A'), client(2, 'B')],
+        checkins: [
+          [1, checkin(1, { adv_score: 5, adv_left_review: 5 })],
+          [2, checkin(2, { adv_score: 1 })],
+        ],
+      })
+      expect(averages()[5].textContent).toBe('3.00')
+    })
   })
 })

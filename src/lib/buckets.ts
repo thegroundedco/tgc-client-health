@@ -47,6 +47,13 @@ export type Question = {
   // The VALUES are still 1, 3 and 5 whatever the labels say -- that is what
   // keeps this a copy change rather than a migration.
   options?: readonly ChoiceOption[]
+  // A noun for the thing this question asks about, for somewhere the whole
+  // prompt will not fit -- the matrix's Advocacy context cell reads "Review and
+  // Case study" rather than two sentences. Only the four Advocacy questions
+  // carry one, because they are the only questions listed as things a client
+  // HAS. It lives here beside the prompt rather than in a lookup keyed by
+  // `key`, so a renamed question cannot leave a stale noun behind.
+  short?: string
 }
 
 export type BucketDefinition = {
@@ -76,6 +83,11 @@ export const CHOICE_OPTIONS: readonly ChoiceOption[] = [
   { label: 'Unsure', value: 3 },
   { label: 'Yes', value: 5 },
 ]
+
+// The value a `choice` question stores for its strongest answer -- "Yes" on six
+// of the seven, "Increased" on the rate question. Named rather than written as a
+// bare 5 wherever an answer is tested for being affirmative.
+export const CHOICE_YES = 5
 
 // "Rate over the last 90 days." is a direction, not a yes/no, so No/Unsure/Yes
 // were the wrong three words for it (owner, 2026-09-01). Break even is the case
@@ -175,13 +187,29 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     label: 'Advocacy',
     initial: 'A',
     questions: [
-      { key: 'adv_left_review', prompt: 'They have left a review.', kind: 'choice' },
-      { key: 'adv_case_study', prompt: 'We could use them for a case study.', kind: 'choice' },
-      { key: 'adv_would_refer', prompt: 'They would refer us without being prompted.', kind: 'choice' },
+      {
+        key: 'adv_left_review',
+        prompt: 'They have left a review.',
+        kind: 'choice',
+        short: 'Review',
+      },
+      {
+        key: 'adv_case_study',
+        prompt: 'We could use them for a case study.',
+        kind: 'choice',
+        short: 'Case study',
+      },
+      {
+        key: 'adv_would_refer',
+        prompt: 'They would refer us without being prompted.',
+        kind: 'choice',
+        short: 'Referral',
+      },
       {
         key: 'adv_reference_check',
         prompt: 'We could send leads to them as a reference check.',
         kind: 'choice',
+        short: 'Reference',
       },
     ],
   },

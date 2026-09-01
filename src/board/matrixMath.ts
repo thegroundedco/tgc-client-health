@@ -1,4 +1,4 @@
-import { GATED_BUCKET } from '../lib/buckets'
+import { BUCKET_DEFINITIONS, CHOICE_YES, GATED_BUCKET } from '../lib/buckets'
 import type { Bucket } from '../lib/buckets'
 import { advocacyApplies } from '../lib/gate'
 import { meanTo2dp } from '../lib/scoreMath'
@@ -137,4 +137,42 @@ export function needsAsterisk(average: ColumnAverage): boolean {
 // number in every cell.
 export function averageDescription(average: ColumnAverage): string {
   return `averaged from ${average.scored} of ${average.eligible} clients`
+}
+
+// The Advocacy column's second half: not how advocacy is going, but what the
+// client actually IS. "2.00" does not say which two of the four.
+//
+// Only Yes counts, and Unsure is not lost by being left out -- it is stored as a
+// 3, so it is already in the score. The two cells say different things on
+// purpose: the number is the temperature including every maybe, the words are
+// only what you can bank on.
+//
+// Iterated from the rubric rather than from the row's own keys, so the list
+// reads in the same order for every client. A cell that reordered itself would
+// make two identical clients look different down a column of eleven.
+const ADVOCACY_QUESTIONS = BUCKET_DEFINITIONS[GATED_BUCKET].questions
+
+// "A", "A and B", "A, B and C". Not `.join(', ')`, which would give "A, B, C" --
+// this cell is read as a sentence about a client, not as a list of data.
+function listSentence(items: readonly string[]): string {
+  if (items.length < 2) return items[0] ?? ''
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+// null when the bucket is not scored -- no check-in, an unfinished Advocacy
+// section, or a client inside their first 90 days. All three make adv_score
+// null, and all three read as an em dash, the same as the score beside them.
+//
+// 'None yet' when it IS scored and nothing is a Yes. That string is doing real
+// work: blank is what UNSCORED looks like, and the property this whole model
+// rests on is that a missing answer never reads as a low one. Four answered Nos
+// and four unasked questions must not look alike.
+export function advocacyContext(row: MatrixRow): string | null {
+  if (cellValue(row, GATED_BUCKET) === null) return null
+
+  const held = ADVOCACY_QUESTIONS.filter(
+    (question) => row.checkin?.[question.key] === CHOICE_YES,
+  ).map((question) => question.short ?? question.prompt)
+
+  return held.length === 0 ? 'None yet' : listSentence(held)
 }

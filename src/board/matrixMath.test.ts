@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advocacyContext,
   averageDescription,
   cellValue,
   columnAverage,
@@ -281,5 +282,68 @@ describe('averageDescription', () => {
     expect(averageDescription({ mean: 4.5, scored: 8, eligible: 10 })).toBe(
       'averaged from 8 of 10 clients',
     )
+  })
+})
+
+describe('advocacyContext', () => {
+  // The Advocacy score is a mean of four yes/no answers, and on its own "2.00"
+  // does not say WHICH two. This is the second half of that column: the things
+  // the client actually is, listed. Owner's design, 2026-09-01.
+  //
+  // Only Yes counts. Unsure is deliberately not listed and is not lost either --
+  // it is a 3, so it already shows in the score. The two halves of the column
+  // say different things on purpose: the number is the temperature including
+  // every maybe, the words are only what you can bank on.
+
+  function scored(answers: Partial<CardCheckin>): MatrixRow {
+    // adv_score non-null is what "this bucket is finished" means: the generated
+    // column is null if ANY of the four answers is missing.
+    return rowsOf([{ id: 1, name: 'A', scores: { adv_score: 3, ...answers } }])[0]
+  }
+
+  it('names the one thing a client has', () => {
+    expect(advocacyContext(scored({ adv_left_review: 5 }))).toBe('Review')
+  })
+
+  it('joins two with "and"', () => {
+    expect(advocacyContext(scored({ adv_left_review: 5, adv_case_study: 5 }))).toBe(
+      'Review and Case study',
+    )
+  })
+
+  it('joins three or more with commas and a final "and"', () => {
+    expect(
+      advocacyContext(
+        scored({ adv_left_review: 5, adv_case_study: 5, adv_would_refer: 5 }),
+      ),
+    ).toBe('Review, Case study and Referral')
+  })
+
+  it('lists them in rubric order, not in the order the row happens to hold them', () => {
+    // The reader compares this cell down a column of eleven clients. A list that
+    // reordered itself per client would make two identical clients look
+    // different.
+    expect(advocacyContext(scored({ adv_would_refer: 5, adv_left_review: 5 }))).toBe(
+      'Review and Referral',
+    )
+  })
+
+  it('says None yet when the bucket is scored but nothing is a Yes', () => {
+    // NOT an em dash, and not blank. Blank is what an unscored bucket reads as,
+    // and the whole model rests on those two never looking alike: one is a
+    // question nobody answered, the other is four answered No.
+    expect(advocacyContext(scored({ adv_left_review: 1, adv_case_study: 3 }))).toBe('None yet')
+  })
+
+  it('counts only Yes, never Unsure', () => {
+    expect(advocacyContext(scored({ adv_case_study: 3 }))).toBe('None yet')
+  })
+
+  it('is null when the bucket is not scored at all', () => {
+    // Which covers all three ways that happens: no check-in, an unfinished
+    // Advocacy section, and a client inside their first 90 days. All three make
+    // adv_score null, and all three read as an em dash beside an em dash.
+    expect(advocacyContext(rowsOf([{ id: 1, name: 'A' }])[0])).toBeNull()
+    expect(advocacyContext(rowsOf([{ id: 1, name: 'A', scores: {} }])[0])).toBeNull()
   })
 })

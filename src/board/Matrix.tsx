@@ -1,9 +1,10 @@
-import { BUCKETS, BUCKET_DEFINITIONS } from '../lib/buckets'
+import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET } from '../lib/buckets'
 import { formatPeriod } from '../lib/month'
 import { BAND_LABELS, bandFor } from '../lib/scoreMath'
 import { isOpenable } from './boardScope'
 import type { CardCheckin } from './cardSummary'
 import {
+  advocacyContext,
   averageDescription,
   cellValue,
   columnAverage,
@@ -39,12 +40,6 @@ function Score({ value }: { value: number | null }) {
   }
   return <>{value.toFixed(2)}</>
 }
-
-// The wall before Overall, carried on the last bucket column's END edge. Read
-// once here rather than spelled out at each of the three places that draw a
-// bucket cell -- header, client row, footer -- which must all agree or the rule
-// would run down only part of the table.
-const lastBucket = (index: number) => (index === BUCKETS.length - 1 ? styles.divider : '')
 
 // The board's second view: every active client down the rows, the six buckets
 // across, and what the agency averages in each. Spec §4.
@@ -94,6 +89,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
             {columns.map(({ bucket }) => (
               <col key={bucket} />
             ))}
+            <col className={styles.colContext} />
             <col className={styles.colOverall} />
           </colgroup>
           {/* Names what the table is and which month it covers, so it is
@@ -101,27 +97,52 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
           <caption className={`t-caption ${styles.caption}`}>
             Client health by bucket, {formatPeriod(period)}
           </caption>
+          {/* Two header rows, because Advocacy is the only bucket with
+              sub-columns -- its score and the things that score is made of.
+              Every other column spans both rows with rowSpan, which is what
+              keeps the header one block rather than a row of labels above a row
+              of blanks.
+
+              scope="colgroup" on Advocacy and scope="col" on its two children is
+              what tells a screen reader that Score and Context sit UNDER
+              Advocacy rather than beside it. */}
           <thead>
             <tr>
-              <th className={`t-label ${styles.headName}`} scope="col">
+              <th className={`t-label ${styles.headName}`} rowSpan={2} scope="col">
                 Client
               </th>
-              {columns.map(({ bucket, definition }, index) => (
-                // The full bucket name, not the initial. The card's bars use the
-                // initial because six letters have to fit under six bars in a
-                // 15rem card; a table has a whole column and a scroller, so the
-                // word costs width the grid can afford and saves the reader
-                // knowing the rubric by heart. Owner's call, 2026-09-01.
-                <th
-                  className={`t-label ${styles.head} ${lastBucket(index)}`}
-                  key={bucket}
-                  scope="col"
-                >
-                  {definition.label}
-                </th>
-              ))}
-              <th className={`t-label ${styles.head}`} scope="col">
+              {columns.map(({ bucket, definition }) =>
+                bucket === GATED_BUCKET ? (
+                  <th
+                    className={`t-label ${styles.head} ${styles.headGroup}`}
+                    colSpan={2}
+                    key={bucket}
+                    scope="colgroup"
+                  >
+                    {definition.label}
+                  </th>
+                ) : (
+                  // The full bucket name, not the initial. The card's bars use
+                  // the initial because six letters have to fit under six bars
+                  // in a 15rem card; a table has a whole column and a scroller,
+                  // so the word costs width the grid can afford and saves the
+                  // reader knowing the rubric by heart. Owner's call,
+                  // 2026-09-01.
+                  <th className={`t-label ${styles.head}`} key={bucket} rowSpan={2} scope="col">
+                    {definition.label}
+                  </th>
+                ),
+              )}
+              <th className={`t-label ${styles.head}`} rowSpan={2} scope="col">
                 Overall
+              </th>
+            </tr>
+            <tr>
+              <th className={`t-label ${styles.head}`} scope="col">
+                Score
+              </th>
+              <th className={`t-label ${styles.head} ${styles.divider}`} scope="col">
+                Context
               </th>
             </tr>
           </thead>
@@ -133,6 +154,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               // because that edge has one owner and this is it. See "ONE EDGE,
               // ONE OWNER" in the stylesheet.
               const floor = rowIndex === rows.length - 1 ? styles.footRule : ''
+              const context = advocacyContext(row)
               return (
                 <tr data-testid="matrix-row" key={row.client.id}>
                   <th className={`${styles.name} ${floor}`} data-band={band} scope="row">
@@ -176,11 +198,11 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                       </span>
                     </span>
                   </th>
-                  {columns.map(({ bucket }, index) => {
+                  {columns.map(({ bucket }) => {
                     const value = cellValue(row, bucket)
                     return (
                       <td
-                        className={`${styles.cell} ${lastBucket(index)} ${floor} numeric`}
+                        className={`${styles.cell} ${floor} numeric`}
                         data-band={bandFor(value)}
                         data-testid="matrix-cell"
                         key={bucket}
@@ -189,6 +211,23 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                       </td>
                     )
                   })}
+                  {/* Advocacy's second cell. Deliberately NOT banded: it is not
+                      a score, and colouring it would imply "Review and Case
+                      study" sits somewhere on a 1-5 scale. The band beside it
+                      already says how the bucket is doing. */}
+                  <td
+                    className={`${styles.cell} ${styles.context} ${styles.divider} ${floor}`}
+                    data-testid="matrix-context"
+                  >
+                    {context === null ? (
+                      <>
+                        <span aria-hidden="true">—</span>
+                        <span className={styles.hidden}>Not scored</span>
+                      </>
+                    ) : (
+                      context
+                    )}
+                  </td>
                   <td
                     className={`${styles.cell} ${floor} numeric`}
                     data-band={band}
@@ -205,9 +244,9 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               <th className={styles.name} scope="row">
                 Average
               </th>
-              {columns.map(({ bucket, average }, index) => (
+              {columns.map(({ bucket, average }) => (
                 <td
-                  className={`${styles.cell} ${lastBucket(index)} numeric`}
+                  className={`${styles.cell} numeric`}
                   data-band={bandFor(average.mean)}
                   data-testid="matrix-average"
                   key={bucket}
@@ -224,6 +263,10 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               {/* The Average row stops before Overall. An agency-wide "overall
                   of overalls" would average numbers built on different
                   divisors, and nobody has asked for one. */}
+              {/* Nothing under Context: there is no average of a sentence.
+                  The Advocacy SCORE above still averages, which is the whole
+                  reason the column was split rather than replaced. */}
+              <td className={`${styles.blank} ${styles.divider}`} />
               <td className={styles.blank} />
             </tr>
           </tfoot>
