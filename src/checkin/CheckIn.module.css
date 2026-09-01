@@ -82,18 +82,23 @@
   background: var(--surface-raised);
 }
 
-/* Two pairs on one line where there is room. The scale is read once, at the
-   top, and then not again -- so it is a caption-weight aside, not a panel. */
+/* Two pairs on one line where there is room: a caption-weight aside, not a
+   panel.
+
+   It was `position: sticky; top: 0` with a page-coloured background until
+   2026-09-01 -- one legend for the whole screen, pinned so it could not scroll
+   away above question fourteen. The owner confirmed the pinning worked and
+   asked for this instead: pinned or not, a thin strip floating at the top of the
+   window reads as chrome, and the eye skips chrome. It now renders inside each
+   bucket that has a scale, between the heading and the first prompt, where
+   somebody is already looking.
+
+   The negative margin is against .bucket's --space-3 gap: it pulls the legend
+   up to sit with the heading it explains rather than floating midway between
+   the heading and the first question, which would leave it ambiguous which one
+   it belongs to. */
 .legend {
-  /* §7's one legend, pinned. It said the right thing in the wrong place: it
-     rendered once above the first bucket and scrolled away long before question
-     fourteen, so the owner asked in August 2026 for anchors that were already
-     there. Sticky rather than fixed, so it scrolls out with the section it
-     belongs to rather than floating over the whole app. */
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--surface-page);
+  margin-top: calc(-1 * var(--space-1));
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-5);

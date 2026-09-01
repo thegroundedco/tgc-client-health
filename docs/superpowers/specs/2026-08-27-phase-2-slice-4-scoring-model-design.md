@@ -602,6 +602,22 @@ first bucket, and scrolls out of view long before question fourteen. **The fix i
 copy:** the legend becomes sticky within the scrolling region. This is not a new decision, it is
 §10's decision 3 failing in practice for a reason that decision did not anticipate.
 
+**AMENDED 2026-09-01, and the sticky version is retired.** The owner confirmed the pinning worked —
+the legend did stay on screen at the bottom bucket — and reported that it was still "hardly
+noticeable". Pinning solved scrolling; it did not solve seeing. A caption-weight strip alone at the
+top of the window reads as chrome, and the eye skips chrome no matter how reliably it is there.
+
+**The legend now renders inside each bucket that uses the scale**, between the section heading and
+its first prompt: *COMMUNICATION*, then `1 strongly disagree / 5 strongly agree`, then "Provides
+constructive feedback." It appears four times, not six — Finances and Advocacy answer
+No / Unsure / Yes, and a 1-5 agreement legend above them would explain a scale their rows do not
+have. Which buckets get one is derived from `question.kind`, never from a list of bucket names, so a
+bucket that changes kind cannot leave the wrong legend behind.
+
+This costs three extra repetitions of eight words, which §10 decision 3 was written to avoid at the
+scale of 66 per-question anchors. Four section-level legends is not that: it is the same eight words
+where the eye already is, and it is still not one per question.
+
 ## 8. The board
 
 Each card grows from five bars to six, keeping the per-bar initial letters added in `befc08f`.

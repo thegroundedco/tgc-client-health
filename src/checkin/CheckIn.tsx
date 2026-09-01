@@ -39,6 +39,30 @@ function formatOverall(overall: number): string {
   return overall.toFixed(2)
 }
 
+// §7's legend, once per bucket that uses the 1-5 scale rather than once for the
+// screen. It was a single sticky line at the top until 2026-09-01; the owner had
+// it pinned and still could not see it -- a caption-weight strip against the
+// page background reads as chrome, and chrome is what the eye skips. Repeating
+// it inside each section puts it where the eye already is: heading, then what
+// the numbers mean, then the first prompt.
+//
+// A definition list because that is what it is: two scores and what each one
+// means, with 2, 3 and 4 reading as between them.
+function ScaleLegend() {
+  return (
+    <dl className={styles.legend} data-testid="scale-legend">
+      <div className={styles.legendPair}>
+        <dt className={`t-label ${styles.legendTerm} numeric`}>1</dt>
+        <dd className="t-caption">strongly disagree</dd>
+      </div>
+      <div className={styles.legendPair}>
+        <dt className={`t-label ${styles.legendTerm} numeric`}>5</dt>
+        <dd className="t-caption">strongly agree</dd>
+      </div>
+    </dl>
+  )
+}
+
 export function CheckIn({ client, period, profile, onBack }: Props) {
   const checkin = useCheckin(client, period, profile)
   const {
@@ -241,26 +265,15 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
         </p>
       )}
 
-      {/* §7: one legend for the fourteen scale questions, not three anchors on
-          each -- Finances and Advocacy answer No/Unsure/Yes and need no scale. The
-          questions are already specific statements, so an agreement scale
-          carries them -- and the alternative is 51 pieces of copy nobody has
-          written. A definition list because that is what it is: two scores and
-          what each one means, with 2, 3 and 4 reading as between them. */}
-      <dl className={styles.legend} data-testid="scale-legend">
-        <div className={styles.legendPair}>
-          <dt className={`t-label ${styles.legendTerm} numeric`}>1</dt>
-          <dd className="t-caption">strongly disagree</dd>
-        </div>
-        <div className={styles.legendPair}>
-          <dt className={`t-label ${styles.legendTerm} numeric`}>5</dt>
-          <dd className="t-caption">strongly agree</dd>
-        </div>
-      </dl>
-
       <div className={styles.buckets}>
         {BUCKETS.map((bucket) => {
           const definition = BUCKET_DEFINITIONS[bucket]
+          const questions = questionsFor(bucket)
+          // Finances and Advocacy answer No/Unsure/Yes, so a 1-5 agreement
+          // legend above them would explain a scale their rows do not have.
+          // Derived from the questions rather than from a list of bucket names,
+          // so a bucket that changes kind cannot leave the wrong legend behind.
+          const hasScale = questions.some((question) => question.kind === 'scale')
           // Only Advocacy is gated, and it is named rather than compared to a
           // string so the gate has one definition (buckets.ts).
           const shut = bucket === GATED_BUCKET && !advocacyApplies
@@ -269,6 +282,8 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
               <h3 className="t-header" data-testid="bucket-heading">
                 {definition.label}
               </h3>
+
+              {hasScale && <ScaleLegend />}
 
               {/* Shown, not hidden -- §7, "so the scorer learns the bucket
                   exists". A hidden section is a screen that silently asks for
@@ -282,7 +297,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
                 </p>
               )}
 
-              {questionsFor(bucket).map((question) =>
+              {questions.map((question) =>
                 question.kind === 'choice' ? (
                   <ChoiceRow
                     key={question.key}

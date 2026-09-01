@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import type { Profile } from '../auth/useProfile'
 import type { SaveState } from './saveState'
 import type { CheckinRow, UseCheckin } from './useCheckin'
+import { BUCKETS } from '../lib/buckets'
 
 // Fix round 2, Important 1: nothing in this file tree tested CheckIn.tsx's
 // *use* of saveStatus() -- if the `.map()` over its result were replaced
@@ -214,6 +215,25 @@ function extractByTestId(markup: string, tag: string, testid: string): string | 
   return extractAllByTestId(markup, tag, testid)[0] ?? null
 }
 
+// The markup of each bucket section, keyed by bucket, in document order.
+// Cannot go through extractAllByTestId: a bucket section CONTAINS <section>
+// elements (every QuestionRow renders one), so a non-greedy match on <section>
+// would stop at the first inner closing tag and return a fragment. Bucket
+// sections are siblings, so slicing between their markers is exact.
+//
+// Built from BUCKETS rather than from a loose [a-z]+ pattern, which would also
+// match data-testid="bucket-heading" and invent a seventh bucket called
+// "heading".
+function bucketSegments(markup: string): Map<string, string> {
+  const re = new RegExp(`data-testid="bucket-(${BUCKETS.join('|')})"`, 'g')
+  const marks: { bucket: string; at: number }[] = []
+  let match: RegExpExecArray | null
+  while ((match = re.exec(markup))) marks.push({ bucket: match[1], at: match.index })
+  return new Map(
+    marks.map(({ bucket, at }, index) => [bucket, markup.slice(at, marks[index + 1]?.at)]),
+  )
+}
+
 describe('CheckIn', () => {
   describe('when the read has failed', () => {
     // Spec §8.1: never write after a failed read. This is correct behaviour,
@@ -370,13 +390,27 @@ describe('CheckIn', () => {
     expect(markup.match(/role="radiogroup"/g)).toHaveLength(21)
   })
 
-  // §7: one legend, not 51 anchors.
-  it('states the scale once', () => {
+  // §7, amended 2026-09-01: one legend per bucket that HAS a scale -- not one
+  // for the screen (it read as chrome and the eye skipped it, pinned or not),
+  // and still not 51 per-question anchors.
+  it('states the scale in each bucket that has one, and nowhere else', () => {
     const markup = render()
-    expect(extractAllByTestId(markup, 'dl', 'scale-legend')).toHaveLength(1)
-    const legend = extractByTestId(markup, 'dl', 'scale-legend')
-    expect(legend).toContain('strongly disagree')
-    expect(legend).toContain('strongly agree')
+    const carrying = [...bucketSegments(markup)]
+      .filter(([, html]) => html.includes('data-testid="scale-legend"'))
+      .map(([bucket]) => bucket)
+
+    // Named, not counted. A length assertion passes just as happily if the
+    // legend appears above Finances and disappears from Delivery -- which is
+    // the specific way this can go wrong, since those are the two kinds of row
+    // and a legend over No/Unsure/Yes explains a scale that is not there.
+    expect(carrying).toEqual(['communication', 'growth', 'relationship', 'delivery'])
+
+    const legends = extractAllByTestId(markup, 'dl', 'scale-legend')
+    expect(legends).toHaveLength(4)
+    for (const legend of legends) {
+      expect(legend).toContain('strongly disagree')
+      expect(legend).toContain('strongly agree')
+    }
   })
 
   describe('when the gate is shut', () => {

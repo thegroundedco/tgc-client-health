@@ -214,13 +214,17 @@ describe('CheckIn, the question controls per kind', () => {
   })
 
   // The owner asked for anchored ends on 2026-08-31 and they were already
-  // there -- he had not seen them, because they scroll away above question
-  // fourteen. The fix is placement, and placement is CSS: CSS Modules are
-  // stubbed under jsdom, so getComputedStyle would report nothing here and a
-  // test asserting `position: sticky` would pass or fail for reasons unrelated
-  // to the stylesheet. What IS testable is that the copy survives the change,
-  // which is what a careless "fix" to the legend would break.
-  it('still states both anchors on one legend', () => {
+  // there -- he had not seen them, because they scrolled away above question
+  // fourteen. Pinning them fixed the scrolling and not the seeing: on
+  // 2026-09-01 he confirmed the sticky line worked and asked for the legend
+  // inside each bucket instead, under the heading and above the first prompt.
+  //
+  // Placement itself is still untestable here -- CSS Modules are stubbed under
+  // jsdom, so getComputedStyle reports nothing and an assertion on `position`
+  // would pass or fail for reasons unrelated to the stylesheet. What IS
+  // testable is that the copy survives, which is what a careless change to the
+  // legend would break, and that there is now one per scale bucket.
+  it('still states both anchors, once per bucket that has a scale', () => {
     hookState.current = mockCheckin({ advocacyApplies: true })
     render(
       <CheckIn
@@ -231,8 +235,11 @@ describe('CheckIn, the question controls per kind', () => {
       />,
     )
 
-    const legend = screen.getByTestId('scale-legend')
-    expect(legend.textContent).toContain('strongly disagree')
-    expect(legend.textContent).toContain('strongly agree')
+    const legends = screen.getAllByTestId('scale-legend')
+    expect(legends).toHaveLength(4)
+    for (const legend of legends) {
+      expect(legend.textContent).toContain('strongly disagree')
+      expect(legend.textContent).toContain('strongly agree')
+    }
   })
 })
