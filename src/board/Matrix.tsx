@@ -108,36 +108,44 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               return (
                 <tr data-testid="matrix-row" key={row.client.id}>
                   <th className={styles.name} data-band={band} scope="row">
-                    {/* isOpenable is applied rather than assumed. The matrix
-                        only ever shows active clients, so it never refuses
-                        here -- but the reason the rule exists is that
-                        checkins_insert_edit_scores carries no status predicate
-                        of its own, and a view that assumes instead of asking is
-                        how that gap gets reopened. */}
-                    {isOpenable(row.client.status) ? (
-                      <button
-                        className={styles.open}
-                        onClick={() => onOpen(row.client)}
-                        type="button"
-                      >
+                    {/* The flex lives on this span, NOT on the <th>. A table
+                        cell given `display: flex` leaves the table formatting
+                        context, stops collapsing its borders with its
+                        neighbours', and draws every line touching the client
+                        column at 2px while the rest of the grid is 1px. See
+                        .name in the stylesheet. */}
+                    <span className={styles.nameRow}>
+                      {/* isOpenable is applied rather than assumed. The matrix
+                          only ever shows active clients, so it never refuses
+                          here -- but the reason the rule exists is that
+                          checkins_insert_edit_scores carries no status predicate
+                          of its own, and a view that assumes instead of asking
+                          is how that gap gets reopened. */}
+                      {isOpenable(row.client.status) ? (
+                        <button
+                          className={styles.open}
+                          onClick={() => onOpen(row.client)}
+                          type="button"
+                        >
+                          <span data-testid="matrix-name">{row.client.name}</span>
+                        </button>
+                      ) : (
                         <span data-testid="matrix-name">{row.client.name}</span>
-                      </button>
-                    ) : (
-                      <span data-testid="matrix-name">{row.client.name}</span>
-                    )}
-                    {/* The band reads beside the name rather than in a column of
-                        its own -- owner's call, 2026-09-01. It stays OUTSIDE the
-                        button so the control's accessible name is the client,
-                        not "Babaloo Watch", and so the band is not something you
-                        appear to be able to click.
+                      )}
+                      {/* The band reads beside the name rather than in a column
+                          of its own -- owner's call, 2026-09-01. It stays
+                          OUTSIDE the button so the control's accessible name is
+                          the client, not "Babaloo Watch", and so the band is not
+                          something you appear to be able to click.
 
-                        No " - " between them any more: the separator existed to
-                        join two words on one line, and .name's space-between
-                        does that job now. A dash floating in the gap between a
-                        left-aligned name and a right-aligned band belongs to
-                        neither. */}
-                    <span className={styles.bandWord} data-testid="matrix-band">
-                      {BAND_LABELS[band]}
+                          No " - " between them any more: the separator existed
+                          to join two words on one line, and .nameRow's
+                          space-between does that job now. A dash floating in the
+                          gap between a left-aligned name and a right-aligned
+                          band belongs to neither. */}
+                      <span className={styles.bandWord} data-testid="matrix-band">
+                        {BAND_LABELS[band]}
+                      </span>
                     </span>
                   </th>
                   {columns.map(({ bucket }) => {

@@ -74,22 +74,32 @@
   text-align: start;
 }
 
-/* The client's name, and the tfoot's "Average". A row header, so the name
-   aligns with the names beneath rather than with the numbers beside.
+/* The client's name, and the tfoot's "Average". A row header, so it aligns with
+   the names beneath rather than with the numbers beside.
 
-   A flex row with the two ends pushed apart: the name holds the left edge and
-   the band holds the right, so the bands line up as their own column inside
-   this one. space-between rather than a fixed name width -- the column is as
-   wide as its longest client, and the bands follow that edge whatever it is.
-
-   The tfoot's "Average" has no second child and simply sits left. */
+   This cell MUST stay a table-cell. `display: flex` on it takes it out of the
+   table formatting context -- the browser wraps it in an anonymous table-cell
+   and its border stops collapsing with its neighbours', so it draws its own
+   full 1px on top of theirs and every line touching the client column comes out
+   at 2px while the rest of the grid is 1px. That is exactly the inconsistency
+   the owner spotted on the deployed page, 2026-09-01. The flex belongs on
+   .nameRow below, inside the cell, where it costs the table nothing. */
 .name {
+  text-align: start;
+  white-space: nowrap;
+}
+
+/* Inside the client cell: the two ends pushed apart, so the name holds the left
+   edge and the band holds the right and the bands line up as their own column
+   within this one. space-between rather than a fixed name width -- the column
+   is as wide as its longest client, and the bands follow that edge whatever it
+   turns out to be.
+   `display: flex` makes this block-level, so it fills the cell on its own. */
+.nameRow {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  text-align: start;
-  white-space: nowrap;
 }
 
 .cell {
