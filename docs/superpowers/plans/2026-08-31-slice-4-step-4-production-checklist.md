@@ -4,6 +4,28 @@
 
 ---
 
+## STATUS: steps 1-4 complete, 2026-09-01
+
+- **Step 1, deploy** — landed 2026-08-31 21:45:30 GMT as chunk `App-BXt0zbRD.js`.
+- **Step 2, board renders** — confirmed by the owner: seven clients with an Advocacy bar, three
+  reading "Advocacy begins at 90 days", six Healthy, four Watch, no error banner. The board opened
+  on **August, not July**, because the confirmation happened after midnight: 1 September makes the
+  previous month August, which is the behaviour this change was built for. Seven Advocacy bars, not
+  the six predicted in Step 2 below — the production query in Step 4 confirms seven, so the
+  prediction was wrong and the screen was right.
+- **Step 3, migration** — applied to production via MCP `apply_migration`, not the SQL editor. The
+  clipboard route below was not used.
+- **Step 4, verification** — all six queries run and matched: seven unchanged Advocacy scores, one
+  non-smallint `adv_*` column (`adv_score`), four check constraints, `{security_invoker=true}`,
+  `authenticated / SELECT`, and all ten overall scores identical. **No score moved.**
+- **Step 5 remains open** — the two manual checks only the owner can make.
+
+The month arrows named throughout this document were replaced by a dropdown on 2026-09-01
+(spec §7, amended; §10 decision 9). Where this checklist says "click →", the control is now a
+month list on the heading.
+
+---
+
 ## Read this first: the board will look empty, and that is the new default working
 
 **Today is 31 August. The board now opens on the PREVIOUS month, which is July — and production has no July data at all.** Every client will read "Not started" with no bars.

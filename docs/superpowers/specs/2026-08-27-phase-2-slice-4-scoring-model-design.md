@@ -539,10 +539,29 @@ real workflow is that **August is scored during September** — a month has to c
 judged — so the tool as built could only ever score a month that was not finished, and the previous
 month became unreachable the moment the calendar turned.
 
-The board owns one `period` in state, defaulting to `previousPeriod(currentPeriod())`, with previous
-and next controls beside the month heading it already renders. The check-in screen inherits that
-period and repeats the control in its own header, so the month being scored is visible at the moment
-of scoring rather than remembered from two screens ago.
+The board owns one `period` in state, defaulting to `previousPeriod(currentPeriod())`. The check-in
+screen inherits that period and renders the same month in its own header, so the month being scored
+is visible at the moment of scoring rather than remembered from two screens ago.
+
+**AMENDED 2026-09-01.** This section first specified previous and next controls flanking the month
+heading, and they shipped that way. The owner asked for a dropdown after one run: stepping is the
+wrong shape for the task, because reaching a month four back cost four clicks and four board reads,
+and the arrows never said what was reachable.
+
+The month heading IS the control now — one native `<select>` carrying `.t-header`, so there is no
+second element to keep in step with the first. It lists twelve months, newest first, beginning at
+the current month; `periodOptions()` in `src/lib/month.ts` builds it. Native rather than a custom
+menu because the platform brings keyboard navigation, type-ahead, the touch picker and the
+"combo box, August 2026" announcement for free, and the list is twelve plain strings.
+
+**A future month is absent rather than disabled**, which is what retired `canAdvance` (and
+`nextPeriod` with it — the arrows were its only caller). The old shape had to offer "next" always
+and then refuse it at the boundary; a list offers only what it will honour, so there is no disabled
+state left to get wrong.
+
+Twelve is a judgment call, not a derived number. Sizing the list from data would mean plumbing every
+client's `started_on` into the board just to decide how many options to draw, and the tool holds one
+month of history. Raise the count when there is more than a year to look at.
 
 **One period, never two.** The board and the check-in screen must not show different months. A card
 reading "Draft, 8 of 21" for one month while opening a check-in for another is the kind of quiet
@@ -680,6 +699,12 @@ fill in.
 8. **The board defaults to the previous month** (§7), ruled by the owner 2026-08-31 against a
    recommendation of "most recent unsubmitted". Cheap to change — one expression in `Board.tsx` —
    and worth revisiting after a month of clicking forward.
+9. **The month is chosen from a dropdown, not stepped through with arrows** (§7), ruled by the owner
+   2026-09-01 after using the arrows once. The default is unchanged — the dropdown opens on last
+   month — so this changes how a *different* month is reached, not which one you land on. What it
+   costs: the list is a fixed twelve months, so a thirteenth month back is unreachable without
+   raising the count, where the arrows had no floor at all. Acceptable while the tool holds one
+   month of history; revisit when it holds a year.
 
 ## 11. Open items carried forward
 
