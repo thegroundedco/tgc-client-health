@@ -374,11 +374,33 @@ describe('the matrix table', () => {
       expect(context()).not.toContain('None yet')
     })
 
-    it('is not banded, because a sentence has no place on a 1-5 scale', () => {
+    it('takes the same band as the Advocacy score beside it', () => {
+      // Banded on the SCORE, never on its own contents: the two cells sit under
+      // one merged heading and a shared ground is what makes them read as a
+      // pair. It follows the score even when the score is nobody's idea of good
+      // news -- the fill is the bucket's, not the sentence's.
       renderMatrix({
-        checkins: [[1, checkin(1, { adv_score: 5, adv_left_review: 5 })]],
+        clients: [client(1, 'A'), client(2, 'B')],
+        checkins: [
+          [1, checkin(1, { adv_score: 5, adv_left_review: 5 })],
+          [2, checkin(2, { adv_score: 1 })],
+        ],
       })
-      expect(screen.getByTestId('matrix-context').getAttribute('data-band')).toBeNull()
+      const contexts = screen.getAllByTestId('matrix-context')
+      const scores = screen.getAllByTestId('matrix-cell')
+      expect(contexts.map((cell) => cell.getAttribute('data-band'))).toEqual([
+        'healthy',
+        'at_risk',
+      ])
+      // Literally the same band as the Advocacy cell in the same row -- the
+      // sixth of the six score cells each row draws.
+      expect(contexts[0].getAttribute('data-band')).toBe(scores[5].getAttribute('data-band'))
+      expect(contexts[1].getAttribute('data-band')).toBe(scores[11].getAttribute('data-band'))
+    })
+
+    it('greys out with the score when the bucket is not scored', () => {
+      renderMatrix({ clients: [client(1, 'Babaloo')] })
+      expect(screen.getByTestId('matrix-context').getAttribute('data-band')).toBe('incomplete')
     })
 
     it('leaves the Advocacy score, and its column average, in place', () => {

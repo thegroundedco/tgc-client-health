@@ -177,6 +177,14 @@
 .context {
   text-align: start;
   white-space: normal;
+  /* The header labels' size, not the body's -- owner's call, 2026-09-01. This
+     cell holds the only prose in a table of numbers, and at body size it shouted
+     over the figures it is annotating. Size only: the label ROLE is also
+     condensed, uppercase and letter-spaced, which is right for a one-word
+     heading and wrong for "Review, Case study and Referral".
+     It also buys width. A sentence at --step--1 wraps to two lines far less
+     often, which is what keeps rows the same height. */
+  font-size: var(--step--1);
 }
 
 /* The Advocacy header, spanning its two sub-columns. Centred over the pair, so

@@ -211,12 +211,18 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                       </td>
                     )
                   })}
-                  {/* Advocacy's second cell. Deliberately NOT banded: it is not
-                      a score, and colouring it would imply "Review and Case
-                      study" sits somewhere on a 1-5 scale. The band beside it
-                      already says how the bucket is doing. */}
+                  {/* Advocacy's second cell, banded on the SCORE beside it
+                      rather than on its own contents -- owner's call,
+                      2026-09-01, reversing an earlier decision here to leave it
+                      unfilled. A sentence has no place on a 1-5 scale, but this
+                      fill is not claiming it does: it is the Advocacy score's
+                      fill, continued. The two cells are one column group under
+                      one merged heading, and a shared ground is what makes them
+                      read as a pair instead of as a number beside an unrelated
+                      note. */}
                   <td
                     className={`${styles.cell} ${styles.context} ${styles.divider} ${floor}`}
+                    data-band={bandFor(cellValue(row, GATED_BUCKET))}
                     data-testid="matrix-context"
                   >
                     {context === null ? (
