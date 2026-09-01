@@ -90,12 +90,25 @@
   inline-size: 7rem;
 }
 
-/* The last cell in every row, and every cell in the last row group, yield their
-   outer edge to the table's own border above. Without this the cell's hairline
-   and the table's ink meet at the perimeter -- same width, same style, differing
-   only in colour -- and a CELL beats a TABLE in that tie, leaving the box light
-   down the right side and along the bottom. */
-.table tr > *:last-child {
+/* The last cell in every FULL-WIDTH row, and every cell in the last row group,
+   yield their outer edge to the table's own border above. Without this the
+   cell's hairline and the table's ink meet at the perimeter -- same width, same
+   style, differing only in colour -- and a CELL beats a TABLE in that tie,
+   leaving the box light down the right side and along the bottom.
+
+   "Full-width" is the whole point of the three selectors, and a plain
+   `.table tr > *:last-child` is WRONG. The header's second row is Score and
+   Context: two cells, starting under Advocacy. Its last child is Context, which
+   sits in the middle of the table -- and zeroing its end edge deletes the heavy
+   rule before Overall. Worse, that selector outweighs .divider, so it wins
+   whatever the source order. Shipped 2026-09-01 and spotted by the owner on the
+   deployed page.
+
+   Any future header row that does not start at column 1 must be excluded here
+   the same way. */
+.table thead tr:first-child > *:last-child,
+.table tbody tr > *:last-child,
+.table tfoot tr > *:last-child {
   border-inline-end: 0;
 }
 

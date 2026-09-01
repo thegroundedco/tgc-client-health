@@ -16,13 +16,20 @@ const SOURCE = readFileSync(
   'utf8',
 )
 
+// The stylesheet with its comments removed, which is what every assertion below
+// reads. Matrix.module.css explains its own traps by NAMING the selectors that
+// caused them, and a check run against the raw file matches that prose and fails
+// on the explanation rather than on the defect. tokenRules.ts hit this first and
+// warns about it in its own header; this is the same lesson, one file over.
+const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
+
 // The body of one top-level rule, by exact selector. `.name {` and `.nameRow {`
 // are different rules and a startsWith match would confuse them.
 function ruleBody(selector: string): string {
-  const start = SOURCE.indexOf(`${selector} {`)
+  const start = CODE.indexOf(`${selector} {`)
   if (start === -1) throw new Error(`no rule for "${selector}" in Matrix.module.css`)
-  const end = SOURCE.indexOf('}', start)
-  return SOURCE.slice(start, end)
+  const end = CODE.indexOf('}', start)
+  return CODE.slice(start, end)
 }
 
 describe('the matrix stylesheet', () => {
@@ -61,11 +68,20 @@ describe('the matrix stylesheet', () => {
   // their END edges, and each heavy rule is that one owner's edge in ink.
   describe('the one-edge-one-owner model', () => {
     it('gives cells end edges only, never the four-sided shorthand', () => {
-      expect(SOURCE).toContain('border-inline-end: 2px solid var(--rule-hairline)')
-      expect(SOURCE).toContain('border-block-end: 2px solid var(--rule-hairline)')
+      expect(CODE).toContain('border-inline-end: 2px solid var(--rule-hairline)')
+      expect(CODE).toContain('border-block-end: 2px solid var(--rule-hairline)')
       // `border: <n>px solid var(--rule-hairline)` would declare all four sides
       // and put two owners on every interior edge again.
-      expect(/border:\s*\d+px\s+solid\s+var\(--rule-hairline\)/.test(SOURCE)).toBe(false)
+      expect(/border:\s*\d+px\s+solid\s+var\(--rule-hairline\)/.test(CODE)).toBe(false)
+    })
+
+    it('yields the perimeter only on rows that span the whole table', () => {
+      // A bare `.table tr > *:last-child` catches the header's SECOND row, whose
+      // last cell is Context -- in the middle of the table, not on its edge --
+      // and zeroes the heavy rule before Overall. It also outweighs .divider, so
+      // it wins whatever the source order. That shipped once.
+      expect(/\.table\s+tr\s*>\s*\*:last-child/.test(CODE)).toBe(false)
+      expect(CODE).toContain('.table thead tr:first-child > *:last-child')
     })
 
     it('carries both heavy rules on END edges', () => {
