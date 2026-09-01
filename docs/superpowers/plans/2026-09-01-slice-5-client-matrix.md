@@ -4,7 +4,7 @@
 
 **Goal:** Add a `Cards | Matrix` view toggle to the board that renders every active client down the rows against the six buckets across the columns, with an overall score, a band, and a per-bucket average across the roster.
 
-**Architecture:** Three new files plus one edit. `src/board/matrix.ts` holds the arithmetic as pure functions with no React and no Supabase client, in the shape `boardScope.ts` and `cardSummary.ts` already use. `src/board/Matrix.tsx` renders a real `<table>` and does no arithmetic of its own. `src/board/Matrix.module.css` carries the fills and the scroll container. `src/board/Board.tsx` gains one piece of state and a branch. **No migration, no new column, no new query** — the matrix reads the same Postgres-generated `*_score` columns the card's bars already read, out of state `useBoard` already holds.
+**Architecture:** Three new files plus one edit. `src/board/matrixMath.ts` holds the arithmetic as pure functions with no React and no Supabase client, in the shape `boardScope.ts` and `cardSummary.ts` already use. `src/board/Matrix.tsx` renders a real `<table>` and does no arithmetic of its own. `src/board/Matrix.module.css` carries the fills and the scroll container. `src/board/Board.tsx` gains one piece of state and a branch. **No migration, no new column, no new query** — the matrix reads the same Postgres-generated `*_score` columns the card's bars already read, out of state `useBoard` already holds.
 
 **Tech Stack:** React 19 + TypeScript (`verbatimModuleSyntax`), Vite, CSS Modules, Vitest + Testing Library + jsdom.
 
@@ -35,8 +35,8 @@ Every task's requirements implicitly include this section.
 
 | File | Responsibility |
 |---|---|
-| `src/board/matrix.ts` | **Create.** Pure arithmetic: row assembly, the per-column average, the asterisk rule, the hidden count sentence. No React, no Supabase. |
-| `src/board/matrix.test.ts` | **Create.** Node-environment unit tests for the above. |
+| `src/board/matrixMath.ts` | **Create.** Pure arithmetic: row assembly, the per-column average, the asterisk rule, the hidden count sentence. No React, no Supabase. |
+| `src/board/matrixMath.test.ts` | **Create.** Node-environment unit tests for the above. |
 | `src/board/Matrix.tsx` | **Create.** The `<table>`. Reads `matrix.ts`, renders cells, bands and the footer. No arithmetic. |
 | `src/board/Matrix.module.css` | **Create.** Cell fills, alignment, the scroll container, the visually-hidden utility. |
 | `src/board/Matrix.dom.test.tsx` | **Create.** jsdom tests for table semantics, the em dash, the band attribute and the asterisk. |
@@ -48,11 +48,11 @@ Three tasks. Task 1 is the arithmetic and can be rejected on its own. Task 2 is 
 
 ---
 
-### Task 1: `src/board/matrix.ts` — the arithmetic
+### Task 1: `src/board/matrixMath.ts` — the arithmetic
 
 **Files:**
-- Create: `src/board/matrix.ts`
-- Test: `src/board/matrix.test.ts`
+- Create: `src/board/matrixMath.ts`
+- Test: `src/board/matrixMath.test.ts`
 
 **Interfaces:**
 - Consumes (all already exist, do not modify any of them):
@@ -75,7 +75,7 @@ Three tasks. Task 1 is the arithmetic and can be rejected on its own. Task 2 is 
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/board/matrix.test.ts` with exactly this content:
+Create `src/board/matrixMath.test.ts` with exactly this content:
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -85,8 +85,8 @@ import {
   columnAverage,
   matrixRows,
   needsAsterisk,
-} from './matrix'
-import type { MatrixRow } from './matrix'
+} from './matrixMath'
+import type { MatrixRow } from './matrixMath'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
 
@@ -364,11 +364,11 @@ describe('averageDescription', () => {
 
 Run: `npx vitest run src/board/matrix.test.ts`
 
-Expected: FAIL — `Failed to resolve import "./matrix"`.
+Expected: FAIL — `Failed to resolve import "./matrixMath"`.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `src/board/matrix.ts` with exactly this content:
+Create `src/board/matrixMath.ts` with exactly this content:
 
 ```ts
 import { GATED_BUCKET } from '../lib/buckets'
@@ -524,7 +524,7 @@ Confirm `npx vitest run src/board/matrix.test.ts` is green again before moving o
 npm run build
 npm run lint
 git rev-parse --abbrev-ref HEAD   # must print slice-5-client-matrix
-git add src/board/matrix.ts src/board/matrix.test.ts
+git add src/board/matrixMath.ts src/board/matrixMath.test.ts
 git commit -m "matrix: the arithmetic, with the divisor being the scored not the roster"
 ```
 
@@ -988,7 +988,7 @@ import {
   columnAverage,
   matrixRows,
   needsAsterisk,
-} from './matrix'
+} from './matrixMath'
 import type { BoardClient, BoardScore } from './useBoard'
 import styles from './Matrix.module.css'
 
@@ -1443,12 +1443,12 @@ Expected: PASS. Every pre-existing test in the file must still pass — in parti
 
 - [ ] **Step 6: Prove one guard by mutation, then revert**
 
-1. In `src/board/matrix.ts`, change `matrixRows`'s filter to `.filter(() => true)`.
+1. In `src/board/matrixMath.ts`, change `matrixRows`'s filter to `.filter(() => true)`.
    Expected: **"shows every active client whatever the archive toggle is doing"** fails with two rows instead of one. Revert.
 2. In edit (d), change `onOpen={setSelected}` to `onOpen={() => {}}`.
    Expected: **"opens a client's check-in from a matrix row"** fails. Revert.
 
-Note that swapping `clients={board.clients}` for `clients={visible}` would NOT fail any test here, because the archive toggle is off in every fixture and the two lists agree. That is a real gap and it is deliberate: the assertion this slice can actually make is the one in `matrix.test.ts` — `matrixRows` drops non-active clients whatever it is handed — and duplicating it against Board's prop would need a fixture that turns the archive toggle on, which is three clicks of setup to re-test one line.
+Note that swapping `clients={board.clients}` for `clients={visible}` would NOT fail any test here, because the archive toggle is off in every fixture and the two lists agree. That is a real gap and it is deliberate: the assertion this slice can actually make is the one in `matrixMath.test.ts` — `matrixRows` drops non-active clients whatever it is handed — and duplicating it against Board's prop would need a fixture that turns the archive toggle on, which is three clicks of setup to re-test one line.
 
 Confirm the file is green again.
 
@@ -1464,6 +1464,14 @@ git commit -m "board: a Cards | Matrix toggle, sharing one period and one fetch"
 ```
 
 Expected suite total: **719 + 20 + 15 + 6 = 760 tests / 46 files.**
+
+---
+
+## Amendments made during execution, 2026-09-01
+
+1. **`matrix.ts` is `matrixMath.ts`.** Spec §8 named the arithmetic module `src/board/matrix.ts` beside `src/board/Matrix.tsx`. Those two filenames **cannot coexist on macOS**, whose filesystem is case-insensitive: `./matrix` and `./Matrix` are the same path, the resolver takes `.ts` before `.tsx`, and both imports land on the arithmetic module. `Matrix.tsx` ends up importing itself, `Matrix` is `undefined`, and all sixteen DOM tests fail with "Element type is invalid". Renamed to `matrixMath.ts`, mirroring `src/lib/scoreMath.ts` — the same split for the same reason. The file carries a comment saying so, because the obvious "tidy-up" is to rename it back.
+2. **`border-collapse: separate` with `border-spacing: 0`, not `collapse`.** Collapsed table borders are shared between neighbouring cells and `border-radius` is ignored outright, so the rounded band fills would have had square corners. `separate` with zero spacing renders identically apart from honouring the radius.
+3. **One test fixture bug, found by a red test.** `rowsOf`'s `started_on: entry.started_on ?? OLD` swallowed an explicit `null` — and a null start date is precisely the case being tested, since it gates a client out of Advocacy for want of a known tenure. Changed to an `in` check. The implementation was correct; the fixture was testing the opposite of what it claimed.
 
 ---
 

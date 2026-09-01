@@ -5,8 +5,8 @@ import {
   columnAverage,
   matrixRows,
   needsAsterisk,
-} from './matrix'
-import type { MatrixRow } from './matrix'
+} from './matrixMath'
+import type { MatrixRow } from './matrixMath'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
 

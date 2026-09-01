@@ -8,7 +8,16 @@ import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
 
 // The matrix's arithmetic, with no React and no Supabase client -- the shape
-// boardScope.ts and cardSummary.ts already use on this screen. Everything here
+// boardScope.ts and cardSummary.ts already use on this screen.
+//
+// Named matrixMath rather than matrix, which is what the spec called it, for a
+// reason worth stating so nobody "corrects" it back: macOS's filesystem is
+// case-INSENSITIVE, so `./matrix` and `./Matrix` are the same path. With a
+// matrix.ts beside a Matrix.tsx, the resolver takes .ts first and BOTH imports
+// land here -- Matrix.tsx imports itself, `Matrix` is undefined, and every test
+// in the file fails with "Element type is invalid". The pairing mirrors
+// src/lib/scoreMath.ts, which is the same split for the same reason: the
+// arithmetic in one module, the thing that renders it in another. Everything here
 // is a pure function of rows that are already in memory: this slice adds no
 // column, no table and no query.
 //
