@@ -88,19 +88,17 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                 Client
               </th>
               {columns.map(({ bucket, definition }) => (
-                // The letter for the eye, the word for the ear: without the
-                // hidden label a screen reader announces "C" and the reader has
-                // to know the rubric by heart to place the column.
+                // The full bucket name, not the initial. The card's bars use the
+                // initial because six letters have to fit under six bars in a
+                // 15rem card; a table has a whole column and a scroller, so the
+                // word costs width the grid can afford and saves the reader
+                // knowing the rubric by heart. Owner's call, 2026-09-01.
                 <th className={`t-label ${styles.head}`} key={bucket} scope="col">
-                  <span aria-hidden="true">{definition.initial}</span>
-                  <span className={styles.hidden}>{definition.label}</span>
+                  {definition.label}
                 </th>
               ))}
-              <th className={`t-label ${styles.head}`} scope="col">
+              <th className={`t-label ${styles.head} ${styles.divider}`} scope="col">
                 Overall
-              </th>
-              <th className={`t-label ${styles.head}`} scope="col">
-                Band
               </th>
             </tr>
           </thead>
@@ -122,11 +120,20 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                         onClick={() => onOpen(row.client)}
                         type="button"
                       >
-                        {row.client.name}
+                        <span data-testid="matrix-name">{row.client.name}</span>
                       </button>
                     ) : (
-                      row.client.name
+                      <span data-testid="matrix-name">{row.client.name}</span>
                     )}
+                    {/* The band reads beside the name rather than in a column of
+                        its own -- owner's call, 2026-09-01. It stays OUTSIDE the
+                        button so the control's accessible name is the client,
+                        not "Babaloo - Watch", and so the band is not something
+                        you appear to be able to click. */}
+                    <span className={styles.bandWord} data-testid="matrix-band">
+                      {' - '}
+                      {BAND_LABELS[band]}
+                    </span>
                   </th>
                   {columns.map(({ bucket }) => {
                     const value = cellValue(row, bucket)
@@ -142,17 +149,11 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                     )
                   })}
                   <td
-                    className={`${styles.cell} numeric`}
+                    className={`${styles.cell} ${styles.divider} numeric`}
                     data-band={band}
                     data-testid="matrix-overall"
                   >
                     <Score value={row.overall} />
-                  </td>
-                  {/* The band always carries its text label. Colour is never
-                      the only signal: teal against warm red measures 1.76:1.
-                      Parent spec §9.3. */}
-                  <td className={styles.cell} data-band={band} data-testid="matrix-band">
-                    {BAND_LABELS[band]}
                   </td>
                 </tr>
               )
@@ -160,12 +161,12 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
           </tbody>
           <tfoot>
             <tr>
-              <th className={styles.name} scope="row">
+              <th className={`${styles.name} ${styles.footRule}`} scope="row">
                 Average
               </th>
               {columns.map(({ bucket, average }) => (
                 <td
-                  className={`${styles.cell} numeric`}
+                  className={`${styles.cell} ${styles.footRule} numeric`}
                   data-band={bandFor(average.mean)}
                   data-testid="matrix-average"
                   key={bucket}
@@ -182,7 +183,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               {/* The Average row stops before Overall. An agency-wide "overall
                   of overalls" would average numbers built on different
                   divisors, and nobody has asked for one. */}
-              <td className={styles.blank} colSpan={2} />
+              <td className={`${styles.blank} ${styles.divider} ${styles.footRule}`} />
             </tr>
           </tfoot>
         </table>

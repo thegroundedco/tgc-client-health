@@ -574,9 +574,12 @@ describe('the Cards | Matrix toggle', () => {
     })
     fireEvent.click(matrixButton())
 
-    const rows = screen.getAllByTestId('matrix-row')
-    expect(rows).toHaveLength(1)
-    expect(rows[0].querySelector('th')?.textContent).toBe('Active One')
+    expect(screen.getAllByTestId('matrix-row')).toHaveLength(1)
+    // The name alone: the client cell also carries the band word, so reading the
+    // whole cell here would couple this test to that format.
+    expect(screen.getAllByTestId('matrix-name').map((name) => name.textContent)).toEqual([
+      'Active One',
+    ])
   })
 
   it('opens a client\'s check-in from a matrix row, on the month shown', () => {

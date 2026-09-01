@@ -33,16 +33,21 @@
   text-align: start;
 }
 
-/* The column headers. The bucket initials sit over numbers, so they align end
-   with them; the corner cell sits over names and aligns start. */
+/* The column headers. The bucket names sit over numbers, so they align end with
+   them; the corner cell sits over client names and aligns start.
+
+   Both carry the heavy rule beneath, which is the first of the three gridlines
+   described under .divider below: it separates the labels from the data. */
 .head {
   padding: var(--space-2) var(--space-3);
+  border-block-end: 2px solid var(--text-secondary);
   text-align: end;
   white-space: nowrap;
 }
 
 .headName {
   padding: var(--space-2) var(--space-3);
+  border-block-end: 2px solid var(--text-secondary);
   text-align: start;
 }
 
@@ -91,11 +96,49 @@
   background: var(--band-none);
 }
 
-/* The two footer cells under Overall and Band. The Average row stops before
-   them: an agency-wide "overall of overalls" is a number nobody asked for and
-   would average two different divisors together. */
+/* The footer cell under Overall. The Average row stops before it: an
+   agency-wide "overall of overalls" is a number nobody asked for and would
+   average numbers built on different divisors together. */
 .blank {
   padding: var(--space-2) var(--space-3);
+}
+
+/* ---------------------------------------------------------------------------
+   The heavy gridlines, the way a spreadsheet groups a sheet. Two weights and
+   no more: the 1px page-coloured gutter between cells INSIDE a block, and a
+   2px ink rule BETWEEN blocks. Three blocks -- the header labels, the six
+   bucket columns, and the Overall column -- plus the Average row across the
+   bottom.
+
+   Both rules must come after the [data-band] block above, which sets `border`
+   as a SHORTHAND and would otherwise overwrite the edge each of these names.
+   They are single-class selectors combined with .cell or .name at the call
+   site, so they match that block's specificity exactly and win on source
+   order. Do not move them above it.
+   --------------------------------------------------------------------------- */
+
+/* The wall to the left of Overall: everything before it is a bucket, everything
+   from it on is the headline. */
+.divider {
+  border-inline-start: 2px solid var(--text-secondary);
+}
+
+/* The floor above the Average row: everything above is a client, the row itself
+   is the agency. */
+.footRule {
+  border-block-start: 2px solid var(--text-secondary);
+}
+
+/* The band word beside the client's name -- "Babaloo - Watch". Quieter than the
+   name by size and weight, not by colour: the cell is a band fill and its ink
+   is --text-on-band, so a secondary grey here would fight the fill rather than
+   recede into it. */
+.bandWord {
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caption);
 }
 
 /* The name as a control. Same treatment as the card's .cardOpen -- one real

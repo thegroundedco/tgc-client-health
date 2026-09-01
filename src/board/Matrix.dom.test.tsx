@@ -71,21 +71,41 @@ describe('the matrix table', () => {
     expect(table.querySelector('caption')?.textContent).toContain('August 2026')
   })
 
-  it('heads every bucket column with its initial and its full label', () => {
+  it('heads every bucket column with its full name, and ends at Overall', () => {
+    // The full word, not the card's initial: a table has a column and a
+    // scroller to spend width on. And no Band column -- the band reads beside
+    // the client's name instead. Owner's call, 2026-09-01.
     renderMatrix()
-    // The visible letter, plus the word a screen reader reads instead of "C".
     const heads = screen.getAllByRole('columnheader')
     expect(heads.map((head) => head.textContent)).toEqual([
       'Client',
-      'CCommunication',
-      'GGrowth',
-      'FFinances',
-      'RRelationship',
-      'DDelivery',
-      'AAdvocacy',
+      'Communication',
+      'Growth',
+      'Finances',
+      'Relationship',
+      'Delivery',
+      'Advocacy',
       'Overall',
-      'Band',
     ])
+  })
+
+  it('gives every row exactly as many cells as the header has columns', () => {
+    // The check a colSpan gets wrong silently. A footer that spans one column
+    // too many or too few shifts the whole Average row sideways under headings
+    // that no longer describe it, and nothing else in this file would notice.
+    renderMatrix({
+      clients: [client(1, 'A'), client(2, 'B')],
+      checkins: [[1, checkin(1, { comm_score: 4 })]],
+    })
+    const table = screen.getByTestId('matrix-table')
+    const width = table.querySelectorAll('thead th').length
+    for (const row of table.querySelectorAll('tbody tr, tfoot tr')) {
+      const spanned = [...row.children].reduce(
+        (total, cell) => total + ((cell as HTMLTableCellElement).colSpan || 1),
+        0,
+      )
+      expect(spanned).toBe(width)
+    }
   })
 
   it('scopes both header axes, and puts the Average row in a tfoot', () => {
@@ -107,8 +127,8 @@ describe('the matrix table', () => {
     renderMatrix({
       clients: [client(3, 'York'), client(1, 'Babaloo'), client(2, 'Gait Happens')],
     })
-    const rows = screen.getAllByTestId('matrix-row')
-    expect(rows.map((row) => row.querySelector('th')?.textContent)).toEqual([
+    // The name alone, not the whole cell: the cell also carries the band word.
+    expect(screen.getAllByTestId('matrix-name').map((name) => name.textContent)).toEqual([
       'Babaloo',
       'Gait Happens',
       'York',
@@ -181,24 +201,35 @@ describe('the matrix table', () => {
     expect(screen.getByTestId('matrix-overall').getAttribute('data-band')).toBe('watch')
   })
 
-  it('prints the band word beside the overall, so colour is never the only signal', () => {
-    // Parent spec §9.3: teal against amber measures 1.06:1. Every coloured thing
-    // in this grid already prints its own number; the overall additionally
-    // prints its word.
+  it('reads the band beside the client name, so colour is never the only signal', () => {
+    // Parent spec §9.3: teal against amber measures 1.06:1, so no band may be
+    // carried by hue alone. The band used to be its own column; it now reads
+    // "Babaloo - Healthy" in the client cell, which is the owner's format.
     renderMatrix({
       scores: [[1, { client_id: 1, overall_score: 4.71, advocacy_applies: true }]],
     })
-    expect(screen.getByTestId('matrix-band').textContent).toBe('Healthy')
+    expect(screen.getByTestId('matrix-row').querySelector('th')?.textContent).toBe(
+      'Babaloo - Healthy',
+    )
     expect(screen.getByTestId('matrix-overall').textContent).toBe('4.71')
   })
 
-  it('reads Not scored for a client whose overall is null', () => {
-    // Read by testid, not by text: every em-dash cell in the row also carries a
-    // visually-hidden "Not scored", so getByText would match eight elements and
-    // throw. That collision is deliberate on both sides -- it is the right word
-    // in both places -- so the test addresses the cell it means.
+  it('reads Not scored beside the name when the overall is null', () => {
     renderMatrix({ scores: [[1, { client_id: 1, overall_score: null, advocacy_applies: true }]] })
-    expect(screen.getByTestId('matrix-band').textContent).toBe('Not scored')
+    expect(screen.getByTestId('matrix-row').querySelector('th')?.textContent).toBe(
+      'Babaloo - Not scored',
+    )
+  })
+
+  it('keeps the band out of the button, so the control is named for the client', () => {
+    // The band is a fact about the client, not a thing you can click. Inside the
+    // button it would make the accessible name "Babaloo - Watch" and imply the
+    // word was part of the target.
+    renderMatrix({
+      scores: [[1, { client_id: 1, overall_score: 3, advocacy_applies: true }]],
+    })
+    expect(screen.getByRole('button', { name: 'Babaloo' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Watch/ })).toBeNull()
   })
 
   it('averages each bucket across the roster', () => {

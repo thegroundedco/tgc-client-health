@@ -132,9 +132,17 @@ Alphabetical is what `visibleClients` already produces for the default board vie
 status rank then name, and with only active clients the status rank is uniform. The matrix therefore
 sorts by name directly rather than routing through a helper whose status-grouping arm it never uses.
 
-**Columns are the six buckets in rubric order**, headed by `BUCKET_DEFINITIONS[bucket].initial` —
-`C G F R D A`. Those initials already exist and `buckets.test.ts` already asserts they stay
-distinct and stay matched to their labels, so the header costs nothing new.
+**Columns are the six buckets in rubric order**, headed by `BUCKET_DEFINITIONS[bucket].label` —
+the full words. AMENDED 2026-09-01 by the owner, after seeing it built: the header row reads
+`Client`, the six bucket names, `Overall`. The card's bars use the one-letter `initial` because six
+letters have to fit under six bars in a 15rem card; a table column has room for the word, and the
+word saves the reader knowing the rubric by heart. The `initial` is untouched and still the card's.
+
+**There is no Band column.** AMENDED 2026-09-01 by the owner: the band reads beside the client's
+name — `Babaloo - Watch` — in the row header. It sits OUTSIDE the name's button, so the control's
+accessible name stays the client and the band does not look clickable. §5's "colour is never the
+only carrier" is satisfied better than before: the name cell now prints its own band word and every
+numeric cell prints its number.
 
 **Cells are the generated bucket score**, read from `checkin[BUCKET_SCORE_KEY[bucket]]` — the same
 Postgres-computed column the card's bar reads. The matrix does not recompute a bucket mean in
@@ -143,8 +151,14 @@ bucket, by construction rather than by test.
 
 Formatted with `toFixed(2)`, matching the card's total. One rounding rule in the app.
 
-**The Overall column** is `overall_score` from `checkin_scores`, `toFixed(2)`, with the band label
-beside it — the same number and the same words the card shows.
+**The Overall column** is `overall_score` from `checkin_scores`, `toFixed(2)` — the same number the
+card shows. Its band label is in the client cell, above.
+
+**Three heavy gridlines group the sheet.** AMENDED 2026-09-01 by the owner, who reads these tables
+the way he reads a spreadsheet: two border weights and no more — the 1px page-coloured gutter
+between cells *inside* a block, and a 2px ink rule *between* blocks. The rules go under the header
+row, down the left edge of Overall, and above the Average row. That is the whole of it; a third
+weight would stop the two carrying meaning.
 
 ## 5. Colour
 
