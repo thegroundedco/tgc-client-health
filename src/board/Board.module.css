@@ -19,14 +19,37 @@
   gap: var(--space-3);
 }
 
-/* The month heading, with the previous/next controls flanking it. A flex row
-   of its own -- rather than folding the buttons into .periodBar directly --
-   so the heading stays centred between them regardless of what else
-   .periodBar wraps onto its own line (the progress line, the archive toggle). */
-.periodNav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+/* The heading is a wrapper and nothing else: .t-header sits on the <select>
+   inside it, not here. Deliberately that way round -- a select does NOT take
+   its parent's type (it uses the browser's form-control face, which is how a
+   page title ends up rendering at the UA's 13px), and inheriting it by hand
+   would mean either the banned `font` shorthand or a second copy of every
+   .t-header value here to drift out of step with the original.
+
+   margin: 0 because the heading rhythm would push the month off the baseline it
+   shares with the progress line, which .periodBar aligns. */
+.periodHeading {
+  margin: 0;
+}
+
+/* The month select, dressed as the page title rather than as a form field. It
+   sets no type of its own -- that is .t-header's job, and the two rules
+   therefore cannot fight over which single-class selector the bundler emits
+   last. All this removes is the chrome that would make a page title look like
+   an input.
+
+   `appearance` is deliberately left alone so the browser keeps drawing its own
+   disclosure caret. That caret is the only thing telling somebody this heading
+   opens; strip it and the control becomes invisible.
+
+   No focus rule here either: base.css's global :focus-visible already outlines
+   it, and a select is a normal-sized box, so the global treatment is right. */
+.periodSelect {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
 }
 
 /* Cards on a responsive grid. auto-fill with a minimum, so eleven clients lay

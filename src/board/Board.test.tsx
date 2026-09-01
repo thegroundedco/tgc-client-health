@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
-import { defaultPeriod, formatPeriod, previousPeriod } from '../lib/month'
+import { currentPeriod, defaultPeriod, formatPeriod, periodOptions, previousPeriod } from '../lib/month'
 import type { CardCheckin } from './cardSummary'
 import type { UseBoard } from './useBoard'
 
@@ -166,25 +166,44 @@ describe('the loaded client grid', () => {
 })
 
 describe('the board', () => {
-  it('names the month', () => {
+  const monthSelect = () => screen.getByRole('combobox', { name: 'Month' }) as HTMLSelectElement
+
+  // The visible text of the chosen option. Read through selectedIndex rather
+  // than by matching text, because every month in the list is rendered and
+  // getByText would find twelve of them.
+  const selectedMonthLabel = () => {
+    const select = monthSelect()
+    return select.options[select.selectedIndex]?.textContent
+  }
+
+  it('names the month, and opens on last month', () => {
     given()
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toMatch(/\w+ 20\d\d/)
+    expect(monthSelect().value).toBe(defaultPeriod())
+    // The selected option's own text, not the select's value: this is the
+    // string on screen, and it is the one a person reads to know which month
+    // they are about to score.
+    expect(selectedMonthLabel()).toBe(formatPeriod(defaultPeriod()))
   })
 
-  it('opens on last month and can walk back', () => {
+  it('jumps straight to any month in one step', () => {
+    // The point of the change: reaching a month four back was four clicks and
+    // four board reads through the old arrows.
     given()
-    expect(screen.getByRole('heading', { name: formatPeriod(defaultPeriod()) })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /previous month/i }))
-    expect(
-      screen.getByRole('heading', { name: formatPeriod(previousPeriod(defaultPeriod())) }),
-    ).toBeTruthy()
+    const target = periodOptions()[4]
+    fireEvent.change(monthSelect(), { target: { value: target } })
+    expect(monthSelect().value).toBe(target)
+    expect(selectedMonthLabel()).toBe(formatPeriod(target))
   })
 
-  it('disables next on the current month', () => {
+  it('offers no month later than this one', () => {
+    // What replaces the old disabled next arrow. A month that cannot be scored
+    // is absent rather than present-and-refused, so there is no disabled state
+    // to get wrong.
     given()
-    fireEvent.click(screen.getByRole('button', { name: /next month/i }))
-    const next = screen.getByRole('button', { name: /next month/i }) as HTMLButtonElement
-    expect(next.disabled).toBe(true)
+    const offered = [...monthSelect().options].map((option) => option.value)
+    expect(offered.length).toBeGreaterThan(1)
+    for (const value of offered) expect(value <= currentPeriod()).toBe(true)
+    expect(offered).toContain(defaultPeriod())
   })
 
   it('opens the check-in on the month the board is showing', () => {
@@ -192,8 +211,8 @@ describe('the board', () => {
     // opening a check-in for another is what makes a person stop trusting the
     // number.
     given()
-    fireEvent.click(screen.getByRole('button', { name: /previous month/i }))
     const shown = previousPeriod(defaultPeriod())
+    fireEvent.change(monthSelect(), { target: { value: shown } })
     fireEvent.click(screen.getByRole('button', { name: /Colorfil/ }))
     expect(screen.getByText(formatPeriod(shown))).toBeTruthy()
   })

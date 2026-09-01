@@ -32,12 +32,6 @@ export function previousPeriod(period: string): string {
   return addMonths(period, -1)
 }
 
-// Named rather than written as addMonths(period, 1) at each call site, for the
-// same reason previousPeriod is.
-export function nextPeriod(period: string): string {
-  return addMonths(period, 1)
-}
-
 // Last month, not this one. A month is judged after it closes: the owner scores
 // August during September. Defaulting to the current month meant the board read
 // as em dashes for the first three weeks of every month and the month he
@@ -47,10 +41,22 @@ export function defaultPeriod(): string {
   return previousPeriod(currentPeriod())
 }
 
-// Forward stops at the current month; back has no floor. Comparing the strings
-// is sound because a period is always YYYY-MM-01 and those sort as dates do.
-export function canAdvance(period: string): boolean {
-  return period < currentPeriod()
+// The months the board offers, newest first, beginning at the current month.
+// The current month is in the list even though it has not closed: somebody who
+// wants to look at a month in progress should be able to, and the check-in
+// screen has never refused one.
+//
+// A future month is simply absent rather than present and disabled -- which is
+// what this replaces. The arrows had to offer "next" always and then refuse it
+// at the boundary; a list offers only what it will honour.
+//
+// Twelve, not "back to the earliest client". Sizing the list from data would
+// mean plumbing every client's started_on into the board just to decide how
+// many options to draw, and the tool holds one month of history. Raise the
+// count when there is more than a year to look at.
+export function periodOptions(count = 12): string[] {
+  const now = currentPeriod()
+  return Array.from({ length: count }, (_, index) => addMonths(now, -index))
 }
 
 // The confirmation's timestamp. Local zone deliberately: the person reading it

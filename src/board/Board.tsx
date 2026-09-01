@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { canAdvance, defaultPeriod, formatPeriod, nextPeriod, previousPeriod } from '../lib/month'
+import { defaultPeriod, formatPeriod, periodOptions } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import { CheckIn } from '../checkin/CheckIn'
 import { can } from '../lib/capabilities'
@@ -220,28 +220,31 @@ export function Board({ profile }: Props) {
       {adminLink}
       {usersLink}
       <div className={styles.periodBar}>
-        <div className={styles.periodNav}>
-          <button
-            className="button button--quiet"
-            type="button"
-            onClick={() => setPeriod(previousPeriod(period))}
+        {/* The month is the heading AND the control -- one element, so there is
+            nothing to keep in step with anything. It replaces a pair of arrows
+            that could only step one month at a time; going back to May meant
+            four clicks and four board reads.
+
+            A native <select>, not a custom menu: the platform's own dropdown
+            already brings keyboard navigation, type-ahead, the touch picker and
+            the "combo box, August 2026" announcement, and this list is twelve
+            plain strings. aria-label rather than a visible <label>, because the
+            heading is the label -- a form-field caption above a page title
+            would be chrome explaining the obvious. */}
+        <h2 className={styles.periodHeading}>
+          <select
+            aria-label="Month"
+            className={`t-header ${styles.periodSelect}`}
+            onChange={(event) => setPeriod(event.target.value)}
+            value={period}
           >
-            {/* An accessible name that says what it does, not "<". The visible
-                glyph is decoration and is hidden from the accessibility tree. */}
-            <span aria-hidden="true">&larr;</span>
-            <span className="visually-hidden">Previous month</span>
-          </button>
-          <h2 className="t-header">{formatPeriod(period)}</h2>
-          <button
-            className="button button--quiet"
-            type="button"
-            disabled={!canAdvance(period)}
-            onClick={() => setPeriod(nextPeriod(period))}
-          >
-            <span aria-hidden="true">&rarr;</span>
-            <span className="visually-hidden">Next month</span>
-          </button>
-        </div>
+            {periodOptions().map((option) => (
+              <option key={option} value={option}>
+                {formatPeriod(option)}
+              </option>
+            ))}
+          </select>
+        </h2>
         {/* §6's progress line. role="status" because this number changes on the
             way back from a check-in -- the one moment somebody wants to hear
             that their submission counted.

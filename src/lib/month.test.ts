@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   addMonths,
-  canAdvance,
   currentPeriod,
   defaultPeriod,
   formatPeriod,
   formatSavedAt,
-  nextPeriod,
   periodFor,
+  periodOptions,
   previousPeriod,
 } from './month'
 
@@ -61,18 +60,41 @@ describe('defaultPeriod', () => {
   })
 })
 
-describe('canAdvance', () => {
-  it('will not advance past the current month', () => {
-    // You cannot score a month that has not started.
-    expect(canAdvance(previousPeriod(currentPeriod()))).toBe(true)
-    expect(canAdvance(currentPeriod())).toBe(false)
+describe('periodOptions', () => {
+  it('starts at the current month and never offers a later one', () => {
+    // The list is the whole guard. There is no disabled state to get wrong
+    // because a month you cannot score is simply not in it.
+    const options = periodOptions()
+    expect(options[0]).toBe(currentPeriod())
+    for (const option of options) expect(option <= currentPeriod()).toBe(true)
   })
-})
 
-describe('nextPeriod', () => {
-  it('rolls the year in both directions', () => {
-    expect(nextPeriod('2026-12-01')).toBe('2027-01-01')
-    expect(previousPeriod('2027-01-01')).toBe('2026-12-01')
+  it('runs newest first, one month apart, with no gaps or repeats', () => {
+    const options = periodOptions(4)
+    expect(options).toHaveLength(4)
+    expect(options).toEqual([
+      currentPeriod(),
+      addMonths(currentPeriod(), -1),
+      addMonths(currentPeriod(), -2),
+      addMonths(currentPeriod(), -3),
+    ])
+  })
+
+  it('includes the month the board opens on', () => {
+    // If it did not, the board would mount with a value matching no option and
+    // the select would silently show whatever came first instead -- the month
+    // shown and the month read would disagree, which is the one failure this
+    // control exists to prevent.
+    expect(periodOptions()).toContain(defaultPeriod())
+  })
+
+  it('crosses the year boundary without a gap', () => {
+    // Not date arithmetic done by hand: addMonths normalises the rollover, and
+    // this is the case that catches a naive month - index.
+    const options = periodOptions(14)
+    const january = options.findIndex((option) => option.endsWith('-01-01'))
+    expect(january).toBeGreaterThan(-1)
+    expect(options[january + 1]?.endsWith('-12-01')).toBe(true)
   })
 })
 
