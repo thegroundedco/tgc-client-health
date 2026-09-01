@@ -19,32 +19,45 @@
   gap: var(--space-3);
 }
 
-/* The heading is a wrapper and nothing else: .t-header sits on the <select>
-   inside it, not here. Deliberately that way round -- a select does NOT take
-   its parent's type (it uses the browser's form-control face, which is how a
-   page title ends up rendering at the UA's 13px), and inheriting it by hand
-   would mean either the banned `font` shorthand or a second copy of every
-   .t-header value here to drift out of step with the original.
-
-   margin: 0 because the heading rhythm would push the month off the baseline it
-   shares with the progress line, which .periodBar aligns. */
+/* The heading is a wrapper and nothing else: the type sits on the <select>
+   inside it. margin: 0 because the heading rhythm would push the month off the
+   baseline it shares with the progress line, which .periodBar aligns. */
 .periodHeading {
   margin: 0;
 }
 
-/* The month select, dressed as the page title rather than as a form field. It
-   sets no type of its own -- that is .t-header's job, and the two rules
-   therefore cannot fight over which single-class selector the bundler emits
-   last. All this removes is the chrome that would make a page title look like
-   an input.
+/* The month select. It wore .t-header until the owner asked for smaller text on
+   2026-09-01, and .t-header's --step-2 could not be overridden here without a
+   specificity coin-toss -- both are single-class selectors, so which one won
+   would have come down to the order the bundler emitted two stylesheets in.
 
-   `appearance` is deliberately left alone so the browser keeps drawing its own
-   disclosure caret. That caret is the only thing telling somebody this heading
-   opens; strip it and the control becomes invisible.
+   So it carries the header ROLE's tokens directly, one step down the scale.
+   This is deliberately not a copy of .t-header to be kept in step: it is a
+   heading that is meant to read smaller than the other headings, and the only
+   value that differs is the size. Every other line here is the same token
+   .t-header uses, so a change of face or weight still reaches this control.
 
-   No focus rule here either: base.css's global :focus-visible already outlines
-   it, and a select is a normal-sized box, so the global treatment is right. */
+   The longhands are also what the repo's own guard requires: tests/tokens.test.ts
+   rejects the `font` shorthand outside tokens.css, and wants font-family to be a
+   single var(--face-…) reference. */
 .periodSelect {
+  font-family: var(--face-header);
+  font-size: var(--step-1);
+  font-stretch: var(--wdth-header);
+  font-weight: var(--wght-header);
+  line-height: var(--leading-header);
+  letter-spacing: var(--tracking-header);
+  text-transform: uppercase;
+
+  /* Dressed as a page title rather than as a form field: all this removes is
+     the chrome that would make a heading look like an input.
+
+     `appearance` is deliberately left alone so the browser keeps drawing its own
+     disclosure caret. That caret is the only thing telling somebody this heading
+     opens; strip it and the control becomes invisible.
+
+     No focus rule either: base.css's global :focus-visible already outlines it,
+     and a select is a normal-sized box, so the global treatment is right. */
   border: none;
   background: transparent;
   color: inherit;

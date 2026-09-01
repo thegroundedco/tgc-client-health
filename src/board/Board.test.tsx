@@ -195,14 +195,19 @@ describe('the board', () => {
     expect(selectedMonthLabel()).toBe(formatPeriod(target))
   })
 
-  it('offers no month later than this one', () => {
+  it('offers no month later than this one, oldest at the top', () => {
     // What replaces the old disabled next arrow. A month that cannot be scored
     // is absent rather than present-and-refused, so there is no disabled state
     // to get wrong.
+    //
+    // Asserted against periodOptions() in full rather than as a set, so the
+    // rendered ORDER is pinned here too: month.test.ts pins what the list
+    // contains, and only this can catch a .reverse() or a .sort() creeping in
+    // between the helper and the DOM.
     given()
     const offered = [...monthSelect().options].map((option) => option.value)
-    expect(offered.length).toBeGreaterThan(1)
-    for (const value of offered) expect(value <= currentPeriod()).toBe(true)
+    expect(offered).toEqual(periodOptions())
+    expect(offered[offered.length - 1]).toBe(currentPeriod())
     expect(offered).toContain(defaultPeriod())
   })
 

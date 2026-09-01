@@ -548,11 +548,24 @@ heading, and they shipped that way. The owner asked for a dropdown after one run
 wrong shape for the task, because reaching a month four back cost four clicks and four board reads,
 and the arrows never said what was reachable.
 
-The month heading IS the control now — one native `<select>` carrying `.t-header`, so there is no
-second element to keep in step with the first. It lists twelve months, newest first, beginning at
-the current month; `periodOptions()` in `src/lib/month.ts` builds it. Native rather than a custom
-menu because the platform brings keyboard navigation, type-ahead, the touch picker and the
-"combo box, August 2026" announcement for free, and the list is twelve plain strings.
+The month heading IS the control now — one native `<select>`, so there is no second element to keep
+in step with the first. It lists twelve months **oldest first, ending at the current month**;
+`periodOptions()` in `src/lib/month.ts` builds it. Native rather than a custom menu because the
+platform brings keyboard navigation, type-ahead, the touch picker and the "combo box, August 2026"
+announcement for free, and the list is twelve plain strings.
+
+**Ordering, ruled 2026-09-01 after the first look:** oldest at the top, newest at the bottom. The
+owner reads the list as a timeline and a timeline runs forward. The current month is therefore the
+LAST entry and nothing follows it — in September the list ends at September, and October is not
+offered.
+
+**Type, same ruling:** the select wore `.t-header` and now carries the header role's tokens directly
+one step down the scale (`--step-1`, where `.t-header` is `--step-2`), because a page title rendered
+at full heading size read as too loud for a control. It is not a copy of `.t-header` to be kept in
+step: the size is the one value meant to differ, and every other line is the same token, so a change
+of face or weight still reaches it. Overriding `.t-header`'s size from `.periodSelect` was not an
+option — both are single-class selectors, so which won would have depended on the order the bundler
+emitted two stylesheets in.
 
 **A future month is absent rather than disabled**, which is what retired `canAdvance` (and
 `nextPeriod` with it — the arrows were its only caller). The old shape had to offer "next" always
@@ -705,6 +718,8 @@ fill in.
    costs: the list is a fixed twelve months, so a thirteenth month back is unreachable without
    raising the count, where the arrows had no floor at all. Acceptable while the tool holds one
    month of history; revisit when it holds a year.
+   **Amended the same day**, after the owner used it: the list runs oldest-to-newest rather than
+   newest-first, and the control is one step smaller than a full heading. Both are §7.
 
 ## 11. Open items carried forward
 

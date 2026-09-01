@@ -61,22 +61,32 @@ describe('defaultPeriod', () => {
 })
 
 describe('periodOptions', () => {
-  it('starts at the current month and never offers a later one', () => {
+  it('ends at the current month and never offers a later one', () => {
     // The list is the whole guard. There is no disabled state to get wrong
-    // because a month you cannot score is simply not in it.
+    // because a month you cannot score is simply not in it: in September the
+    // list ends at September, and October does not appear.
     const options = periodOptions()
-    expect(options[0]).toBe(currentPeriod())
+    expect(options[options.length - 1]).toBe(currentPeriod())
     for (const option of options) expect(option <= currentPeriod()).toBe(true)
   })
 
-  it('runs newest first, one month apart, with no gaps or repeats', () => {
+  it('does not offer next month', () => {
+    // Stated on its own, against the month itself rather than against a <=
+    // comparison, because this is the specific thing the owner asked for and a
+    // range assertion can pass while an off-by-one at the top end does not.
+    expect(periodOptions()).not.toContain(addMonths(currentPeriod(), 1))
+  })
+
+  it('runs oldest first, one month apart, with no gaps or repeats', () => {
+    // Oldest at the top, newest at the bottom: the owner reads it as a
+    // timeline, and a timeline runs forward.
     const options = periodOptions(4)
     expect(options).toHaveLength(4)
     expect(options).toEqual([
-      currentPeriod(),
-      addMonths(currentPeriod(), -1),
-      addMonths(currentPeriod(), -2),
       addMonths(currentPeriod(), -3),
+      addMonths(currentPeriod(), -2),
+      addMonths(currentPeriod(), -1),
+      currentPeriod(),
     ])
   })
 
@@ -90,11 +100,11 @@ describe('periodOptions', () => {
 
   it('crosses the year boundary without a gap', () => {
     // Not date arithmetic done by hand: addMonths normalises the rollover, and
-    // this is the case that catches a naive month - index.
+    // this is the case that catches a naive month + index.
     const options = periodOptions(14)
-    const january = options.findIndex((option) => option.endsWith('-01-01'))
-    expect(january).toBeGreaterThan(-1)
-    expect(options[january + 1]?.endsWith('-12-01')).toBe(true)
+    const december = options.findIndex((option) => option.endsWith('-12-01'))
+    expect(december).toBeGreaterThan(-1)
+    expect(options[december + 1]?.endsWith('-01-01')).toBe(true)
   })
 })
 

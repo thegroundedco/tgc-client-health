@@ -234,7 +234,7 @@ export function Board({ profile }: Props) {
         <h2 className={styles.periodHeading}>
           <select
             aria-label="Month"
-            className={`t-header ${styles.periodSelect}`}
+            className={styles.periodSelect}
             onChange={(event) => setPeriod(event.target.value)}
             value={period}
           >
