@@ -339,6 +339,23 @@ describe('advocacyContext', () => {
     expect(advocacyContext(scored({ adv_case_study: 3 }))).toBe('None yet')
   })
 
+  it('drops an Unsure standing beside a Yes', () => {
+    // The owner's rule stated exactly, 2026-09-01: for the CONTEXT cell an
+    // Unsure is a No. This is the case the two tests above miss between them --
+    // one has a Yes and no Unsure, the other an Unsure and no Yes, and both
+    // would still pass if Unsure were being listed alongside a Yes.
+    expect(
+      advocacyContext(
+        scored({
+          adv_left_review: 5,
+          adv_case_study: 3,
+          adv_would_refer: 3,
+          adv_reference_check: 1,
+        }),
+      ),
+    ).toBe('Review')
+  })
+
   it('is null when the bucket is not scored at all', () => {
     // Which covers all three ways that happens: no check-in, an unfinished
     // Advocacy section, and a client inside their first 90 days. All three make
