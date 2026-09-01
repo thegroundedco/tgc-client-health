@@ -132,7 +132,12 @@ function rowsOf(
   entries: readonly { id: number; name: string; started_on?: string | null; scores?: Partial<CardCheckin> }[],
 ): MatrixRow[] {
   return entries.map((entry) => ({
-    client: client(entry.id, entry.name, { started_on: entry.started_on ?? OLD }),
+    // `in`, not `?? OLD`: a null start date is a CASE this file tests -- it is
+    // what gates a client out of Advocacy for want of a known tenure -- and ??
+    // would quietly replace it with OLD and test the opposite.
+    client: client(entry.id, entry.name, {
+      started_on: 'started_on' in entry ? (entry.started_on ?? null) : OLD,
+    }),
     checkin: entry.scores === undefined ? null : checkin(entry.id, entry.scores),
     overall: null,
   }))
@@ -1473,5 +1478,7 @@ Expected suite total: **719 + 20 + 15 + 6 = 760 tests / 46 files.**
 3. **Horizontal scroll on a phone.** The grid should scroll sideways inside `.scroller` while the page body stays put.
 4. **The asterisk.** It is a bare `*` after the number; check it is legible against a band fill and not mistaken for part of the figure.
 5. **The toggle's position** in the period bar, which wraps at narrow widths.
+
+**Next slice, decided 2026-09-01 while this plan was being written:** a **light/dark theme**. The owner asked for it and chose *follow the OS with a manual override* — three internal states (system / light / dark), `prefers-color-scheme` for the default, the toggle overriding it, and the choice **persisted**, which is a deliberate exception to this screen's rule that no view state survives a reload: a month or a view is about the work, a theme is about the person. It needs its own design pass before any code, because every contrast ratio recorded in `tokens.css` was measured on warm paper. Early finding worth carrying in: the health bands are light fills with ink labels, a treatment that already works on a dark ground, so the work concentrates on surfaces, text and the action colours rather than on the bands. It also needs a `color-scheme` declaration, or the browser's own chrome — the month `<select>`, scrollbars — stays light under a dark page.
 
 **Not in this slice, carried forward** (spec §11): revenue as its own slice (`sows`, `client_month_revenue`, four capabilities — owed to the owner as a scoped proposal, not a question); the tenure and churn report as Slice 6; lifting Clients and People out of `Board.tsx` into an app shell nav; and reading a bucket's average across several months, which is the obvious next question the moment somebody looks at this table.
