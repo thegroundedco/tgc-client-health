@@ -37,13 +37,27 @@ body {
 }
 
 /* Layout does the spacing: sibling gaps come from a flex container, never from
-   per-element margins that collapse or double unpredictably. */
+   per-element margins that collapse or double unpredictably.
+
+   dl and dd are on this list for a reason worth keeping. The UA stylesheet
+   gives dd `margin-inline-start: 40px` -- not a spacing preference but the
+   indent for the classic term-above-definition layout. The check-in's scale
+   legend lays its dt and dd side by side in a flex row instead, so that indent
+   arrived as a 40px hole between the "1" and "strongly disagree" (reported
+   2026-09-01). dl's own default `margin-block: 1em` was adding vertical space
+   on top of the flex gap in the same place, which is why the legend sat further
+   from its heading than .legend's negative margin intended.
+
+   The app has exactly one dl -- that legend -- so this is global for
+   consistency with the rest of the reset, not to fix a second case. */
 h1,
 h2,
 h3,
 p,
 ul,
 ol,
+dl,
+dd,
 figure {
   margin: 0;
 }
