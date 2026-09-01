@@ -521,3 +521,81 @@ describe('the show-archived toggle', () => {
     expect(screen.getByRole('alert')).toBeTruthy()
   })
 })
+
+describe('the Cards | Matrix toggle', () => {
+  const cardsButton = () => screen.getByRole('button', { name: 'Cards' })
+  const matrixButton = () => screen.getByRole('button', { name: 'Matrix' })
+
+  it('opens on the cards, which is where the monthly work is done', () => {
+    given()
+    expect(clientList()).toBeTruthy()
+    expect(screen.queryByTestId('matrix-table')).toBeNull()
+    expect(cardsButton().getAttribute('aria-pressed')).toBe('true')
+    expect(matrixButton().getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('swaps the cards for the table, and back', () => {
+    given()
+
+    fireEvent.click(matrixButton())
+    expect(screen.getByTestId('matrix-table')).toBeTruthy()
+    expect(clientList()).toBeNull()
+    expect(matrixButton().getAttribute('aria-pressed')).toBe('true')
+
+    fireEvent.click(cardsButton())
+    expect(clientList()).toBeTruthy()
+    expect(screen.queryByTestId('matrix-table')).toBeNull()
+  })
+
+  it('keeps the month dropdown, and the matrix follows it', () => {
+    // The whole reason this is a view of the board rather than a screen of its
+    // own: one period, and nowhere for a second one to drift.
+    given()
+    fireEvent.click(matrixButton())
+
+    const select = screen.getByRole('combobox', { name: 'Month' }) as HTMLSelectElement
+    const target = periodOptions()[4]
+    fireEvent.change(select, { target: { value: target } })
+
+    expect(screen.getByTestId('matrix-table').querySelector('caption')?.textContent).toContain(
+      formatPeriod(target),
+    )
+  })
+
+  it('shows every active client whatever the archive toggle is doing', () => {
+    // Decision 3: the agency's own average must not move because somebody
+    // pressed a display control.
+    given({
+      clients: [
+        { id: 1, name: 'Active One', status: 'active', started_on: null },
+        { id: 2, name: 'Gone', status: 'churned', started_on: null },
+      ],
+      activeTotal: 1,
+    })
+    fireEvent.click(matrixButton())
+
+    const rows = screen.getAllByTestId('matrix-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].querySelector('th')?.textContent).toBe('Active One')
+  })
+
+  it('opens a client\'s check-in from a matrix row, on the month shown', () => {
+    // The wiring Matrix's own tests cannot see: Matrix proves it calls onOpen
+    // with the client, and this proves onOpen is the board's navigation --
+    // carrying the same period a card click would.
+    //
+    // Asserted the way 'opens the check-in on the month the board is showing'
+    // asserts it, and for the same reason: the board is unmounted once the
+    // check-in opens, so the month can only be coming from the check-in screen.
+    given()
+    fireEvent.click(matrixButton())
+    const shown = previousPeriod(defaultPeriod())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Month' }), {
+      target: { value: shown },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Babaloo' }))
+
+    expect(screen.queryByTestId('matrix-table')).toBeNull()
+    expect(screen.getByText(formatPeriod(shown))).toBeTruthy()
+  })
+})

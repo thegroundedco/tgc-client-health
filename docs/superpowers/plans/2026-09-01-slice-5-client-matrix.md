@@ -1228,24 +1228,9 @@ git commit -m "matrix: the table, banded per cell with the average in a tfoot"
 
 Two edits to `src/board/Board.test.tsx`.
 
-**(a) Add a fourth module mock**, beside the three at the top of the file (after the `vi.mock('../clients/useClients', ...)` block, before `import { Board } from './Board'`):
+**AMENDED during execution: do NOT add a `CheckIn` mock.** This step originally called for one, on the reasoning that the file's `{}` supabase mock would make the real `CheckIn` throw on navigation. It does not — the file already has a test that navigates into it — and adding the mock breaks that test. See Amendment 3 below.
 
-```tsx
-// The FOURTH mock, and it is new in this slice. `supabase` is mocked as `{}`
-// above, so the real CheckIn -- which uses useCheckin, which calls
-// supabase.from() -- would throw the moment a test navigated into it. No test
-// in this file navigated into it before, so the seam was never needed; the
-// matrix's row click is the first thing here that opens a check-in.
-//
-// Mocked rather than made to work: what this file is testing is that clicking a
-// row hands the right client to the navigation, not anything the check-in
-// screen does with it. CheckIn has its own tests.
-vi.mock('../checkin/CheckIn', () => ({
-  CheckIn: ({ client }: { client: { name: string } }) => <p>Check-in for {client.name}</p>,
-}))
-```
-
-**(b) Append this describe block** to the end of the file. It uses the file's existing `given` helper and `clientList` helper; do not redefine either.
+**Append this describe block** to the end of the file. It uses the file's existing `given` helper and `clientList` helper; do not redefine either.
 
 ```tsx
 describe('the Cards | Matrix toggle', () => {
@@ -1305,15 +1290,24 @@ describe('the Cards | Matrix toggle', () => {
     expect(rows[0].querySelector('th')?.textContent).toBe('Active One')
   })
 
-  it('opens a client\'s check-in from a matrix row', () => {
+  it('opens a client\'s check-in from a matrix row, on the month shown', () => {
     // The wiring Matrix's own tests cannot see: Matrix proves it calls onOpen
-    // with the client, and this proves onOpen is the board's navigation.
+    // with the client, and this proves onOpen is the board's navigation --
+    // carrying the same period a card click would.
+    //
+    // Asserted the way 'opens the check-in on the month the board is showing'
+    // asserts it, and for the same reason: the board is unmounted once the
+    // check-in opens, so the month can only be coming from the check-in screen.
     given()
     fireEvent.click(matrixButton())
+    const shown = previousPeriod(defaultPeriod())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Month' }), {
+      target: { value: shown },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Babaloo' }))
-    // The check-in replaces the board entirely, the same as clicking a card.
+
     expect(screen.queryByTestId('matrix-table')).toBeNull()
-    expect(screen.getByText('Check-in for Babaloo')).toBeTruthy()
+    expect(screen.getByText(formatPeriod(shown))).toBeTruthy()
   })
 })
 ```
@@ -1471,7 +1465,8 @@ Expected suite total: **719 + 20 + 15 + 6 = 760 tests / 46 files.**
 
 1. **`matrix.ts` is `matrixMath.ts`.** Spec §8 named the arithmetic module `src/board/matrix.ts` beside `src/board/Matrix.tsx`. Those two filenames **cannot coexist on macOS**, whose filesystem is case-insensitive: `./matrix` and `./Matrix` are the same path, the resolver takes `.ts` before `.tsx`, and both imports land on the arithmetic module. `Matrix.tsx` ends up importing itself, `Matrix` is `undefined`, and all sixteen DOM tests fail with "Element type is invalid". Renamed to `matrixMath.ts`, mirroring `src/lib/scoreMath.ts` — the same split for the same reason. The file carries a comment saying so, because the obvious "tidy-up" is to rename it back.
 2. **`border-collapse: separate` with `border-spacing: 0`, not `collapse`.** Collapsed table borders are shared between neighbouring cells and `border-radius` is ignored outright, so the rounded band fills would have had square corners. `separate` with zero spacing renders identically apart from honouring the radius.
-3. **One test fixture bug, found by a red test.** `rowsOf`'s `started_on: entry.started_on ?? OLD` swallowed an explicit `null` — and a null start date is precisely the case being tested, since it gates a client out of Advocacy for want of a known tenure. Changed to an `in` check. The implementation was correct; the fixture was testing the opposite of what it claimed.
+3. **No `CheckIn` mock was added.** Task 3 step 1(a) said to mock it, on the reasoning that the `{}` supabase mock would make the real component throw. That reasoning was wrong: `Board.test.tsx` already has a test — *"opens the check-in on the month the board is showing"* — that clicks a card, renders the real `CheckIn`, and asserts on it. Adding the mock broke that existing test. The matrix's navigation test now asserts the same way it does: the board is unmounted once the check-in opens, so the month on screen can only be coming from the check-in screen, which tests the period is carried through as well as the click.
+4. **One test fixture bug, found by a red test.** `rowsOf`'s `started_on: entry.started_on ?? OLD` swallowed an explicit `null` — and a null start date is precisely the case being tested, since it gates a client out of Advocacy for want of a known tenure. Changed to an `in` check. The implementation was correct; the fixture was testing the opposite of what it claimed.
 
 ---
 

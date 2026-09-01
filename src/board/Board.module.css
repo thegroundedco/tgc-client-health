@@ -97,3 +97,11 @@
 .archiveBar {
   display: flex;
 }
+
+/* The Cards | Matrix switch, in the period bar beside the month and the archive
+   toggle. A flex row of its own so the two buttons sit together and read as one
+   control rather than as two unrelated links. */
+.viewToggle {
+  display: flex;
+  gap: var(--space-2);
+}

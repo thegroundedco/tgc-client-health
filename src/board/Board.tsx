@@ -6,6 +6,7 @@ import { can } from '../lib/capabilities'
 import { ClientsAdmin } from '../clients/ClientsAdmin'
 import { UsersAdmin } from '../users/UsersAdmin'
 import { ClientCard } from './ClientCard'
+import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
 import type { BoardClient } from './useBoard'
@@ -49,6 +50,12 @@ export function Board({ profile }: Props) {
   // state, so a refresh lands somewhere predictable rather than wherever the
   // last visit left off.
   const [showArchived, setShowArchived] = useState(false)
+
+  // Not persisted, matching every other view state on this screen: a reload
+  // lands on the cards, which is where the monthly work is done. The matrix is
+  // a second rendering of the SAME board -- same period, same fetch, same
+  // state -- so it cannot disagree with the cards about a month or a number.
+  const [view, setView] = useState<'cards' | 'matrix'>('cards')
 
   const board = useBoard(period)
 
@@ -160,6 +167,34 @@ export function Board({ profile }: Props) {
     </button>
   ) : null
 
+  // Two buttons rather than one that says what it will become: a single
+  // "Matrix" button gives no indication that the current view is the cards, and
+  // aria-pressed on a pair says which of the two is showing without a person
+  // having to work it out from the label.
+  //
+  // Deliberately not in the empty-roster branch below. A view switch that
+  // reveals a second empty screen is a control with nothing to control.
+  const viewToggle = (
+    <div aria-label="View" className={styles.viewToggle} role="group">
+      <button
+        aria-pressed={view === 'cards'}
+        className="button button--quiet"
+        onClick={() => setView('cards')}
+        type="button"
+      >
+        Cards
+      </button>
+      <button
+        aria-pressed={view === 'matrix'}
+        className="button button--quiet"
+        onClick={() => setView('matrix')}
+        type="button"
+      >
+        Matrix
+      </button>
+    </div>
+  )
+
   // Error before loading: a failed read must never fall through to a screen
   // that looks merely empty. That is v1's "a broken tool looks like an empty
   // one", and it is the reason useBoard reports a status rather than just a
@@ -255,26 +290,40 @@ export function Board({ profile }: Props) {
           {progressLine(board.submitted, board.activeTotal, period)}
         </p>
         {archiveToggle}
+        {viewToggle}
       </div>
 
-      {/* role="list" because base.css removes the markers globally, and WebKit
-          drops a list's semantics when its markers are removed — so in Safari
-          with VoiceOver this would otherwise announce as a group of paragraphs
-          with no count and no position. The role puts the semantics back. The
-          label is what lets a test address this list, and what tells a screen
-          reader which list it is. */}
-      <ul aria-label="Clients" className={styles.grid} role="list">
-        {visible.map((client) => (
-          <ClientCard
-            checkin={board.checkins.get(client.id) ?? null}
-            client={client}
-            key={client.id}
-            onOpen={() => setSelected(client)}
-            score={board.scores.get(client.id) ?? null}
-            viewerId={profile.id}
-          />
-        ))}
-      </ul>
+      {view === 'matrix' ? (
+        // Every active client, not `visible`: the cards are the month's work
+        // list and honour the archive toggle, the matrix is the roster's health
+        // picture and does not. Spec §8, decision 3.
+        <Matrix
+          checkins={board.checkins}
+          clients={board.clients}
+          onOpen={setSelected}
+          period={period}
+          scores={board.scores}
+        />
+      ) : (
+        /* role="list" because base.css removes the markers globally, and WebKit
+           drops a list's semantics when its markers are removed — so in Safari
+           with VoiceOver this would otherwise announce as a group of paragraphs
+           with no count and no position. The role puts the semantics back. The
+           label is what lets a test address this list, and what tells a screen
+           reader which list it is. */
+        <ul aria-label="Clients" className={styles.grid} role="list">
+          {visible.map((client) => (
+            <ClientCard
+              checkin={board.checkins.get(client.id) ?? null}
+              client={client}
+              key={client.id}
+              onOpen={() => setSelected(client)}
+              score={board.scores.get(client.id) ?? null}
+              viewerId={profile.id}
+            />
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
