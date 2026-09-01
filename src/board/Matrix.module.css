@@ -36,12 +36,63 @@
    the right trade here: rounded cells fight a grid, and the earlier version of
    this file used `separate` PRECISELY to keep a radius that this design no
    longer wants.
+
+   ONE EDGE, ONE OWNER. Both weights are 2px as of 2026-09-01, and that makes
+   the collapsing rules dangerous rather than helpful. CSS 2.1 §17.6.2.1 settles
+   a conflict by WIDTH first, then by STYLE, and only then by position -- and
+   two 2px solid borders that differ only in COLOUR fall all the way through to
+   position, where "the one further to the left and further to the top wins".
+   A 2px ink divider on Overall's left edge would therefore lose to the 2px
+   hairline on Advocacy's right edge, and the heavy rule would silently vanish.
+   Wider-wins is what had been carrying it while the grid was 1px.
+
+   So no edge is ever declared twice. Every cell draws only its INLINE-END and
+   its BLOCK-END; the cells on the table's right and bottom draw neither, and
+   the perimeter belongs to .table alone. A heavy rule is then simply that one
+   owner's edge painted in ink -- see .divider and .footRule at the bottom of
+   this file, both of which name an END edge for exactly this reason. Moving
+   either back to a start edge reintroduces the conflict.
    --------------------------------------------------------------------------- */
 
 .table {
   border-collapse: collapse;
   border: 2px solid var(--text-primary);
+  /* Fixed, so the six bucket columns are EQUAL. Under auto layout each column
+     sizes to its own content and "Communication" ends up half again the width
+     of "Growth", which is hard to scan across -- owner, 2026-09-01. Under fixed,
+     the colgroup names Client and Overall and the six in between split what is
+     left, identically.
+
+     The pair of sizes below is what keeps that from crushing anything: the table
+     fills its container, but never shrinks past the point where a bucket column
+     can hold "Communication" on one line. Below that the scroller takes over.
+     Raise min-inline-size, not the column widths, if a longer bucket name is
+     ever added. */
+  table-layout: fixed;
   inline-size: 100%;
+  min-inline-size: 70rem;
+}
+
+/* 70rem total, less these two, leaves 42rem for the six -- 7rem each. */
+.colClient {
+  inline-size: 20rem;
+}
+
+.colOverall {
+  inline-size: 8rem;
+}
+
+/* The last cell in every row, and every cell in the last row group, yield their
+   outer edge to the table's own border above. Without this the cell's hairline
+   and the table's ink meet at the perimeter -- same width, same style, differing
+   only in colour -- and a CELL beats a TABLE in that tie, leaving the box light
+   down the right side and along the bottom. */
+.table tr > *:last-child {
+  border-inline-end: 0;
+}
+
+.table tfoot tr > * {
+  border-block-end: 0;
 }
 
 /* Left, not centred: the caption is a sentence, and a centred sentence over a
@@ -60,7 +111,9 @@
 .cell,
 .blank {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--rule-hairline);
+  /* END edges only -- see "ONE EDGE, ONE OWNER" above. */
+  border-inline-end: 2px solid var(--rule-hairline);
+  border-block-end: 2px solid var(--rule-hairline);
 }
 
 /* The column headers. The bucket names sit over numbers, so they align end with
@@ -148,16 +201,20 @@
   border-block-end: 2px solid var(--text-primary);
 }
 
-/* The wall to the left of Overall: everything before it is a bucket, everything
-   from it on is the headline. */
+/* The wall before Overall: everything to its left is a bucket, everything from
+   there on is the headline.
+   Carried on the LAST BUCKET cell's inline-END, not on Overall's inline-start,
+   because that edge's owner is the cell to its left. See "ONE EDGE, ONE OWNER". */
 .divider {
-  border-inline-start: 2px solid var(--text-primary);
+  border-inline-end: 2px solid var(--text-primary);
 }
 
 /* The floor above the Average row: everything above is a client, the row itself
-   is the agency. */
+   is the agency.
+   Carried on the LAST CLIENT ROW's block-END, not on the footer's block-start,
+   for the same reason. */
 .footRule {
-  border-block-start: 2px solid var(--text-primary);
+  border-block-end: 2px solid var(--text-primary);
 }
 
 /* The footer cell under Overall. The Average row stops before it: an

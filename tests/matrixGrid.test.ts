@@ -50,6 +50,34 @@ describe('the matrix stylesheet', () => {
     }
   })
 
+  // ONE EDGE, ONE OWNER. Both weights are 2px, so the collapsing rules no longer
+  // settle a conflict by width. CSS 2.1 §17.6.2.1 falls through width, then
+  // style, then POSITION -- and two 2px solid borders differing only in colour
+  // reach that last step, where "the one further to the left and further to the
+  // top wins". A heavy ink rule declared on a start edge therefore loses to the
+  // hairline on the cell before it and silently disappears.
+  //
+  // The whole model rests on no edge ever being declared twice: cells draw only
+  // their END edges, and each heavy rule is that one owner's edge in ink.
+  describe('the one-edge-one-owner model', () => {
+    it('gives cells end edges only, never the four-sided shorthand', () => {
+      expect(SOURCE).toContain('border-inline-end: 2px solid var(--rule-hairline)')
+      expect(SOURCE).toContain('border-block-end: 2px solid var(--rule-hairline)')
+      // `border: <n>px solid var(--rule-hairline)` would declare all four sides
+      // and put two owners on every interior edge again.
+      expect(/border:\s*\d+px\s+solid\s+var\(--rule-hairline\)/.test(SOURCE)).toBe(false)
+    })
+
+    it('carries both heavy rules on END edges', () => {
+      // .divider on the last BUCKET column's right, not Overall's left.
+      expect(ruleBody('.divider')).toContain('border-inline-end')
+      expect(ruleBody('.divider')).not.toContain('border-inline-start')
+      // .footRule on the last CLIENT row's bottom, not the footer's top.
+      expect(ruleBody('.footRule')).toContain('border-block-end')
+      expect(ruleBody('.footRule')).not.toContain('border-block-start')
+    })
+  })
+
   it('keeps the borders collapsed, which is what the two weights rest on', () => {
     // `collapse` merges each pair of adjacent cell borders into one line, and
     // where two weights meet it keeps the WIDER one -- which is the only reason

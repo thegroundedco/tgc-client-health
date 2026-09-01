@@ -40,6 +40,12 @@ function Score({ value }: { value: number | null }) {
   return <>{value.toFixed(2)}</>
 }
 
+// The wall before Overall, carried on the last bucket column's END edge. Read
+// once here rather than spelled out at each of the three places that draw a
+// bucket cell -- header, client row, footer -- which must all agree or the rule
+// would run down only part of the table.
+const lastBucket = (index: number) => (index === BUCKETS.length - 1 ? styles.divider : '')
+
 // The board's second view: every active client down the rows, the six buckets
 // across, and what the agency averages in each. Spec §4.
 //
@@ -77,6 +83,19 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
     <div className={styles.matrix}>
       <div className={styles.scroller}>
         <table className={styles.table} data-testid="matrix-table">
+          {/* The six bucket columns must be equal to each other -- owner's call,
+              2026-09-01: unequal ones are hard to scan across. Under
+              `table-layout: fixed` a column with no width of its own takes an
+              equal share of what is left, so naming only Client and Overall is
+              what makes the six in between identical. Naming all eight would
+              work too and would be eight numbers to keep in agreement. */}
+          <colgroup>
+            <col className={styles.colClient} />
+            {columns.map(({ bucket }) => (
+              <col key={bucket} />
+            ))}
+            <col className={styles.colOverall} />
+          </colgroup>
           {/* Names what the table is and which month it covers, so it is
               self-describing when read out of the page's context. */}
           <caption className={`t-caption ${styles.caption}`}>
@@ -87,27 +106,36 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               <th className={`t-label ${styles.headName}`} scope="col">
                 Client
               </th>
-              {columns.map(({ bucket, definition }) => (
+              {columns.map(({ bucket, definition }, index) => (
                 // The full bucket name, not the initial. The card's bars use the
                 // initial because six letters have to fit under six bars in a
                 // 15rem card; a table has a whole column and a scroller, so the
                 // word costs width the grid can afford and saves the reader
                 // knowing the rubric by heart. Owner's call, 2026-09-01.
-                <th className={`t-label ${styles.head}`} key={bucket} scope="col">
+                <th
+                  className={`t-label ${styles.head} ${lastBucket(index)}`}
+                  key={bucket}
+                  scope="col"
+                >
                   {definition.label}
                 </th>
               ))}
-              <th className={`t-label ${styles.head} ${styles.divider}`} scope="col">
+              <th className={`t-label ${styles.head}`} scope="col">
                 Overall
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
+            {rows.map((row, rowIndex) => {
               const band = bandFor(row.overall)
+              // The rule between the clients and the agency's own row. It is the
+              // LAST CLIENT ROW's bottom edge rather than the footer's top edge,
+              // because that edge has one owner and this is it. See "ONE EDGE,
+              // ONE OWNER" in the stylesheet.
+              const floor = rowIndex === rows.length - 1 ? styles.footRule : ''
               return (
                 <tr data-testid="matrix-row" key={row.client.id}>
-                  <th className={styles.name} data-band={band} scope="row">
+                  <th className={`${styles.name} ${floor}`} data-band={band} scope="row">
                     {/* The flex lives on this span, NOT on the <th>. A table
                         cell given `display: flex` leaves the table formatting
                         context, stops collapsing its borders with its
@@ -148,11 +176,11 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                       </span>
                     </span>
                   </th>
-                  {columns.map(({ bucket }) => {
+                  {columns.map(({ bucket }, index) => {
                     const value = cellValue(row, bucket)
                     return (
                       <td
-                        className={`${styles.cell} numeric`}
+                        className={`${styles.cell} ${lastBucket(index)} ${floor} numeric`}
                         data-band={bandFor(value)}
                         data-testid="matrix-cell"
                         key={bucket}
@@ -162,7 +190,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                     )
                   })}
                   <td
-                    className={`${styles.cell} ${styles.divider} numeric`}
+                    className={`${styles.cell} ${floor} numeric`}
                     data-band={band}
                     data-testid="matrix-overall"
                   >
@@ -174,12 +202,12 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
           </tbody>
           <tfoot>
             <tr>
-              <th className={`${styles.name} ${styles.footRule}`} scope="row">
+              <th className={styles.name} scope="row">
                 Average
               </th>
-              {columns.map(({ bucket, average }) => (
+              {columns.map(({ bucket, average }, index) => (
                 <td
-                  className={`${styles.cell} ${styles.footRule} numeric`}
+                  className={`${styles.cell} ${lastBucket(index)} numeric`}
                   data-band={bandFor(average.mean)}
                   data-testid="matrix-average"
                   key={bucket}
@@ -196,7 +224,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               {/* The Average row stops before Overall. An agency-wide "overall
                   of overalls" would average numbers built on different
                   divisors, and nobody has asked for one. */}
-              <td className={`${styles.blank} ${styles.divider} ${styles.footRule}`} />
+              <td className={styles.blank} />
             </tr>
           </tfoot>
         </table>
