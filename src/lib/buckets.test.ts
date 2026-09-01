@@ -8,6 +8,8 @@ import {
   OVERALL_EXCLUDED,
   OVERALL_QUESTIONS,
   questionsFor,
+  RATE_OPTIONS,
+  choiceLabel,
 } from './buckets'
 
 describe('the six buckets', () => {
@@ -94,6 +96,18 @@ describe('the question keys', () => {
   })
 })
 
+describe('the rate question', () => {
+  it('asks about direction, not about an increase', () => {
+    // Reworded 2026-09-01. The key is still fin_rate_increased -- it is the
+    // column name, and renaming it would be a migration to buy nothing -- so
+    // the key alone no longer says what the question asks. This is the only
+    // place that does.
+    const question = questionsFor('finances').find((q) => q.key === 'fin_rate_increased')
+    expect(question?.prompt).toBe('Rate over the last 90 days.')
+    expect(question?.options).toBe(RATE_OPTIONS)
+  })
+})
+
 describe('one answer type', () => {
   it('offers exactly three choices, ascending, mapped to 1 / 3 / 5', () => {
     // The mapping IS the losslessness argument in spec §3.2: a four-question
@@ -101,6 +115,51 @@ describe('one answer type', () => {
     // here silently rescales Advocacy's whole history.
     expect(CHOICE_OPTIONS.map((option) => option.value)).toEqual([1, 3, 5])
     expect(CHOICE_OPTIONS.map((option) => option.label)).toEqual(['No', 'Unsure', 'Yes'])
+  })
+
+  it('writes the same 1 / 3 / 5 whatever the three words are', () => {
+    // THE load-bearing assertion of the 2026-09-01 relabelling. "Rate over the
+    // last 90 days." reads Decreased / Break even / Increased instead of
+    // No / Unsure / Yes, and that is a copy change ONLY because both sets write
+    // the same three values into the same column. The moment an option set
+    // picks different numbers, the same column holds two incompatible scales,
+    // every historical answer is silently rescaled, and the check constraint is
+    // the only thing left between the screen and nonsense.
+    for (const options of [CHOICE_OPTIONS, RATE_OPTIONS]) {
+      expect(options.map((option) => option.value)).toEqual([1, 3, 5])
+    }
+  })
+
+  it('labels the rate question by direction, worse-left to better-right', () => {
+    expect(RATE_OPTIONS.map((option) => option.label)).toEqual([
+      'Decreased',
+      'Break even',
+      'Increased',
+    ])
+  })
+
+  it('gives the rate question its own words and leaves the other six alone', () => {
+    // Named, not counted. A count passes just as happily if the wrong question
+    // picked up the direction labels -- and "Pays on time: Decreased" is
+    // exactly the failure that would ship without anybody noticing, because it
+    // renders, saves and scores identically.
+    const relabelled = BUCKETS.flatMap((bucket) => questionsFor(bucket))
+      .filter((question) => question.options !== undefined)
+      .map((question) => question.key)
+    expect(relabelled).toEqual(['fin_rate_increased'])
+  })
+
+  it('reads a stored value against the question that stored it', () => {
+    // The same 3 is "Unsure" on six questions and "Break even" on the seventh.
+    // choiceLabel defaulting to CHOICE_OPTIONS is what the other six rely on;
+    // passing the set is what stops the seventh printing the wrong word on its
+    // "last month" line -- wrong being worse than absent.
+    expect(choiceLabel(3)).toBe('Unsure')
+    expect(choiceLabel(3, RATE_OPTIONS)).toBe('Break even')
+    expect(choiceLabel(1, RATE_OPTIONS)).toBe('Decreased')
+    // A legacy 2 or 4 is real August 2026 data and belongs to no option.
+    expect(choiceLabel(4, RATE_OPTIONS)).toBeUndefined()
+    expect(choiceLabel(2)).toBeUndefined()
   })
 
   it('gives Finances and Advocacy the choice control and nothing else', () => {

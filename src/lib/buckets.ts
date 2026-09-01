@@ -25,6 +25,8 @@ export const GATED_BUCKET: Bucket = 'advocacy'
 
 export type QuestionKind = 'scale' | 'choice'
 
+export type ChoiceOption = { label: string; value: number }
+
 export type Question = {
   // The column on public.checkins. Also the key in an Answers object.
   key: string
@@ -32,13 +34,19 @@ export type Question = {
   // Which CONTROL the check-in screen draws, and nothing more. Every answer,
   // whatever its kind, is a nullable smallint 1-5 in the same shape of column
   // and is scored by the same mean (spec §3.2, amended 2026-08-31). 'scale'
-  // draws five numbered radios; 'choice' draws the three in CHOICE_OPTIONS.
+  // draws five numbered radios; 'choice' draws three labelled ones -- the
+  // question's own `options` if it has them, otherwise CHOICE_OPTIONS.
   //
   // This USED to decide how a bucket was scored and, through a filter on it,
   // which questions the overall averaged. Both of those were wrong: the first
   // capped a three-question yes/no bucket at 4.00, and the second meant that
   // changing a question's control silently changed the headline divisor.
   kind: QuestionKind
+  // Only for `choice`, and only where No/Unsure/Yes is the wrong three words.
+  // Absent means CHOICE_OPTIONS, which is six of the seven choice questions.
+  // The VALUES are still 1, 3 and 5 whatever the labels say -- that is what
+  // keeps this a copy change rather than a migration.
+  options?: readonly ChoiceOption[]
 }
 
 export type BucketDefinition = {
@@ -49,6 +57,56 @@ export type BucketDefinition = {
   // AND that each still matches its label, so a rename fails the build.
   initial: string
   questions: readonly Question[]
+}
+
+// The three answers a `choice` question offers by default, and the value each
+// writes.
+//
+// Ascending, so that every control on the check-in screen runs worse-left to
+// better-right -- the same direction as QuestionRow's 1 through 5. The old
+// two-option row read Yes then No, against that direction; on a screen where 14
+// rows run one way and 7 the other, the leftmost box is a trap.
+//
+// The values are the losslessness argument of spec §3.2, not a preference: a
+// four-question bucket answered in 5s and 1s produces exactly what the retired
+// `1 + yeses` produced, so no Advocacy score moves. Changing them rescales
+// history.
+export const CHOICE_OPTIONS: readonly ChoiceOption[] = [
+  { label: 'No', value: 1 },
+  { label: 'Unsure', value: 3 },
+  { label: 'Yes', value: 5 },
+]
+
+// "Rate over the last 90 days." is a direction, not a yes/no, so No/Unsure/Yes
+// were the wrong three words for it (owner, 2026-09-01). Break even is the case
+// he named: a client who paid more one month and went back to the regular rate,
+// so the ninety days net out.
+//
+// SAME VALUES, different words. 1/3/5 in the same column, so no score moves, no
+// constraint changes and there is no migration -- which is the whole reason the
+// options are labels over a fixed scale rather than a set of their own.
+//
+// Worse-left to better-right, like every other control on the screen: a rate
+// that fell is the bad end.
+export const RATE_OPTIONS: readonly ChoiceOption[] = [
+  { label: 'Decreased', value: 1 },
+  { label: 'Break even', value: 3 },
+  { label: 'Increased', value: 5 },
+]
+
+// The label a `choice` answer reads as, for the "last month" line. Takes the
+// question's own option set, because the same stored 3 reads as "Unsure" on six
+// questions and "Break even" on the seventh -- a lookup against one global list
+// would print the wrong word rather than no word, which is worse.
+//
+// Undefined for a value no control can write -- a legacy 2 or 4 in a Finance
+// column, which is real data (August 2026) and must not be rendered as though
+// it were a choice.
+export function choiceLabel(
+  value: number,
+  options: readonly ChoiceOption[] = CHOICE_OPTIONS,
+): string | undefined {
+  return options.find((option) => option.value === value)?.label
 }
 
 export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
@@ -76,7 +134,16 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     questions: [
       { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'choice' },
       { key: 'fin_pays_on_time', prompt: 'Pays on time.', kind: 'choice' },
-      { key: 'fin_rate_increased', prompt: 'Rate has increased over the last 90 days.', kind: 'choice' },
+      // The key is historical and deliberately not renamed: it is the column
+      // name on public.checkins, and renaming it would be a migration to buy
+      // nothing. The question stopped being "did it increase, yes or no?" on
+      // 2026-09-01 and became a direction with three answers.
+      {
+        key: 'fin_rate_increased',
+        prompt: 'Rate over the last 90 days.',
+        kind: 'choice',
+        options: RATE_OPTIONS,
+      },
     ],
   },
   relationship: {
@@ -129,30 +196,6 @@ export const ALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
 )
 
 export type QuestionKey = (typeof ALL_QUESTIONS)[number]
-
-// The three answers a `choice` question offers, and the value each writes.
-//
-// Ascending, so that every control on the check-in screen runs worse-left to
-// better-right -- the same direction as QuestionRow's 1 through 5. The old
-// two-option row read Yes then No, against that direction; on a screen where 14
-// rows run one way and 7 the other, the leftmost box is a trap.
-//
-// The values are the losslessness argument of spec §3.2, not a preference: a
-// four-question bucket answered in 5s and 1s produces exactly what the retired
-// `1 + yeses` produced, so no Advocacy score moves. Changing them rescales
-// history.
-export const CHOICE_OPTIONS = [
-  { label: 'No', value: 1 },
-  { label: 'Unsure', value: 3 },
-  { label: 'Yes', value: 5 },
-] as const
-
-// The label a `choice` answer reads as, for the "last month" line. Undefined for
-// a value no control can write -- a legacy 2 or 4 in a Finance column, which is
-// real data (August 2026) and must not be rendered as though it were a choice.
-export function choiceLabel(value: number): string | undefined {
-  return CHOICE_OPTIONS.find((option) => option.value === value)?.label
-}
 
 // The one bucket the headline number leaves out. Named apart from GATED_BUCKET
 // even though both are Advocacy today, because they are two unrelated facts

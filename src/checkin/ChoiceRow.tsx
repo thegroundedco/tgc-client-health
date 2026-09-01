@@ -21,11 +21,18 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
   // several of these, and stable across renders.
   const labelId = `question-${question.key}-label`
 
+  // The question's own three words where it has them, No/Unsure/Yes otherwise.
+  // Read once here rather than at each of the four use sites below, so the
+  // radios, the focus target and the "last month" line cannot end up reading
+  // different lists.
+  const options = question.options ?? CHOICE_OPTIONS
+
   // Clear's button unmounts the instant it fires (it only renders while
   // value !== undefined), taking focus with it. An element detached while
   // focused hands focus to <body>, so without somewhere to send it the very
   // next Tab would restart at the top of the document instead of continuing in
-  // this row. The first radio (No) is never unmounted, so it is always a
+  // this row. The first radio -- the worst answer, whatever it is called on
+  // this question -- is never unmounted, so it is always a
   // valid target, and it is where the person is likely headed next: they just
   // cleared an answer and the next move is to pick one.
   const firstRadio = useRef<HTMLInputElement>(null)
@@ -59,10 +66,10 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
 
       <div className={styles.scale} role="radiogroup" aria-labelledby={labelId}>
         <div className={styles.options}>
-          {CHOICE_OPTIONS.map((option) => (
+          {options.map((option) => (
             <label className={styles.option} key={option.value}>
               <input
-                ref={option.value === CHOICE_OPTIONS[0].value ? firstRadio : undefined}
+                ref={option.value === options[0].value ? firstRadio : undefined}
                 className={styles.input}
                 type="radio"
                 // Scoped to the question key, as in QuestionRow: two questions
@@ -71,7 +78,7 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
                 name={`question-${question.key}`}
                 value={option.value}
                 // === value, not a truthiness check: value can be the lowest
-                // option (No, 1), and 1 is an answer, not an absence of one. A
+                // option (1), and 1 is an answer, not an absence of one. A
                 // truthy check here would leave "No" unchecked and read as
                 // unanswered.
                 checked={value === option.value}
@@ -115,7 +122,7 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
             'No answer last month'
           ) : (
             <>
-              Last month: <span>{choiceLabel(lastValue) ?? lastValue}</span>
+              Last month: <span>{choiceLabel(lastValue, options) ?? lastValue}</span>
             </>
           )}
         </p>

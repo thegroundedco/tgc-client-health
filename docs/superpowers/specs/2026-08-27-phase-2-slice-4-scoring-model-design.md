@@ -79,7 +79,24 @@ turns them into a migration and §9 verifies them by name.
 
 **Finances** — `fin_rack_rate`, `fin_pays_on_time`, `fin_rate_increased`
 
-  Paying rack rate / pays on time / increased rate over the last 90 days.
+  Paying rack rate / pays on time / rate over the last 90 days.
+
+  **AMENDED 2026-09-01: the third question is a DIRECTION, not a yes/no.** Its prompt is
+  "Rate over the last 90 days." and it answers **Decreased (1) / Break even (3) / Increased (5)**
+  instead of No / Unsure / Yes. Break even is the owner's case: a client who paid more one month
+  and went back to the regular rate, so the ninety days net out — a state the old wording could
+  only record as "No", flattening it against a client whose rate actually fell.
+
+  **This is a copy change, not a migration.** The values are still 1, 3 and 5 in the same
+  `fin_rate_increased` column, so no score moves, no constraint changes and `verify:score` is
+  untouched. The column KEEPS its name deliberately: renaming it would be a migration to buy
+  nothing, and the cost — that the key alone no longer says what the question asks — is paid in
+  `buckets.ts` and pinned by a test.
+
+  **It re-labels history, and that is the real cost.** August 2026 holds five 3s on this question,
+  entered when a 3 meant "Unsure" (and before that, a middling point on a 1-5 scale). Those same
+  rows now read "Break even" on next month's comparison line. Nothing recomputes; the words over
+  the stored number changed.
 
   **AMENDED 2026-08-31: "On terms" is REMOVED, and the column is DROPPED.** Finances is a
   THREE-question bucket, and the model has 21 questions, not 22.
@@ -736,6 +753,14 @@ fill in.
    month of history; revisit when it holds a year.
    **Amended the same day**, after the owner used it: the list runs oldest-to-newest rather than
    newest-first, and the control is one step smaller than a full heading. Both are §7.
+10. **A `choice` question may carry its own three words** (§3.1), ruled by the owner 2026-09-01.
+   The alternative was a fourth `QuestionKind`, which would have meant a third row component and a
+   third branch everywhere kind is switched on, to render three radios that differ only in their
+   labels. Instead `Question.options` is optional and defaults to `CHOICE_OPTIONS`, so six of the
+   seven choice questions are unchanged and unaware. What it costs: nothing stops a future option
+   set choosing different VALUES, which would put two incompatible scales in one column and rescale
+   every historical answer silently — so `buckets.test.ts` asserts every option set writes 1 / 3 / 5,
+   and that assertion is the one holding this design together.
 
 ## 11. Open items carried forward
 

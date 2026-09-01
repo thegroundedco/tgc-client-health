@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ChoiceRow } from './ChoiceRow'
+import { RATE_OPTIONS } from '../lib/buckets'
 import type { Question } from '../lib/buckets'
 
 // ChoiceRow is QuestionRow's three-option sibling, for Finances' and
@@ -29,11 +30,17 @@ const QUESTION: Question = {
 // the answer and re-rendering. Testing focus behaviour without that round
 // trip would test a sequence the app never performs, so this harness is the
 // parent.
-function Harness({ initial }: { initial: number | undefined }) {
+function Harness({
+  initial,
+  question = QUESTION,
+}: {
+  initial: number | undefined
+  question?: Question
+}) {
   const [value, setValue] = useState<number | undefined>(initial)
   return (
     <ChoiceRow
-      question={QUESTION}
+      question={question}
       value={value}
       lastValue={null}
       disabled={false}
@@ -80,6 +87,55 @@ describe('a choice row in a real DOM', () => {
     expect(screen.getByLabelText('No')).not.toBeNull()
     expect(screen.getByLabelText('Unsure')).not.toBeNull()
     expect(screen.getByLabelText('Yes')).not.toBeNull()
+  })
+
+  // The rate question is the one `choice` question that does not read
+  // No/Unsure/Yes. Its labels come from the question, its VALUES do not: the
+  // same 1/3/5 in the same column, which is the only reason relabelling it was
+  // not a migration.
+  describe('a question carrying its own three words', () => {
+    const RATE: Question = {
+      key: 'fin_rate_increased',
+      prompt: 'Rate over the last 90 days.',
+      kind: 'choice',
+      options: RATE_OPTIONS,
+    }
+
+    it('renders the question\'s labels over the same three values', () => {
+      render(<ChoiceRow {...props({ question: RATE })} />)
+      expect(screen.getAllByRole('radio').map((radio) => (radio as HTMLInputElement).value)).toEqual(
+        ['1', '3', '5'],
+      )
+      expect(screen.getByLabelText('Decreased')).toBeTruthy()
+      expect(screen.getByLabelText('Break even')).toBeTruthy()
+      expect(screen.getByLabelText('Increased')).toBeTruthy()
+      // The default words must not leak onto it.
+      expect(screen.queryByLabelText('Unsure')).toBeNull()
+    })
+
+    it('reads last month in the question\'s own words', () => {
+      // The failure this prevents is a wrong word, not a missing one: a stored
+      // 3 printed as "Unsure" on a question whose 3 means "Break even" is a
+      // sentence that looks fine and says something else.
+      render(<ChoiceRow {...props({ question: RATE, lastValue: 3 })} />)
+      // Read off the "Last month:" line itself. A page-wide text query would
+      // find "Break even" on the radio too and pass without the line ever
+      // rendering.
+      expect(screen.getByText('Last month:').textContent).toBe('Last month: Break even')
+    })
+
+    it('anchors Clear\'s focus to THIS question\'s first option', () => {
+      // firstRadio follows the question's own options now. Asserted on the
+      // accessible name rather than on the value, because both option sets
+      // start at 1 -- a firstRadio still bound to CHOICE_OPTIONS would focus a
+      // radio with the same value and this would pass while being wrong.
+      render(<Harness initial={5} question={RATE} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+      expect(focusedValue()).toBe('1')
+      expect((document.activeElement as HTMLInputElement).labels?.[0]?.textContent).toBe(
+        'Decreased',
+      )
+    })
   })
 
   it('checks the radio matching value when it is 5 (Yes)', () => {
