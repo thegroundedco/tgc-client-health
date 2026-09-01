@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Matrix } from './Matrix'
@@ -203,22 +203,25 @@ describe('the matrix table', () => {
 
   it('reads the band beside the client name, so colour is never the only signal', () => {
     // Parent spec §9.3: teal against amber measures 1.06:1, so no band may be
-    // carried by hue alone. The band used to be its own column; it now reads
-    // "Babaloo - Healthy" in the client cell, which is the owner's format.
+    // carried by hue alone. The band used to be its own column; it now sits at
+    // the right end of the client cell.
+    //
+    // The two parts are asserted separately rather than as the cell's whole
+    // text. There is no separator between them any more -- the layout does that
+    // job -- so a concatenated assertion would read "BabalooHealthy" and would
+    // be pinning an artefact of the DOM rather than anything a person sees.
     renderMatrix({
       scores: [[1, { client_id: 1, overall_score: 4.71, advocacy_applies: true }]],
     })
-    expect(screen.getByTestId('matrix-row').querySelector('th')?.textContent).toBe(
-      'Babaloo - Healthy',
-    )
+    const row = screen.getByTestId('matrix-row')
+    expect(within(row).getByTestId('matrix-name').textContent).toBe('Babaloo')
+    expect(within(row).getByTestId('matrix-band').textContent).toBe('Healthy')
     expect(screen.getByTestId('matrix-overall').textContent).toBe('4.71')
   })
 
   it('reads Not scored beside the name when the overall is null', () => {
     renderMatrix({ scores: [[1, { client_id: 1, overall_score: null, advocacy_applies: true }]] })
-    expect(screen.getByTestId('matrix-row').querySelector('th')?.textContent).toBe(
-      'Babaloo - Not scored',
-    )
+    expect(screen.getByTestId('matrix-band').textContent).toBe('Not scored')
   })
 
   it('keeps the band out of the button, so the control is named for the client', () => {

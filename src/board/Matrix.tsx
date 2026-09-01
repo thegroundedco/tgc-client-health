@@ -128,10 +128,15 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                     {/* The band reads beside the name rather than in a column of
                         its own -- owner's call, 2026-09-01. It stays OUTSIDE the
                         button so the control's accessible name is the client,
-                        not "Babaloo - Watch", and so the band is not something
-                        you appear to be able to click. */}
+                        not "Babaloo Watch", and so the band is not something you
+                        appear to be able to click.
+
+                        No " - " between them any more: the separator existed to
+                        join two words on one line, and .name's space-between
+                        does that job now. A dash floating in the gap between a
+                        left-aligned name and a right-aligned band belongs to
+                        neither. */}
                     <span className={styles.bandWord} data-testid="matrix-band">
-                      {' - '}
                       {BAND_LABELS[band]}
                     </span>
                   </th>

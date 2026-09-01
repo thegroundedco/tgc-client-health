@@ -51,9 +51,20 @@
   text-align: start;
 }
 
-/* The client's name, and the tfoot's "Average". A row header, so it aligns with
-   the names beneath rather than with the numbers beside. */
+/* The client's name, and the tfoot's "Average". A row header, so the name
+   aligns with the names beneath rather than with the numbers beside.
+
+   A flex row with the two ends pushed apart: the name holds the left edge and
+   the band holds the right, so the bands line up as their own column inside
+   this one. space-between rather than a fixed name width -- the column is as
+   wide as its longest client, and the bands follow that edge whatever it is.
+
+   The tfoot's "Average" has no second child and simply sits left. */
 .name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
   padding: var(--space-2) var(--space-3);
   text-align: start;
   white-space: nowrap;
@@ -129,14 +140,40 @@
   border-block-start: 2px solid var(--text-secondary);
 }
 
-/* The band word beside the client's name -- "Babaloo - Watch". Quieter than the
-   name by size and weight, not by colour: the cell is a band fill and its ink
-   is --text-on-band, so a secondary grey here would fight the fill rather than
-   recede into it. */
+/* The band word at the right end of the client cell.
+
+   The caption ROLE is bold by design -- a caption in this app is small and has
+   to hold its own against body text. Here the same size has the opposite job:
+   it sits beside a client's name and must not compete with it. So the role's
+   face, width, size and tracking are kept and only the weight is dropped to
+   regular, with a light hand on the opacity on top. That pair is the "happy
+   medium between bold and ghost" the owner asked for, 2026-09-01.
+
+   WEIGHT ONLY. Do not soften this with opacity, and do not swap in a quieter
+   ink -- both were tried on 2026-09-01 and both fail. This cell is a BAND FILL,
+   and --text-on-band is the only ink whose contrast is measured against all
+   four of those grounds. At 13px the word is normal-size text and needs 4.5:1.
+   Measured, ink against each fill:
+
+                       100%    @0.85   @0.72
+     teal   healthy    8.13    6.01    4.44
+     amber  watch      7.64    5.75    4.30
+     red    at risk    4.61    3.92    3.26
+     rule   not scored 9.88    6.99    4.96
+
+   At 0.72 three of the four fail. On red NO useful opacity passes, because the
+   ink starts at 4.61:1 with no headroom to spend -- the brand red is why
+   --brand-red-dark exists for text elsewhere, and it cannot help here because
+   the red is the BACKGROUND. A quieter ink token has the same problem and adds
+   an unmeasured colour on a coloured ground, which is the one thing tokens.css
+   exists to prevent. So the subtlety is carried by weight alone: regular
+   against the name's own weight, which is a clear step down and costs no
+   contrast. If it still reads too heavy, --wght-eyebrow (300) is the next stop
+   and is also free. */
 .bandWord {
   font-family: var(--face-caption);
   font-stretch: var(--wdth-caption);
-  font-weight: var(--wght-caption);
+  font-weight: var(--wght-body);
   font-size: var(--step--1);
   letter-spacing: var(--tracking-caption);
 }
