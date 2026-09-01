@@ -1,4 +1,4 @@
-/* The client × bucket matrix. One table, banded per cell.
+/* The client × bucket matrix. One table, banded per cell, ruled like a sheet.
 
    Every colour here is a var(--token) reference: tests/tokens.test.ts walks this
    file and fails the build on a literal, in any notation. */
@@ -9,20 +9,38 @@
   gap: var(--space-3);
 }
 
-/* Horizontal scroll lives here, never on the page body. Seven columns plus a
-   name fit a laptop; a phone scrolls the grid sideways while the rest of the
-   screen stays put. */
+/* Horizontal scroll lives here, never on the page body. Eight columns of full
+   bucket names do not fit a laptop; a phone scrolls the grid sideways while the
+   rest of the screen stays put. */
 .scroller {
   overflow-x: auto;
   max-inline-size: 100%;
 }
 
-/* border-collapse: separate, with a spacing of zero, because the per-cell
-   border-radius below has nothing to round under `collapse` -- collapsed
-   borders are shared between neighbours and radii are ignored outright. */
+/* ---------------------------------------------------------------------------
+   THE BORDER MODEL. Two weights and no more, the way a spreadsheet rules a
+   sheet -- owner's reference, 2026-09-01:
+
+     1px --rule-hairline    every cell, the grid itself
+     2px --text-primary     the outer box, and the three rules that group it:
+                            under the header, left of Overall, above Average
+
+   border-collapse: COLLAPSE is what makes this work, and it is load-bearing in
+   two ways. It merges each pair of adjacent cell borders into one line, so a
+   shared edge is 1px rather than two abutting 1px borders reading as 2px. And
+   where weights disagree it keeps the WIDER one, which is why a 2px divider
+   beats its neighbour's 1px edge without either cell having to know about the
+   other.
+
+   The cost is border-radius, which collapsed borders ignore outright. That is
+   the right trade here: rounded cells fight a grid, and the earlier version of
+   this file used `separate` PRECISELY to keep a radius that this design no
+   longer wants.
+   --------------------------------------------------------------------------- */
+
 .table {
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
+  border: 2px solid var(--text-primary);
   inline-size: 100%;
 }
 
@@ -33,21 +51,26 @@
   text-align: start;
 }
 
-/* The column headers. The bucket names sit over numbers, so they align end with
-   them; the corner cell sits over client names and aligns start.
-
-   Both carry the heavy rule beneath, which is the first of the three gridlines
-   described under .divider below: it separates the labels from the data. */
-.head {
+/* The grid. One rule for every cell in the table, header and footer included,
+   so the hairline is a property of the table rather than something each kind of
+   cell remembers to ask for. */
+.headName,
+.head,
+.name,
+.cell,
+.blank {
   padding: var(--space-2) var(--space-3);
-  border-block-end: 2px solid var(--text-secondary);
+  border: 1px solid var(--rule-hairline);
+}
+
+/* The column headers. The bucket names sit over numbers, so they align end with
+   them; the corner cell sits over client names and aligns start. */
+.head {
   text-align: end;
   white-space: nowrap;
 }
 
 .headName {
-  padding: var(--space-2) var(--space-3);
-  border-block-end: 2px solid var(--text-secondary);
   text-align: start;
 }
 
@@ -65,23 +88,19 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-2) var(--space-3);
   text-align: start;
   white-space: nowrap;
 }
 
 .cell {
-  padding: var(--space-2) var(--space-3);
   text-align: end;
   white-space: nowrap;
 }
 
-/* The gutter between fills. A page-coloured border rather than a hairline, so
-   two adjacent bands read as two cells rather than as one wide stripe. */
+/* The band fills. Background and ink only -- the border above is the grid's,
+   and a fill has no business redrawing it. */
 .name[data-band],
 .cell[data-band] {
-  border: 1px solid var(--surface-page);
-  border-radius: var(--radius-sm);
   color: var(--text-on-band);
 }
 
@@ -107,75 +126,36 @@
   background: var(--band-none);
 }
 
-/* The footer cell under Overall. The Average row stops before it: an
-   agency-wide "overall of overalls" is a number nobody asked for and would
-   average numbers built on different divisors together. */
-.blank {
-  padding: var(--space-2) var(--space-3);
-}
-
 /* ---------------------------------------------------------------------------
-   The heavy gridlines, the way a spreadsheet groups a sheet. Two weights and
-   no more: the 1px page-coloured gutter between cells INSIDE a block, and a
-   2px ink rule BETWEEN blocks. Three blocks -- the header labels, the six
-   bucket columns, and the Overall column -- plus the Average row across the
-   bottom.
-
-   Both rules must come after the [data-band] block above, which sets `border`
-   as a SHORTHAND and would otherwise overwrite the edge each of these names.
-   They are single-class selectors combined with .cell or .name at the call
-   site, so they match that block's specificity exactly and win on source
-   order. Do not move them above it.
+   The heavy rules. Each is a single class combined with .head/.name/.cell at
+   the call site, so it matches those selectors' specificity exactly and wins on
+   source order. They must stay BELOW the block above. Do not move them.
    --------------------------------------------------------------------------- */
+
+/* Under the header: labels above, data below. */
+.head,
+.headName {
+  border-block-end: 2px solid var(--text-primary);
+}
 
 /* The wall to the left of Overall: everything before it is a bucket, everything
    from it on is the headline. */
 .divider {
-  border-inline-start: 2px solid var(--text-secondary);
+  border-inline-start: 2px solid var(--text-primary);
 }
 
 /* The floor above the Average row: everything above is a client, the row itself
    is the agency. */
 .footRule {
-  border-block-start: 2px solid var(--text-secondary);
+  border-block-start: 2px solid var(--text-primary);
 }
 
-/* The band word at the right end of the client cell.
-
-   The caption ROLE is bold by design -- a caption in this app is small and has
-   to hold its own against body text. Here the same size has the opposite job:
-   it sits beside a client's name and must not compete with it. So the role's
-   face, width, size and tracking are kept and only the weight is dropped to
-   regular, with a light hand on the opacity on top. That pair is the "happy
-   medium between bold and ghost" the owner asked for, 2026-09-01.
-
-   WEIGHT ONLY. Do not soften this with opacity, and do not swap in a quieter
-   ink -- both were tried on 2026-09-01 and both fail. This cell is a BAND FILL,
-   and --text-on-band is the only ink whose contrast is measured against all
-   four of those grounds. At 13px the word is normal-size text and needs 4.5:1.
-   Measured, ink against each fill:
-
-                       100%    @0.85   @0.72
-     teal   healthy    8.13    6.01    4.44
-     amber  watch      7.64    5.75    4.30
-     red    at risk    4.61    3.92    3.26
-     rule   not scored 9.88    6.99    4.96
-
-   At 0.72 three of the four fail. On red NO useful opacity passes, because the
-   ink starts at 4.61:1 with no headroom to spend -- the brand red is why
-   --brand-red-dark exists for text elsewhere, and it cannot help here because
-   the red is the BACKGROUND. A quieter ink token has the same problem and adds
-   an unmeasured colour on a coloured ground, which is the one thing tokens.css
-   exists to prevent. So the subtlety is carried by weight alone: regular
-   against the name's own weight, which is a clear step down and costs no
-   contrast. If it still reads too heavy, --wght-eyebrow (300) is the next stop
-   and is also free. */
-.bandWord {
-  font-family: var(--face-caption);
-  font-stretch: var(--wdth-caption);
-  font-weight: var(--wght-body);
-  font-size: var(--step--1);
-  letter-spacing: var(--tracking-caption);
+/* The footer cell under Overall. The Average row stops before it: an
+   agency-wide "overall of overalls" is a number nobody asked for and would
+   average numbers built on different divisors together. */
+.blank {
+  /* Empty, but still a cell of the grid. */
+  min-inline-size: var(--space-7);
 }
 
 /* The name as a control. Same treatment as the card's .cardOpen -- one real
@@ -197,6 +177,42 @@
 
 .open:hover {
   text-decoration: underline;
+}
+
+/* The band word at the right end of the client cell.
+
+   The caption ROLE is bold by design -- a caption in this app is small and has
+   to hold its own against body text. Here the same size has the opposite job:
+   it sits beside a client's name and must not compete with it. So the role's
+   face, width, size and tracking are kept and only the weight is dropped to
+   regular.
+
+   WEIGHT ONLY. Do not soften this with opacity, and do not swap in a quieter
+   ink -- both were tried on 2026-09-01 and both fail. This cell is a BAND FILL,
+   and --text-on-band is the only ink whose contrast is measured against all
+   four of those grounds. At 13px the word is normal-size text and needs 4.5:1.
+   Measured, ink against each fill:
+
+                       100%    @0.85   @0.72
+     teal   healthy    8.13    6.01    4.44
+     amber  watch      7.64    5.75    4.30
+     red    at risk    4.61    3.92    3.26
+     rule   not scored 9.88    6.99    4.96
+
+   At 0.72 three of the four fail. On red NO useful opacity passes, because the
+   ink starts at 4.61:1 with no headroom to spend -- the brand red is why
+   --brand-red-dark exists for text elsewhere, and it cannot help here because
+   the red is the BACKGROUND. A quieter ink token has the same problem and adds
+   an unmeasured colour on a coloured ground, which is the one thing tokens.css
+   exists to prevent. So the subtlety is carried by weight alone, which costs no
+   contrast. If it still reads too heavy, --wght-eyebrow (300) is the next stop
+   and is also free. */
+.bandWord {
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-body);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-caption);
 }
 
 /* Read by a screen reader, invisible on screen. Not `display: none`, which
