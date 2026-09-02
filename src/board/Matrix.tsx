@@ -113,8 +113,18 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               </th>
               {columns.map(({ bucket, definition }) =>
                 bucket === GATED_BUCKET ? (
+                  // .divider, like Context below it and the context cell in
+                  // every body row. Spanning both sub-columns makes THIS cell's
+                  // inline-end the boundary with Overall for the whole first
+                  // header row, so by ONE EDGE, ONE OWNER it is that segment's
+                  // owner and nothing else can draw it. It was missing until
+                  // 2026-09-02, which left the wall before Overall running the
+                  // full height of the table except its topmost segment --
+                  // invisible on the pale header of the light theme, and an
+                  // obvious break once the dark theme made the heavy rule cream
+                  // against a hairline that recedes.
                   <th
-                    className={`t-label ${styles.head} ${styles.headGroup}`}
+                    className={`t-label ${styles.head} ${styles.headGroup} ${styles.divider}`}
                     colSpan={2}
                     key={bucket}
                     scope="colgroup"

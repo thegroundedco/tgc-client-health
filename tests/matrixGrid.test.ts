@@ -16,6 +16,22 @@ const SOURCE = readFileSync(
   'utf8',
 )
 
+const MARKUP_SOURCE = readFileSync(
+  join(import.meta.dirname, '..', 'src', 'board', 'Matrix.tsx'),
+  'utf8',
+)
+
+// Comments stripped before anything reads it, for the same reason CODE strips
+// them below -- and this file learned that lesson the hard way while the test
+// beneath was being written. Matrix.tsx explains its own header in prose that
+// NAMES the attributes it is describing: `scope="colgroup" on Advocacy and
+// scope="col" on its two children`. A search of the raw text finds that
+// sentence first and reads the explanation instead of the markup.
+const MARKUP = MARKUP_SOURCE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(
+  /\/\*[\s\S]*?\*\//g,
+  '',
+)
+
 // The stylesheet with its comments removed, which is what every assertion below
 // reads. Matrix.module.css explains its own traps by NAMING the selectors that
 // caused them, and a check run against the raw file matches that prose and fails
@@ -101,5 +117,54 @@ describe('the matrix stylesheet', () => {
     // about the other. Under `separate` every shared edge doubles and the whole
     // grid reads at the wrong weight.
     expect(ruleBody('.table')).toContain('border-collapse: collapse')
+  })
+})
+
+// The stylesheet above proves the heavy rule is DECLARED correctly. It cannot
+// prove the rule is APPLIED to every cell that owns a segment of it, because
+// that lives in the markup -- and a wall with one segment missing is still a
+// wall in the CSS.
+//
+// This is the defect that section catches, reported by the owner from the
+// deployed page on 2026-09-02 and invisible until the dark theme shipped.
+// `.divider` was on Context in the second header row, on the context body cell
+// and on the footer blank -- but NOT on the Advocacy colgroup header in the
+// FIRST header row, whose inline-end is the same edge one row up. So the wall
+// before Overall ran the full height of the table except for its topmost
+// segment, which quietly fell back to the grid hairline.
+//
+// It survived six rounds of the owner's review in the light theme because
+// there the two weights are #1F1F1F ink against a #CFC8B6 hairline on a pale
+// header: a slightly lighter grey where a dark line belongs. In dark the same
+// gap is cream at 14.22:1 against a hairline at 1.74:1, and the wall visibly
+// stops dead.
+describe('the heavy rule before Overall', () => {
+  it('is read, not silently skipped', () => {
+    expect(MARKUP_SOURCE.length).toBeGreaterThan(1000)
+    expect(MARKUP.length).toBeGreaterThan(1000)
+    expect(MARKUP).toContain('scope="colgroup"')
+    expect(MARKUP).toContain('styles.divider')
+  })
+
+  // Every region of the table that has a cell to Overall's left owns a segment
+  // of the wall: both header rows, the body, and the footer. Counting them is
+  // what turns "the wall is declared" into "the wall is unbroken".
+  it('is carried by a cell in every row region, the colgroup header included', () => {
+    const uses = MARKUP.match(/styles\.divider/g) ?? []
+    expect(uses.length).toBe(4)
+  })
+
+  // The one that was missing. The Advocacy header spans Score and Context with
+  // colSpan={2}, which makes its inline-end the boundary with Overall for the
+  // whole of the first header row -- so by ONE EDGE, ONE OWNER it is that
+  // segment's owner, and nothing else can draw it.
+  it('is carried by the Advocacy colgroup header, which owns the top segment', () => {
+    const start = MARKUP.indexOf('scope="colgroup"')
+    expect(start).toBeGreaterThan(-1)
+    // Back up to the opening of the <th> that carries it, then read its
+    // attributes -- the className sits above scope in the sorted attribute list.
+    const open = MARKUP.lastIndexOf('<th', start)
+    const tag = MARKUP.slice(open, start)
+    expect(tag).toContain('styles.divider')
   })
 })
