@@ -265,6 +265,46 @@
   border-block-end: 2px solid var(--text-primary);
 }
 
+/* ---------------------------------------------------------------------------
+   A HEAVY RULE TAKES ITS COLOUR FROM THE CELL IT IS DRAWN ON.
+
+   Spec §9's defect, fixed 2026-09-02. --text-primary flips with the theme; the
+   four band fills do not. So in dark the heavy rules turned cream and vanished
+   over the data -- 1.72 on teal, 1.83 on amber, 1.41 on stone -- while the
+   ordinary 2px hairline ROSE to 4.75, 4.47 and 5.78. The two weights traded
+   places, and the grid outread the rules that group it.
+
+   No single colour can serve both regions: the same rules also cross the dark
+   PAGE GROUND in the header and around the perimeter, where the pinned ink
+   measures 1.02 and would erase them instead. And making the heavy rules wider
+   does not help, which was the obvious fix -- a 3px line at 1.72:1 on teal is
+   still 1.72:1. Width does not buy contrast.
+
+   So the colour follows the OWNER, which ONE EDGE, ONE OWNER above has already
+   established for every edge in this table. On a band-filled cell the owner's
+   ink is --text-on-band, measured against all four fills at 8.13 teal, 7.64
+   amber, 4.61 red and 9.88 stone -- in BOTH themes, because that token and the
+   fills are all pinned. Everything not on a fill keeps --text-primary.
+
+   Colour ONLY. Taking the width here as well would put the border model's
+   two-weight rule in a second place and let the two drift.
+
+   These win on SPECIFICITY, not on source order -- (0,3,0) against the base
+   rules' (0,1,0) -- which is deliberately unlike .headGroup below, and means
+   they cannot be broken by being moved. In LIGHT nothing changes at all:
+   --text-primary and --text-on-band are the same literal there, so this is a
+   dark-only correction to a dark-only defect.
+   --------------------------------------------------------------------------- */
+
+.cell[data-band].divider {
+  border-inline-end-color: var(--text-on-band);
+}
+
+.name[data-band].footRule,
+.cell[data-band].footRule {
+  border-block-end-color: var(--text-on-band);
+}
+
 /* The Advocacy header, spanning its two sub-columns. Centred over the pair, so
    it reads as their parent rather than as a label for the first of them.
 

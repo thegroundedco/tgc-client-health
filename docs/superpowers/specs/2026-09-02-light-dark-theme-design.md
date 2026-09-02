@@ -331,43 +331,36 @@ Ink labels on them are ground-independent and unchanged: 8.13 · 7.64 · 4.61 ·
 - The **`--surface-raised` warning survives into dark.** It measures 1.12:1 against the page there,
   as it does 1.05:1 in light: it cannot define a card edge on its own, and the hairline remains the
   actual boundary. The existing comment in `tokens.css` applies to both schemes and should say so.
-- **The matrix's grid inverts in dark, and this is a known defect awaiting an owner decision, not
-  an open question to check on a device.** The arithmetic already answers it without a browser.
-  This item used to reason from §8's hairline-on-page ratio (1.74 against light's 1.56), and that
-  reasoning does not apply: most of `Matrix.module.css`'s grid runs across *band fills*, which §7
-  establishes do not flip, not across the page ground, which does. `Matrix.module.css` uses
-  `2px solid var(--text-primary)` for the heavy rules — the table perimeter, the rule under the
-  header, `.divider`, `.footRule` — and `2px solid var(--rule-hairline)` for the ordinary grid.
-  Both weights are 2px, so colour alone is what tells them apart (spec 2026-08-21's parent design
-  and `Matrix.module.css`'s own header call this the one-edge-one-owner model), and in dark every
-  one of those colours inverts across a band fill:
+- **RESOLVED 2026-09-02. The matrix's grid no longer inverts in dark.** This item stood here as a
+  known defect awaiting an owner's decision; it was fixed instead, and the reasoning is kept because
+  the wrong fix is the tempting one.
 
-  | against | heavy (`--text-primary`) light → dark | hairline (`--rule-hairline`) light → dark |
-  |---|---|---|
-  | teal | 8.13 → 1.72 | 1.22 → 4.75 |
-  | amber | 7.64 → 1.83 | 1.29 → 4.47 |
-  | red | 4.61 → 3.03 | 2.15 → 2.69 |
-  | stone | 9.88 → 1.41 | 1.00 → 5.78 |
+  The defect: `--text-primary` flips with the theme and the four band fills do not, so in dark the
+  heavy grouping rules turned cream and vanished over the data — **1.72** on teal, **1.83** on
+  amber, **1.41** on stone — while the ordinary 2px hairline *rose* to 4.75, 4.47 and 5.78. The two
+  weights traded places, and the grid outread the rules meant to group it, over the half of the
+  table people actually read. (Red was the one fill that did not fully invert: heavy 3.03 against
+  hairline 2.69.)
 
-  The heavy rule, which reads clearly against every fill in light, drops below 2:1 against three
-  of the four fills in dark. For teal, amber and stone, the two rules trade places: the heavy rule
-  falls to 1.72, 1.83 and 1.41 while the hairline, barely there in light, rises to 4.75, 4.47 and
-  5.78 — the more visible of the two lines in dark. Red is the one fill where this does not
-  invert: the heavy rule still falls, from 4.61 to 3.03, but it still leads the hairline's 2.69, so
-  the two lines do not swap places there.
+  **The obvious fix does not work.** A genuine difference in line weight was the candidate this item
+  originally proposed, and the arithmetic refuses it: a 3px line at 1.72:1 on teal is still 1.72:1.
+  Width does not buy contrast.
 
-  There is no trivial fix, and that is worth saying plainly rather than filing this as a one-line
-  polish item. The heavy rule has to cross both the dark PAGE ground (where `--text-primary` is
-  correct, being light ink on a dark ground) and the light BAND fills (where it is now wrong, for
-  the same reason it was right in light mode — light ink stops being legible the moment the ground
-  it sits on stops being dark). No single colour serves both regions at once: the fix needs either
-  a rule colour that varies by the region it crosses, which the current border model has no
-  mechanism for, or a genuine difference in line weight to replace the colour-only distinction the
-  one-edge-one-owner model currently rests on. `Matrix.module.css`'s own header already documents
-  that model as fragile — one edge, one owner, tie-broken by DOM position under
-  `border-collapse` — and it is in daily use in light mode today. Changing it is a real design
-  decision with a real chance of reopening that fragility, not a follow-up task, so it is left here
-  for the owner to decide rather than made as part of this pass.
+  **What was done instead — one principle: a heavy rule takes its colour from the cell it is drawn
+  on.** That is not a new mechanism; it falls out of `ONE EDGE, ONE OWNER`, which already establishes
+  that every edge in this table has exactly one owning cell. On a band-filled cell the owner's ink is
+  `--text-on-band`, which §3.1 pinned and measured against all four fills: **8.13** teal, **7.64**
+  amber, **4.61** red, **9.88** stone — in *both* themes, because that token and the fills are all
+  pinned. Everything not drawn on a fill — the header's under-rule, the footer blank's divider, the
+  table perimeter — keeps `--text-primary`, which is what reads against the page ground and where
+  the pinned ink would measure 1.02 and erase the rule instead.
+
+  Two rules in `Matrix.module.css`, colour only, winning on **specificity** rather than source order
+  — `(0,3,0)` against the base rules' `(0,1,0)` — so unlike `.headGroup` they cannot be broken by
+  being moved. **Light mode is byte-identical**: `--text-primary` and `--text-on-band` are the same
+  literal there, so this is a dark-only correction to a dark-only defect, and the fragile border
+  model this item worried about reopening was never touched. `tests/matrixGrid.test.ts` holds both
+  halves — that filled cells use the pinned ink, and that the page-ground rules do not.
 - Carried forward from Slice 5, untouched here: horizontal scroll inside `.scroller` on a phone;
   the bare `*` against a band fill; where the Cards/Matrix toggle lands when `.periodBar` wraps;
   and the owner's open suggestion that the matrix's "Average" label be right-aligned.

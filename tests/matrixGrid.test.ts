@@ -252,3 +252,54 @@ describe('the clickable row ring', () => {
     expect(ruleBody('.table tbody tr:has(.open)')).toContain('cursor: pointer')
   })
 })
+
+// Spec §9's defect, fixed 2026-09-02. In dark the two weights traded places
+// across the band fills: the heavy grouping rules fell to 1.72 on teal, 1.83 on
+// amber and 1.41 on stone, while the ordinary hairline ROSE to 4.75, 4.47 and
+// 5.78. The grid outread the rules that group it, over the data, which is the
+// half of the table people actually read.
+//
+// The fix is one principle, and it falls out of ONE EDGE, ONE OWNER: a heavy
+// rule takes its colour from the cell it is DRAWN ON. On a band-filled cell that
+// is --text-on-band, the pinned ink already measured against all four fills; on
+// an unfilled cell -- the header, the footer blank, the perimeter -- it stays
+// --text-primary, which is what reads against the page ground.
+//
+// Making the heavy rules WIDER was the obvious fix and does not work: a 3px line
+// at 1.72:1 on teal is still 1.72:1. Width does not buy contrast.
+describe('the heavy rules over the band fills', () => {
+  it('is read, not silently skipped', () => {
+    expect(CODE).toContain('.divider {')
+    expect(CODE).toContain('.footRule {')
+  })
+
+  // The two heavy rules that land on filled cells. These are the ones that were
+  // disappearing in dark.
+  it('uses the pinned band ink where a heavy rule crosses a fill', () => {
+    expect(CODE).toContain('.cell[data-band].divider')
+    expect(CODE).toContain('.name[data-band].footRule')
+    expect(CODE).toContain('.cell[data-band].footRule')
+
+    const filled = CODE.slice(CODE.indexOf('.cell[data-band].divider'))
+    expect(filled).toContain('var(--text-on-band)')
+  })
+
+  // Colour only. Taking the width or the style from these would move the border
+  // model's two-weight rule into a second place and let the two drift.
+  it('overrides only the colour, leaving width and style to the base rules', () => {
+    const start = CODE.indexOf('.cell[data-band].divider')
+    const block = CODE.slice(start, CODE.indexOf('}', start))
+    expect(block).toContain('border-inline-end-color')
+    expect(block).not.toMatch(/border-inline-end:\s/)
+    expect(block).not.toContain('2px')
+  })
+
+  // The other half of the principle, and the half a careless fix would break:
+  // the header and the perimeter are NOT on a fill, so pinned ink there would
+  // measure 1.02 against the dark page and erase them instead.
+  it('leaves the rules that cross the page ground on --text-primary', () => {
+    expect(ruleBody('.divider')).toContain('var(--text-primary)')
+    expect(ruleBody('.footRule')).toContain('var(--text-primary)')
+    expect(ruleBody('.table')).toContain('var(--text-primary)')
+  })
+})
