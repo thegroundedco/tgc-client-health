@@ -292,10 +292,22 @@ a {
 }
 
 /* A churned client, marked as well as labelled. The word is still there; this
-   only makes the row scannable. */
+   only makes the row scannable.
+
+   This pill is a fill with an ink label, exactly like a health band above --
+   not a coincidence, the SAME rule: light fill, dark ink, and the fill can
+   never be the only signal (see the note above .status-pill). It used to
+   reach past the SEMANTIC layer straight to --brand-blush and pair it with
+   --text-primary, which measures 9.64:1 in light and 1.45:1 in dark, because
+   --text-primary is exactly the token that flips. It shipped that way because
+   the reach-through was invisible to the audit that swept the SEMANTIC layer
+   for spec §3 -- this was, for a while, the only reference to a BRAND token
+   anywhere outside tokens.css, so nothing was watching it. It now takes
+   --status-ended, a SEMANTIC token declared in tokens.css beside the health
+   bands, and tests/brandLayering.test.ts stops a second one appearing. */
 .status-pill--ended {
-  background: var(--brand-blush);
-  color: var(--text-primary);
+  background: var(--status-ended);
+  color: var(--text-on-band);
 }
 
 /* ---------------------------------------------------------------------------

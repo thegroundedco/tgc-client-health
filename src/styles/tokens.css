@@ -84,7 +84,11 @@
      --brand-stone carries the same literal as --brand-rule, and that is NOT a
      duplicate to be tidied away: a hairline grey and a light band fill are two
      different jobs that happen to coincide on paper and diverge in the dark.
-     Merging them back is how spec §3.2's defect returns. */
+     Merging them back is how spec §3.2's defect returns. Their measurements
+     live with the SEMANTIC tokens that consume them: --brand-ink-fixed's in
+     the health-bands paragraph below (ink on stone, 9.88:1, alongside the
+     other three), --brand-stone's in the DARK block's own comment
+     (stone-vs-dark-ground, 10.07:1). */
   --brand-ink-fixed: #1F1F1F;
   --brand-stone: #CFC8B6;
 
@@ -137,7 +141,8 @@
 
   /* health bands. Fills, never text: teal on paper is 1.89:1, amber 2.01:1,
      brand red 3.34:1 — all three fail as type on this ground. Ink on each of
-     them passes: 8.13:1, 7.64:1, 4.61:1. So a band is a filled chip with an
+     them passes: 8.13:1, 7.64:1, 4.61:1, and on the fourth, stone (the
+     not-scored fill, below), 9.88:1. So a band is a filled chip with an
      ink label.
      Any two bands are also indistinguishable from one another — teal vs red
      1.76:1, teal vs amber 1.06:1, amber vs red 1.66:1 — which is why parent
@@ -151,6 +156,22 @@
   --band-risk: var(--brand-red);
   --band-none: var(--brand-stone);
   --text-on-band: var(--brand-ink-fixed);
+
+  /* The churned-client pill (base.css .status-pill--ended) is a fill with an
+     ink label, exactly like the four bands just above, and it is bound by the
+     same rule for the same reason: the fill is one of a small set of
+     similar-looking chips, so the word inside it is load-bearing, not
+     decorative. --brand-blush does not flip in dark -- it is one of the
+     identity literals, not a role -- so its label must take --text-on-band,
+     never --text-primary, exactly as a band's label does. Measured 9.64:1
+     against --text-on-band in BOTH schemes, because the pinned ink does not
+     move and neither does this fill.
+     This token exists because a component once skipped it and reached
+     straight for --brand-blush, which made the pairing invisible to the audit
+     that swept this SEMANTIC layer for spec §3: the reach-through was the
+     only reference to a BRAND token anywhere outside this file, so nothing
+     was watching it. tests/brandLayering.test.ts now is. */
+  --status-ended: var(--brand-blush);
 
   /* interaction */
   --action-face: var(--brand-ink);
