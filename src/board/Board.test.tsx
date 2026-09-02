@@ -544,6 +544,22 @@ describe('adding a client from the Clients tab', () => {
     expect(screen.getByLabelText(/name/i)).toBeTruthy()
   })
 
+  // The reason AddClientPanel's onClose calls board.reload(): without it, a
+  // client added through this panel would not appear on the board until some
+  // other action forced a reload. This is the same class of silent gap that
+  // let a deleted board.reload() call leave all 413 tests green earlier in
+  // this slice -- see Board.tsx's onClose comment.
+  it('reloads the board when the panel is closed, so an added client appears', async () => {
+    const reload = vi.fn()
+    vi.mocked(useBoard).mockReturnValue({ ...READY, reload })
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
   // The empty roster is exactly when somebody needs to add a client, which is
   // why the button is defined above the early returns rather than inside the
   // populated branch. The same argument the deleted adminLink comment made.
