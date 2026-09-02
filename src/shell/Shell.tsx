@@ -23,6 +23,14 @@ import styles from './Shell.module.css'
 // ClientsAdmin no longer needs to ask the board to reload on the way out, since
 // coming back IS a reload. The cost is a round trip per visit, which is the same
 // cost the board already pays on every page load.
+//
+// The unmount discards the board's OTHER state as well, and that half is a real
+// cost rather than a benefit: period, view and showArchived all reset, so
+// somebody reading June in the matrix who steps into Admin comes back to the
+// default month in cards. Left as it is deliberately. Lifting period out of the
+// board and into the shell is a decision about where a month belongs -- the
+// check-in reads the same value, and the two must never disagree -- and that is
+// a later slice's call, not a side effect of moving navigation.
 export function Shell({
   profile,
   preference,

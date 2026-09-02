@@ -25,26 +25,6 @@ import type { UseBoard } from './useBoard'
 // fails in CI.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
-// The third mock, and it is not optional. Board now renders ClientsAdmin, which
-// uses useClients, which imports the Supabase client. `supabase` is mocked as
-// `{}` above, so an unmocked useClients would call `.from` on an empty object
-// and this file would fail on navigation rather than on anything it is testing.
-vi.mock('../clients/useClients', () => ({
-  useClients: () => ({
-    status: 'ready',
-    loadError: null,
-    clients: [],
-    owners: [],
-    addState: { kind: 'idle' },
-    editState: { kind: 'idle' },
-    editStateFor: null,
-    reload: vi.fn(),
-    addClient: vi.fn(),
-    saveClient: vi.fn(),
-    resetAdd: vi.fn(),
-    resetEdit: vi.fn(),
-  }),
-}))
 
 import { Board } from './Board'
 import { useBoard } from './useBoard'
