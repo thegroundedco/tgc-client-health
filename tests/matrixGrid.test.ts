@@ -198,3 +198,57 @@ describe('the Advocacy group header floor', () => {
     expect(group).toBeGreaterThan(heavy)
   })
 })
+
+// The hover ring on a clickable row. No DOM test can see any of this: jsdom
+// computes no hover and vitest stubs CSS Modules, so every property below is
+// invisible to Matrix.dom.test.tsx and visible only here.
+describe('the clickable row ring', () => {
+  const ROW = '.table tbody tr:has(.open):hover > *'
+
+  it('is read, not silently skipped', () => {
+    expect(CODE).toContain(ROW)
+  })
+
+  // Copied from ClientCard's `.card:has(.cardOpen):hover`, which exists because
+  // before it was scoped every card lit up on hover -- including archived ones
+  // that were not buttons, making a highlight that meant "clickable" start
+  // meaning nothing. The matrix shows only active clients today, so this is the
+  // same defensive scoping for the same reason isOpenable is applied in the
+  // markup rather than assumed.
+  it('lights only rows that actually have something to open', () => {
+    expect(CODE).toContain(':has(.open):hover')
+    expect(CODE).not.toMatch(/tbody tr:hover(?!\s*>\s*\*\s*\{[^}]*\})/)
+  })
+
+  // A border here would be a fourth participant in border-collapse conflict
+  // resolution, against cell borders of the same width and style, resolved by
+  // POSITION -- the exact trap ONE EDGE, ONE OWNER exists to prevent, and it
+  // would silently eat segments of the grid on hover. box-shadow does not
+  // collapse and does not affect layout, so it cannot disturb the model.
+  it('is drawn with box-shadow, never a border', () => {
+    const body = ruleBody(ROW)
+    expect(body).toContain('box-shadow')
+    expect(body).not.toContain('border')
+    expect(body).not.toContain('outline')
+  })
+
+  // Every cell in a body row carries a band fill, and the four fills are PINNED
+  // -- identical in both themes. So the one ink already measured against all of
+  // them is the right colour here, and it is the reason this line does not
+  // inherit the problem spec §9 documents for the grid rules: those cross the
+  // page ground, where the fills' contrast does not apply. Ink on the fills is
+  // 8.13 teal, 7.64 amber, 4.61 red, 9.88 stone -- in BOTH themes.
+  it('uses the pinned band ink, so it reads on every fill in both themes', () => {
+    expect(ruleBody(ROW)).toContain('var(--text-on-band)')
+    expect(ruleBody(ROW)).not.toContain('var(--text-primary)')
+  })
+
+  it('caps both ends of the row so the ring is closed', () => {
+    expect(CODE).toContain(`${ROW}:first-child`)
+    expect(CODE).toContain(`${ROW}:last-child`)
+  })
+
+  it('shows a pointer only where the row is clickable', () => {
+    expect(ruleBody('.table tbody tr:has(.open)')).toContain('cursor: pointer')
+  })
+})

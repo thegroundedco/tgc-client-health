@@ -417,3 +417,95 @@ describe('the matrix table', () => {
     })
   })
 })
+
+// Owner, 2026-09-02: "regardless of what you click on in the matrix data, it
+// takes you to that client's card."
+//
+// The row carries the click; the name button stays the KEYBOARD path. A <tr>
+// cannot be a button and must not become a tab stop -- ten focusable rows ahead
+// of the real controls is worse than the problem it would solve -- so the
+// button keeps its own handler and stops the click from bubbling, which is also
+// what stops one press opening the same card twice.
+describe('opening a client from anywhere in the row', () => {
+  it('opens from a score cell', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(1, 'Babaloo')],
+      checkins: [[1, checkin(1, { comm_score: 4 })]],
+      onOpen,
+    })
+    const cells = within(screen.getByTestId('matrix-row')).getAllByRole('cell')
+    await userEvent.click(cells[0])
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen.mock.calls[0][0].name).toBe('Babaloo')
+  })
+
+  it('opens from the last cell in the row as readily as the first', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(1, 'Babaloo')],
+      checkins: [[1, checkin(1, { comm_score: 4 })]],
+      onOpen,
+    })
+    const cells = within(screen.getByTestId('matrix-row')).getAllByRole('cell')
+    await userEvent.click(cells[cells.length - 1])
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  // Once, not twice. The button's handler and the row's handler both reach
+  // onOpen, and a click on the name passes through both unless the button stops
+  // it -- which would open, then re-open, the same card.
+  it('opens exactly once when the name itself is clicked', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({ clients: [client(1, 'Babaloo')], onOpen })
+    await userEvent.click(screen.getByTestId('matrix-name'))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  // The button is why this works without a keydown handler, and the reason it
+  // must survive the row becoming clickable.
+  it('opens from the keyboard, through the name button', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({ clients: [client(1, 'Babaloo')], onOpen })
+    screen.getByRole('button', { name: 'Babaloo' }).focus()
+    await userEvent.keyboard('{Enter}')
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  // Selecting a Context sentence to copy it ends in a click on the row. Without
+  // this guard the act of reading the words would navigate away from them.
+  it('does not open when the click merely finished selecting text', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(1, 'Babaloo')],
+      checkins: [[1, checkin(1, { comm_score: 4 })]],
+      onOpen,
+    })
+    const selection = vi
+      .spyOn(window, 'getSelection')
+      .mockReturnValue({ toString: () => 'Review, Case study' } as unknown as Selection)
+    const cells = within(screen.getByTestId('matrix-row')).getAllByRole('cell')
+    await userEvent.click(cells[0])
+    expect(onOpen).not.toHaveBeenCalled()
+    selection.mockRestore()
+  })
+
+  // The Average row is the agency, not a client, and has nothing to open.
+  it('does nothing when the Average row is clicked', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(1, 'Babaloo')],
+      checkins: [[1, checkin(1, { comm_score: 4 })]],
+      onOpen,
+    })
+    await userEvent.click(screen.getByText('Average'))
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when a column header is clicked', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({ clients: [client(1, 'Babaloo')], onOpen })
+    await userEvent.click(screen.getByText('Communication'))
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+})

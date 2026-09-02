@@ -54,6 +54,18 @@ function Score({ value }: { value: number | null }) {
 // uppercase, caption face. That is right for a chip beside a name and wrong for
 // a table cell full of digits. The attribute gives the stylesheet a selector and
 // keeps the four band values from being spelled out a second time here.
+// A click that merely finished a drag-selection must not navigate. Every body
+// row is clickable now, and Context holds a sentence people will want to copy --
+// "Review, Case study and Referral" -- so without this the act of selecting
+// those words would open the card and take them off the page they were reading.
+//
+// Read through globalThis rather than window so this module stays honest in a
+// context that has no window; an environment with no selection API returns ''
+// and the click is treated as an ordinary one.
+function endedASelection(): boolean {
+  return (globalThis.getSelection?.()?.toString() ?? '') !== ''
+}
+
 export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
   const rows = matrixRows(clients, checkins, scores)
 
@@ -166,7 +178,24 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
               const floor = rowIndex === rows.length - 1 ? styles.footRule : ''
               const context = advocacyContext(row)
               return (
-                <tr data-testid="matrix-row" key={row.client.id}>
+                <tr
+                  data-testid="matrix-row"
+                  key={row.client.id}
+                  // The whole row opens the client -- owner, 2026-09-02. It is
+                  // deliberately NOT a tab stop: a <tr> cannot be a button, and
+                  // ten focusable rows ahead of the real controls would be a
+                  // worse screen than the one this improves. The name button
+                  // below stays the keyboard path, which is why it must not be
+                  // removed now that the row does the same job for a mouse.
+                  onClick={
+                    isOpenable(row.client.status)
+                      ? () => {
+                          if (endedASelection()) return
+                          onOpen(row.client)
+                        }
+                      : undefined
+                  }
+                >
                   <th className={`${styles.name} ${floor}`} data-band={band} scope="row">
                     {/* The flex lives on this span, NOT on the <th>. A table
                         cell given `display: flex` leaves the table formatting
@@ -184,7 +213,17 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                       {isOpenable(row.client.status) ? (
                         <button
                           className={styles.open}
-                          onClick={() => onOpen(row.client)}
+                          // stopPropagation, because the row above now reaches
+                          // the same onOpen: without it a click on the name
+                          // passes through both handlers and opens the card
+                          // twice. The button keeps its OWN handler rather than
+                          // relying on that bubbling, so the keyboard path does
+                          // not depend on the row's selection guard -- pressing
+                          // Enter with text selected elsewhere must still work.
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onOpen(row.client)
+                          }}
                           type="button"
                         >
                           <span data-testid="matrix-name">{row.client.name}</span>

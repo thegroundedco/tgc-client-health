@@ -369,3 +369,55 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   THE CLICKABLE ROW. Owner, 2026-09-02: any cell in a data row opens that
+   client's card, not just the name.
+
+   Scoped to :has(.open) rather than to every body row, copying
+   ClientCard.module.css's `.card:has(.cardOpen):hover` -- and copying its
+   reason, which that file records: before it was scoped, every card lit up on
+   hover including archived ones that were no longer buttons, so a highlight
+   that had always meant "clickable" started meaning nothing on part of the
+   grid. The matrix shows only active clients today, which is exactly why the
+   markup applies isOpenable rather than assuming it, and this is the same
+   defence one layer down.
+
+   BOX-SHADOW, NOT A BORDER, and that is not a style preference. A border here
+   would be a fourth participant in border-collapse conflict resolution, meeting
+   cell borders of the same width and the same style and differing only in
+   colour -- resolved by POSITION, which is the precise trap ONE EDGE, ONE OWNER
+   exists to prevent. It would silently eat segments of the grid for as long as
+   the pointer sat on a row. An inset box-shadow does not collapse, does not
+   affect layout, and cannot disturb the model at all.
+
+   --text-on-band, not --text-primary. Every cell in a body row carries a band
+   fill, and the four fills are PINNED: teal, amber, red and stone are identical
+   in both themes. So the ink already measured against all four is the right
+   colour, and it is why this line does NOT inherit the inversion the spec's §9
+   records for the grid rules -- those cross the dark page ground, where a fill's
+   contrast has nothing to say. Ink on the fills is 8.13 teal, 7.64 amber, 4.61
+   red and 9.88 stone, in BOTH themes.
+   --------------------------------------------------------------------------- */
+
+.table tbody tr:has(.open) {
+  cursor: pointer;
+}
+
+.table tbody tr:has(.open):hover > * {
+  /* Named once and reused by the two cap rules below, which would otherwise
+     repeat it and drift the day the weight changes. */
+  --row-ring: inset 0 2px 0 0 var(--text-on-band),
+    inset 0 -2px 0 0 var(--text-on-band);
+  box-shadow: var(--row-ring);
+}
+
+/* The ends. Without these the ring is two rails with open sides; the row reads
+   as underlined rather than as one thing you can click. */
+.table tbody tr:has(.open):hover > *:first-child {
+  box-shadow: var(--row-ring), inset 2px 0 0 0 var(--text-on-band);
+}
+
+.table tbody tr:has(.open):hover > *:last-child {
+  box-shadow: var(--row-ring), inset -2px 0 0 0 var(--text-on-band);
+}
