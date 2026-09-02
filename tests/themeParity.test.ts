@@ -17,6 +17,34 @@ const SOURCE = readFileSync(
   'utf8',
 )
 
+const THEME_MODULE = readFileSync(
+  join(import.meta.dirname, '..', 'src', 'styles', 'theme.ts'),
+  'utf8',
+)
+
+// THEME_PREFERENCES and DEFAULT_PREFERENCE, read out of theme.ts's source text
+// rather than imported. Not for tests/bootTheme.test.ts's reason -- these two
+// are not single literal strings a second file must independently spell the
+// same way, so importing them would not let this test agree with theme.ts by
+// construction about anything this file actually checks. It is ruled out on a
+// plainer, structural ground: this file is compiled under tsconfig.node.json,
+// which has Node's lib and no DOM, while theme.ts's own types reach for
+// `Element` and `Storage` -- importing it here would pull those DOM types into
+// a program with no DOM lib and fail the BUILD, not the assertion. Reading the
+// values out of source text sidesteps that, at the same modest cost
+// tests/bootTheme.test.ts's exportedString already pays for a different reason.
+function exportedString(name: string): string {
+  const match = THEME_MODULE.match(new RegExp(`export const ${name}[^=]*=\\s*'([^']*)'`))
+  if (!match) throw new Error(`theme.ts does not export ${name} as a string literal`)
+  return match[1]
+}
+
+function exportedArray(name: string): string[] {
+  const match = THEME_MODULE.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([^\\]]*)\\]`))
+  if (!match) throw new Error(`theme.ts does not export ${name} as an array literal`)
+  return [...match[1].matchAll(/'([^']*)'/g)].map((entry) => entry[1])
+}
+
 // Comments stripped before any assertion reads the file. tokens.css explains its
 // own traps by naming the tokens that caused them, so a check run against the raw
 // text would match the prose and pass on the explanation rather than the code.
@@ -82,5 +110,39 @@ describe('the two dark blocks', () => {
   it('points the band label and the not-scored fill at the pinned tokens', () => {
     expect(CODE).toContain('--text-on-band: var(--brand-ink-fixed)')
     expect(CODE).toContain('--band-none: var(--brand-stone)')
+  })
+})
+
+describe('theme coverage', () => {
+  // The hole tests/bootTheme.test.ts closes on the HTML side: THEME_PREFERENCES
+  // gaining a fourth entry with no matching CSS ships silently, because nothing
+  // before this asserted that every non-default preference has SOMEWHERE in
+  // tokens.css keyed to its attribute value. Today's two shapes differ on
+  // purpose -- dark gets its own :root[data-theme='dark'] override block,
+  // while light is the baseline and only needs the media query NEUTRALISED via
+  // :root:not([data-theme='light']), because there is nothing left to repoint
+  // once the media query is out of the way. Both shapes leave the literal
+  // selector text `[data-theme='<preference>']` somewhere in the file, which is
+  // the one thing a third kind of preference with no CSS written for it at all
+  // could never do -- so this checks for the selector's presence rather than
+  // for either specific shape, which is what lets it catch a preference nobody
+  // has invented yet instead of only re-confirming the two that already exist.
+  //
+  // See the note above THEME_MODULE for why these are read out of source text
+  // rather than imported. That reasoning is structural (a DOM-typed module
+  // cannot be imported into this file's no-DOM program), not the
+  // agree-by-construction concern tests/bootTheme.test.ts's exportedString
+  // guards against -- but it still leaves this assertion honest: the array
+  // only chooses WHICH selector text to go looking for in tokens.css, a file
+  // theme.ts plays no part in, so nothing here lets tokens.css off the hook
+  // for containing the literal text.
+  it('gives every non-default preference a selector in tokens.css', () => {
+    const overrides = exportedArray('THEME_PREFERENCES').filter(
+      (preference) => preference !== exportedString('DEFAULT_PREFERENCE'),
+    )
+    expect(overrides.length).toBeGreaterThan(0)
+    for (const preference of overrides) {
+      expect(CODE).toContain(`[data-theme='${preference}']`)
+    }
   })
 })

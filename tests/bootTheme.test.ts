@@ -25,6 +25,28 @@ function exportedString(name: string): string {
   return match[1]
 }
 
+// THEME_PREFERENCES, read out of source text rather than imported -- and here
+// the reason is not the same one exportedString is for. Importing it would
+// have been the natural choice: the array only says WHICH words to go looking
+// for in the script's actual text, so importing does not let this test agree
+// with the module about anything the script itself has to independently
+// contain. It is ruled out on a plainer, structural ground instead: this file
+// is compiled under tsconfig.node.json, which gives it Node's lib and no DOM,
+// while src/styles/theme.ts's own types reach for `Element` and `Storage` --
+// importing it from here would pull those DOM types into a program that has
+// no DOM lib and fail the build, not fail the assertion. Reading the array out
+// of source text sidesteps that entirely, at the same small cost exportedString
+// already pays.
+function exportedArray(name: string): string[] {
+  const match = MODULE.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([^\\]]*)\\]`))
+  if (!match) throw new Error(`theme.ts does not export ${name} as an array literal`)
+  return [...match[1].matchAll(/'([^']*)'/g)].map((entry) => entry[1])
+}
+
+const allPreferences = exportedArray('THEME_PREFERENCES')
+const defaultPreference = exportedString('DEFAULT_PREFERENCE')
+const overrides = allPreferences.filter((preference) => preference !== defaultPreference)
+
 describe('the inline theme script', () => {
   it('is read, not silently skipped', () => {
     expect(HTML.length).toBeGreaterThan(500)
@@ -57,14 +79,43 @@ describe('the inline theme script', () => {
     expect(script).toContain('catch')
   })
 
-  // It must recognise exactly the two OVERRIDES. 'system' is represented by the
-  // key's absence (theme.ts's writePreference clears it), so a script that also
-  // matched the word would be reading a value that is never written.
-  it('recognises the two overrides and not the default', () => {
+  // It must recognise exactly the OVERRIDES, and every one of them. 'system'
+  // is represented by the key's absence (theme.ts's writePreference clears
+  // it), so a script that also matched the word would be reading a value that
+  // is never written. Derived from THEME_PREFERENCES rather than the two words
+  // 'light' and 'dark' written out here: hardcoding them is exactly how a
+  // THIRD override, added to the module tomorrow, would ship with this test
+  // still green and the script silently blind to it.
+  it('recognises every override and not the default', () => {
+    expect(overrides.length).toBeGreaterThan(0)
     const head = HTML.slice(0, HTML.indexOf('</head>'))
     const script = head.slice(head.lastIndexOf('<script'))
-    expect(script).toContain("'light'")
-    expect(script).toContain("'dark'")
-    expect(script).not.toContain("'system'")
+    for (const preference of overrides) {
+      expect(script).toContain(`'${preference}'`)
+    }
+    expect(script).not.toContain(`'${defaultPreference}'`)
+  })
+
+  // type="module" defers execution until the module graph resolves and the
+  // bundle is fetched -- past first paint, which is the one thing this script
+  // exists to run before. Every other assertion in this file would still pass
+  // against a script that had quietly grown that attribute; only this one
+  // would catch it.
+  it('is a classic script, not a module', () => {
+    const head = HTML.slice(0, HTML.indexOf('</head>'))
+    expect(head).not.toContain('type="module"')
+    expect(head).not.toContain("type='module'")
+  })
+
+  // head.lastIndexOf('<script') above silently retargets to whichever inline
+  // script was added to <head> most recently, if a second one ever is. That
+  // would not fail loudly -- it would just start reading and asserting
+  // against the wrong script's text, quietly. Pinning the count to exactly
+  // one is what turns that retarget into a failing test instead of a passing
+  // one that stopped checking what it claims to check.
+  it('is the only inline script in <head>', () => {
+    const head = HTML.slice(0, HTML.indexOf('</head>'))
+    const openTags = head.match(/<script(?:\s[^>]*)?>/g) ?? []
+    expect(openTags.length).toBe(1)
   })
 })
