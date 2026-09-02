@@ -8,7 +8,7 @@ import { currentPeriod, defaultPeriod, formatPeriod, periodOptions, previousPeri
 import type { CardCheckin } from './cardSummary'
 import type { UseBoard } from './useBoard'
 
-// TWO mocks, and the second is not optional.
+// THREE mocks, and none of the three is optional.
 //
 // Mocking the hook is the whole reason useBoard exists. Ruling 13 left four
 // tests in this file permanently skipped because Board held its read in an
@@ -23,6 +23,10 @@ import type { UseBoard } from './useBoard'
 // `npx vitest run` with no VITE_ env at all (test.yml puts that env block on the
 // build step only). Without this line the file passes locally off .env.local and
 // fails in CI.
+//
+// The third, `../clients/useClients`, arrived with the Add client panel and its
+// reasoning sits beside it below -- it is a consequence of the second, because
+// the stubbed supabase client is what an unmocked useClients would call.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
 

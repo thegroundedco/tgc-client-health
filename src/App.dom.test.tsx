@@ -50,5 +50,15 @@ describe('the theme on the signed-out screen', () => {
     // renders any more -- passing whether or not the switch leaked onto this
     // screen, which is the one thing it is here to catch.
     expect(screen.queryByRole('switch', { name: 'Dark mode' })).toBe(null)
+
+    // Spec §5: "A signed-out visitor gets no navigation, because there is
+    // nowhere for them to go." True by structure today -- the bar renders inside
+    // Shell, and Shell renders only on the `active` branch -- and structure is
+    // exactly what a refactor changes. Hoisting the bar into App, to keep the
+    // chrome steady across the loading flash, would offer four destinations to
+    // somebody with no session, every one of them landing on a screen that
+    // cannot read a row. Asserted here rather than left to the same reasoning
+    // that already failed to keep the theme control off this screen.
+    expect(screen.queryByRole('navigation', { name: 'Sections' })).toBe(null)
   })
 })
