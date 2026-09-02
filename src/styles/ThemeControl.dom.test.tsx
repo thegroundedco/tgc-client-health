@@ -10,47 +10,61 @@ afterEach(() => {
 })
 
 describe('ThemeControl', () => {
-  it('offers all three states at once', () => {
-    render(<ThemeControl preference="system" onChange={vi.fn()} />)
-    const group = screen.getByRole('group', { name: 'Theme' })
-    expect(group).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'System' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Light' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Dark' })).toBeTruthy()
+  // A switch rather than the three buttons this replaced. role="switch" carries
+  // its own on/off state, so a screen reader announces "Dark mode, switch, on"
+  // from one control -- which is what makes a two-position pill legitimate
+  // rather than a picture of a control.
+  it('is one switch, named for what it turns on', () => {
+    render(<ThemeControl preference="light" onChange={vi.fn()} />)
+    expect(screen.getByRole('switch', { name: 'Dark mode' })).toBeTruthy()
+    expect(screen.getAllByRole('switch')).toHaveLength(1)
   })
 
-  // The reason there are three buttons rather than one that cycles. Board.tsx's
-  // view toggle makes the same argument: a control that says what it will
-  // BECOME gives no indication of what is currently showing.
-  it('says which one is showing, without anybody working it out', () => {
-    render(<ThemeControl preference="dark" onChange={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'System' }).getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true')
+  it('reports dark as on and light as off', () => {
+    const { rerender } = render(<ThemeControl preference="dark" onChange={vi.fn()} />)
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
+    rerender(<ThemeControl preference="light" onChange={vi.fn()} />)
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('false')
   })
 
-  it('reports the state that was pressed', async () => {
+  it('asks for dark when it is showing light', async () => {
     const onChange = vi.fn()
-    render(<ThemeControl preference="system" onChange={onChange} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Light' }))
-    expect(onChange).toHaveBeenCalledWith('light')
+    render(<ThemeControl preference="light" onChange={onChange} />)
+    await userEvent.click(screen.getByRole('switch'))
+    expect(onChange).toHaveBeenCalledWith('dark')
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
-  it('still reports a press on the state already showing', async () => {
+  it('asks for light when it is showing dark', async () => {
     const onChange = vi.fn()
     render(<ThemeControl preference="dark" onChange={onChange} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Dark' }))
+    await userEvent.click(screen.getByRole('switch'))
+    expect(onChange).toHaveBeenCalledWith('light')
+  })
+
+  // A switch must be operable from the keyboard, and a real <button> gets Enter
+  // and Space for free. This asserts the element actually IS a button rather
+  // than a div wearing the role, which would look identical and be unreachable.
+  it('is a real button, so the keyboard works without help', async () => {
+    const onChange = vi.fn()
+    render(<ThemeControl preference="light" onChange={onChange} />)
+    const control = screen.getByRole('switch')
+    expect(control.tagName).toBe('BUTTON')
+    expect(control.getAttribute('type')).toBe('button')
+    control.focus()
+    await userEvent.keyboard('{Enter}')
     expect(onChange).toHaveBeenCalledWith('dark')
   })
 
-  // type="button" on every one. These sit inside a header today and could sit
-  // inside a form tomorrow, where a bare <button> defaults to type="submit"
-  // and would submit it.
-  it('never submits a form', () => {
-    render(<ThemeControl preference="system" onChange={vi.fn()} />)
-    for (const name of ['System', 'Light', 'Dark']) {
-      expect(screen.getByRole('button', { name }).getAttribute('type')).toBe('button')
+  // The sun and moon are decoration: the switch's name and state already say
+  // everything. Left exposed they would be announced as stray images inside a
+  // control that has just described itself.
+  it('hides its icons from the accessibility tree', () => {
+    const { container } = render(<ThemeControl preference="light" onChange={vi.fn()} />)
+    const svgs = container.querySelectorAll('svg')
+    expect(svgs.length).toBeGreaterThan(0)
+    for (const svg of svgs) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true')
     }
   })
 })

@@ -33,12 +33,6 @@ const THEME_MODULE = readFileSync(
 // a program with no DOM lib and fail the BUILD, not the assertion. Reading the
 // values out of source text sidesteps that, at the same modest cost
 // tests/bootTheme.test.ts's exportedString already pays for a different reason.
-function exportedString(name: string): string {
-  const match = THEME_MODULE.match(new RegExp(`export const ${name}[^=]*=\\s*'([^']*)'`))
-  if (!match) throw new Error(`theme.ts does not export ${name} as a string literal`)
-  return match[1]
-}
-
 function exportedArray(name: string): string[] {
   const match = THEME_MODULE.match(new RegExp(`export const ${name}[^=]*=\\s*\\[([^\\]]*)\\]`))
   if (!match) throw new Error(`theme.ts does not export ${name} as an array literal`)
@@ -115,8 +109,8 @@ describe('the two dark blocks', () => {
 
 describe('theme coverage', () => {
   // The hole tests/bootTheme.test.ts closes on the HTML side: THEME_PREFERENCES
-  // gaining a fourth entry with no matching CSS ships silently, because nothing
-  // before this asserted that every non-default preference has SOMEWHERE in
+  // gaining a THIRD entry with no matching CSS ships silently, because nothing
+  // before this asserted that every preference has SOMEWHERE in
   // tokens.css keyed to its attribute value. Today's two shapes differ on
   // purpose -- dark gets its own :root[data-theme='dark'] override block,
   // while light is the baseline and only needs the media query NEUTRALISED via
@@ -136,12 +130,10 @@ describe('theme coverage', () => {
   // only chooses WHICH selector text to go looking for in tokens.css, a file
   // theme.ts plays no part in, so nothing here lets tokens.css off the hook
   // for containing the literal text.
-  it('gives every non-default preference a selector in tokens.css', () => {
-    const overrides = exportedArray('THEME_PREFERENCES').filter(
-      (preference) => preference !== exportedString('DEFAULT_PREFERENCE'),
-    )
-    expect(overrides.length).toBeGreaterThan(0)
-    for (const preference of overrides) {
+  it('gives every preference a selector in tokens.css', () => {
+    const preferences = exportedArray('THEME_PREFERENCES')
+    expect(preferences.length).toBeGreaterThan(0)
+    for (const preference of preferences) {
       expect(CODE).toContain(`[data-theme='${preference}']`)
     }
   })

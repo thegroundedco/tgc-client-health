@@ -44,6 +44,11 @@ describe('the theme on the signed-out screen', () => {
     await waitFor(() => {
       expect(document.documentElement.getAttribute(THEME_ATTRIBUTE)).toBe('dark')
     })
-    expect(screen.queryByRole('group', { name: 'Theme' })).toBe(null)
+    // Queried by the role the control actually has. It was written against
+    // role="group" when this was three buttons; left that way after the pill
+    // replaced them, it would assert the absence of a role nothing in the app
+    // renders any more -- passing whether or not the switch leaked onto this
+    // screen, which is the one thing it is here to catch.
+    expect(screen.queryByRole('switch', { name: 'Dark mode' })).toBe(null)
   })
 })

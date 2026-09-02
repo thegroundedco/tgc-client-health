@@ -1,5 +1,25 @@
 # Light and dark theme
 
+## AMENDED 2026-09-02, AFTER SHIPPING — READ THIS FIRST
+
+The owner reversed **two** rulings below on the day this shipped, after seeing it running. Both
+reversals are recorded in place further down; this is the summary, because a reader who only skims
+the top must not walk away with the retired version.
+
+**One: there are TWO states now, not three.** The control became a two-position pill — the owner
+supplied a reference image of one — and a switch has two ends with nowhere to put a third.
+`system` is gone as a *selectable* state. Following the OS survives as the **starting condition**:
+a browser that has never been toggled opens matching the machine, via the media query, with no
+JavaScript. The first press pins it. The cost the owner accepted, stated to him before he chose it,
+is that **sunset stops doing anything once you have pressed the switch**.
+
+Everything §3 and §4 say about the palette, the pins and the two dark blocks is **unchanged** — the
+CSS needed no edit at all for this, because `data-theme` absent already meant "follow the OS" and
+`light`/`dark` already meant explicit. Only what the UI *writes* changed.
+
+**Two: the switch is animated.** §1's "the switch is instant" is reversed. See §1 for how, and for
+the constraint that survived the reversal.
+
 Source: the owner, asked directly on 2026-09-01 and confirmed 2026-09-02. He asked for a dark
 theme, and chose **follow the OS with a manual override** — three states, `system` / `light` /
 `dark` — with the choice **persisted**.
@@ -15,7 +35,7 @@ sits between Slice 5 and Slice 6.
 
 ## 1. What is in this, and what is not
 
-**In.** A dark palette. The three-state preference, persisted per browser. One control, in the
+**In.** A dark palette. The preference, persisted per browser — three states as first shipped, two after the same day's amendment above. One control, in the
 signed-in header. `color-scheme`, so the platform's own widgets follow. The contrast measurements
 for every new value, in the file, beside the value.
 
@@ -23,9 +43,30 @@ for every new value, in the file, beside the value.
 entirely in the bundle. No per-account sync (§7). No change to the band fills themselves (§3). No
 new screens, and no revisiting of Slice 5's matrix beyond the tokens it already consumes.
 
-**Explicitly not in: a transition.** Cross-fading a whole palette costs a `transition` on
-properties that are painted on every element in the app, and buys a quarter-second of prettiness on
-an action taken perhaps twice a year. The switch is instant.
+**~~Explicitly not in: a transition.~~ REVERSED 2026-09-02 by the owner.** The original ruling
+read: *"Cross-fading a whole palette costs a `transition` on properties that are painted on every
+element in the app, and buys a quarter-second of prettiness on an action taken perhaps twice a
+year. The switch is instant."* The owner asked for the cross-fade after seeing the instant switch,
+and that is his call to make.
+
+The objection was never wrong, though, and the implementation answers it rather than ignoring it.
+The transition is **not** a standing rule on every element: `<html>` gains a `theme-transition`
+class for the length of one switch and loses it again. So there is no cost at rest, and — the part
+that actually mattered — **nothing animates on the first paint.** A permanent rule would have
+cross-faded the page from its unstyled default into the stamped theme on every single load, which
+is precisely the flash §5's inline script exists to prevent: the prettiness would have reintroduced
+the defect the architecture was built around.
+
+It is declared inside `@media (prefers-reduced-motion: no-preference)`, so a machine that asked for
+less motion gets the instant switch from a rule that was never applied — not from one applied and
+then overridden by `base.css`'s reduce block. Colour properties only, never `all`: a theme change
+moves no geometry.
+
+The duration lives in two files by necessity — `--theme-transition` in `tokens.css` is how long CSS
+animates, `TRANSITION_MS` in `theme.ts` is how long JavaScript waits before removing the class —
+and `tests/themeTransition.test.ts` is the only thing that can catch them disagreeing. Set them
+apart and the fade is either cut dead halfway or left hanging over the next interaction, with every
+other test still green.
 
 ## 2. Paper and ink are roles, not lightnesses
 
@@ -193,9 +234,17 @@ writePreference(storage, pref): boolean       // returns whether it actually stu
 applyPreference(root, pref): void             // 'system' REMOVES the attribute
 ```
 
-`applyPreference` removing the attribute for `system` is the point of the three states: with no
-attribute, the media query resumes control, and the app follows an OS that changes at sunset
+`applyPreference` removing the attribute for `system` was the point of the three states: with no
+attribute, the media query resumed control, and the app followed an OS that changed at sunset
 without anybody pressing anything.
+
+**Amended 2026-09-02:** with two states there is nothing to hand control back to, so
+`applyPreference` now always SETS and never removes — a removed attribute would silently re-follow
+the OS against a choice the person has actually made. `writePreference` likewise always writes:
+clearing the key was how `system` was represented, and an absence now means only "never chose",
+which is a different thing from either live state. The media query still runs, but only for a
+browser that has never been toggled — which is exactly what makes "follows the system" the
+starting condition rather than a mode.
 
 **No key versioning**, and the contrast with `draftCache` is the reason to say so. The draft's key
 carries `v4` because reading a stale *shape* would present an old rubric's answers as this month's
@@ -236,7 +285,7 @@ inherits that warmth rather than dropping it. Cost: four or five new brand liter
 lower band separation than a cool near-black would give (teal 8.28:1 against 8.93:1) — a difference
 with no practical consequence at those values.
 
-**The control is three buttons in the header, not a cycling button or a `<select>`.** It reuses the
+**~~The control is three buttons in the header, not a cycling button or a `<select>`.~~ REVERSED 2026-09-02 — see the amendment at the top; it is now a two-position pill switch, and the reasoning below survives only as the record of why three buttons were right for three states.** It reuses the
 Cards/Matrix pattern exactly: `role="group"`, an `aria-label`, and `aria-pressed` on each button.
 Board.tsx's own comment gives the reason — a control that says what it will *become* gives no
 indication of what is currently showing. Cost: three buttons of header width rather than one.

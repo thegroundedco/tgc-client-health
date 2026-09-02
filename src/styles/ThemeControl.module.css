@@ -1,8 +1,70 @@
-/* The three-state theme switch, in the header beside the signed-in address. A
-   flex row of its own so the buttons sit together and read as one control
-   rather than as three unrelated links -- the same reason Board's .viewToggle
-   has a rule. */
-.group {
-  display: flex;
-  gap: var(--space-2);
+/* The light/dark pill, in the header beside the signed-in address. Replaces the
+   three-button segmented control on the owner's instruction, 2026-09-02.
+
+   Every colour here resolves through the semantic layer and therefore FLIPS
+   with the theme, which is what makes one set of rules draw both states of the
+   reference: --surface-raised is near-white on paper and near-black at night,
+   --text-primary is the reverse. So the track is light with a dark knob in the
+   light theme and dark with a light knob in the dark one, with no second rule
+   and no literal.
+
+   The hairline is load-bearing, not trim: --surface-raised measures 1.05:1
+   against the page in light and 1.12:1 in dark, so the fill cannot define this
+   control's edge on its own -- the same warning tokens.css gives about cards. */
+
+.track {
+  /* Named here so the knob's travel below is arithmetic on them rather than a
+     magic number that silently stops matching when the pill is resized. */
+  --track-width: 3.25rem;
+  --knob-size: 1.25rem;
+  --knob-inset: 3px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: var(--track-width);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Small enough that the knob covers one completely. Both are always drawn; the
+   knob is opaque and sits above, so the uncovered one is the theme you are in. */
+.icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+}
+
+.knob {
+  position: absolute;
+  top: 50%;
+  left: var(--knob-inset);
+  width: var(--knob-size);
+  height: var(--knob-size);
+  border-radius: var(--radius-pill);
+  background: var(--text-primary);
+
+  /* translateY holds the vertical centring that `top: 50%` only half does, so
+     both the resting and travelled positions must carry it -- a transform
+     replaces, it does not accumulate. */
+  transform: translateY(-50%);
+
+  /* The slide. base.css's prefers-reduced-motion: reduce block already forces
+     transition-duration to 0.01ms with !important across every element, so a
+     machine asking for less motion gets the knob jumping rather than sliding
+     without this rule needing to know about it. */
+  transition: transform var(--theme-transition) ease;
+}
+
+/* Dark parks the knob at the sun end and leaves the moon showing; light parks
+   it at the moon end and leaves the sun showing. Travel is the track less the
+   knob and both insets. */
+.knobLight {
+  transform: translateY(-50%)
+    translateX(calc(var(--track-width) - var(--knob-size) - var(--knob-inset) * 2));
 }

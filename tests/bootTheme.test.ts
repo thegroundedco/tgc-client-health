@@ -44,8 +44,14 @@ function exportedArray(name: string): string[] {
 }
 
 const allPreferences = exportedArray('THEME_PREFERENCES')
-const defaultPreference = exportedString('DEFAULT_PREFERENCE')
-const overrides = allPreferences.filter((preference) => preference !== defaultPreference)
+
+// The state that was retired on 2026-09-02 when the control became a
+// two-position pill. There is no longer a default to exclude -- both live
+// preferences are explicit and both are written to storage -- but the retired
+// word must stay OUT of the script: a browser holding it falls through to the
+// OS by failing validation, and a script that started matching it again would
+// stamp data-theme="system", an attribute no CSS block matches.
+const RETIRED_PREFERENCE = 'system'
 
 describe('the inline theme script', () => {
   it('is read, not silently skipped', () => {
@@ -79,21 +85,20 @@ describe('the inline theme script', () => {
     expect(script).toContain('catch')
   })
 
-  // It must recognise exactly the OVERRIDES, and every one of them. 'system'
-  // is represented by the key's absence (theme.ts's writePreference clears
-  // it), so a script that also matched the word would be reading a value that
-  // is never written. Derived from THEME_PREFERENCES rather than the two words
-  // 'light' and 'dark' written out here: hardcoding them is exactly how a
-  // THIRD override, added to the module tomorrow, would ship with this test
-  // still green and the script silently blind to it.
-  it('recognises every override and not the default', () => {
-    expect(overrides.length).toBeGreaterThan(0)
+  // It must recognise every live preference, and not the retired one. Derived
+  // from THEME_PREFERENCES rather than the two words 'light' and 'dark'
+  // written out here: hardcoding them is exactly how a THIRD preference, added
+  // to the module tomorrow, would ship with this test still green and the
+  // script silently blind to it -- stamping an attribute no CSS block matches
+  // and flashing the wrong theme on every load.
+  it('recognises every live preference and not the retired one', () => {
+    expect(allPreferences.length).toBeGreaterThan(0)
     const head = HTML.slice(0, HTML.indexOf('</head>'))
     const script = head.slice(head.lastIndexOf('<script'))
-    for (const preference of overrides) {
+    for (const preference of allPreferences) {
       expect(script).toContain(`'${preference}'`)
     }
-    expect(script).not.toContain(`'${defaultPreference}'`)
+    expect(script).not.toContain(`'${RETIRED_PREFERENCE}'`)
   })
 
   // type="module" defers execution until the module graph resolves and the

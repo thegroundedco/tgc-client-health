@@ -272,6 +272,17 @@
   --radius-md: 6px;
   --radius-pill: 999px;
 
+  /* How long the light/dark switch takes to cross-fade. The owner asked for a
+     transition on 2026-09-02, reversing spec §1's "the switch is instant".
+
+     This number is half of a pair: src/styles/theme.ts's TRANSITION_MS is how
+     long JavaScript leaves the .theme-transition class on <html> before taking
+     it off again, and this is how long CSS animates for. They must agree --
+     shorter here and the fade is cut dead when the class comes off, longer and
+     the class lingers over the next interaction. tests/themeTransition.test.ts
+     is what stops them drifting. */
+  --theme-transition: 300ms;
+
   /* Running text stays near 65 characters. */
   --measure-prose: 62ch;
 

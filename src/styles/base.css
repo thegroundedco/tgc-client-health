@@ -92,6 +92,41 @@ a {
   }
 }
 
+/* The light/dark cross-fade. A CLASS on <html> that is added for the length of
+   one switch and taken off again -- not a transition living permanently on
+   every element -- and the difference is the whole design.
+
+   A permanent rule would fade the entire page in on the FIRST paint, which is
+   precisely the flash index.html's inline script exists to prevent: the script
+   stamps data-theme before anything is painted, and a standing transition would
+   then animate from the unstyled default to the stamped theme in full view. It
+   would also tax every unrelated repaint in the app for the sake of an action
+   taken perhaps twice a year.
+
+   Declared inside no-preference rather than left to the reduce block above.
+   That block would neutralise it -- transition-duration: 0.01ms !important --
+   but a person who asked their machine for less motion should get the instant
+   switch from a rule that was never applied, not from one applied and then
+   overridden. The distinction matters the day somebody adds a transition
+   shorthand here that the reduce block does not name.
+
+   Colour properties only, never `all`: a theme change moves no geometry, and
+   `all` would catch width and height on anything mid-render when the class
+   lands. */
+@media (prefers-reduced-motion: no-preference) {
+  .theme-transition,
+  .theme-transition *,
+  .theme-transition *::before,
+  .theme-transition *::after {
+    transition:
+      background-color var(--theme-transition) ease,
+      border-color var(--theme-transition) ease,
+      color var(--theme-transition) ease,
+      outline-color var(--theme-transition) ease,
+      fill var(--theme-transition) ease;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    Type roles. Global classes rather than per-module rules: these are app-wide
    vocabulary, and five copies of the same three declarations in five modules is
