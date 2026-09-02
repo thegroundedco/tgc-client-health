@@ -1,39 +1,3 @@
-/* The shell every signed-in screen sits inside. */
-
-.shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
-  border-bottom: 1px solid var(--rule-hairline);
-  background: var(--surface-raised);
-}
-
-.wordmark {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.identity {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-4);
-}
-
-.content {
-  flex: 1;
-  padding: var(--space-6);
-}
-
 /* Loading and the failure states share a centred column: each is one short
    message, and centring it stops a single line stranding itself in a corner of
    a wide screen. */

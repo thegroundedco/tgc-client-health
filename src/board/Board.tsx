@@ -2,9 +2,6 @@ import { useState } from 'react'
 import { defaultPeriod, formatPeriod, periodOptions } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
 import { CheckIn } from '../checkin/CheckIn'
-import { can } from '../lib/capabilities'
-import { ClientsAdmin } from '../clients/ClientsAdmin'
-import { UsersAdmin } from '../users/UsersAdmin'
 import { ClientCard } from './ClientCard'
 import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
@@ -36,14 +33,11 @@ export function Board({ profile }: Props) {
   // until somebody wants to send a colleague a link to one check-in.
   const [selected, setSelected] = useState<BoardClient | null>(null)
 
-  // §5.1 again: state-based navigation in the board container, no router,
-  // therefore no URL change and a refresh returns to the board. A linkable
-  // admin URL needs the GitHub Pages 404.html redirect trick, which is not
-  // worth buying until somebody wants to send a colleague a link to it.
-  const [showingClients, setShowingClients] = useState(false)
-
-  // Same reasoning as showingClients, immediately above.
-  const [showingUsers, setShowingUsers] = useState(false)
+  // Navigation left this file in Slice 6a. adminLink and usersLink used to be
+  // defined above the early returns and repeated in all four render branches,
+  // because a failed read and an empty roster are exactly when somebody needs
+  // to reach the admin screens. The menu bar in the shell is always drawn, so
+  // that requirement is now met by structure rather than by four copies.
 
   // Not persisted, deliberately. A reload returns to the working view, which is
   // the same choice §5.1 makes for the check-in screen: no router, no URL
@@ -77,72 +71,8 @@ export function Board({ profile }: Props) {
     )
   }
 
-  if (showingClients) {
-    return (
-      <ClientsAdmin
-        onBack={() => {
-          setShowingClients(false)
-          // Re-read on the way back, so a client added, renamed or retired here
-          // shows correctly on the board. Without this the board would show what
-          // it read before the change -- the same picture as a change that did
-          // nothing.
-          board.reload()
-        }}
-      />
-    )
-  }
-
-  if (showingUsers) {
-    return (
-      <UsersAdmin
-        currentUserId={profile.id}
-        onBack={() => setShowingUsers(false)}
-        // No board.reload() here, unlike the ClientsAdmin branch above: nothing
-        // on this screen changes a client or a check-in, so re-reading the
-        // board on the way back would be a pointless extra round trip.
-      />
-    )
-  }
-
-  // Drawn only for a role whose preset includes manage_clients. Convenience,
-  // not security: spec §7.2, "UI hiding is convenience; the database refusing is
-  // the security". A viewer who reached the screen would have every write
-  // refused by clients_insert_manage_clients and clients_update_manage_clients.
-  // This is the first caller of can() in the application.
-  //
-  // Defined here, above the four early returns below, and included in every one
-  // of them. It has to be reachable from the empty state and from the failed
-  // read in particular: a board with no clients is exactly when somebody needs
-  // to add one, and a failed read is not a reason to strand them.
-  const adminLink = can(profile.role, 'manage_clients') ? (
-    <nav className={styles.adminLink}>
-      <button
-        className="button button--quiet"
-        onClick={() => setShowingClients(true)}
-        type="button"
-      >
-        Clients
-      </button>
-    </nav>
-  ) : null
-
-  // The second caller of can() in the application. Convenience, not security:
-  // a non-admin reaching this screen reads an empty invitation list and has
-  // every write refused by profiles_update_manage_users and the guard trigger.
-  //
-  // Defined here beside adminLink, above the same four early returns, and
-  // included in every one of them for the same reason: a failed read or an
-  // empty board must not strand an admin.
-  const usersLink = can(profile.role, 'manage_users') ? (
-    <nav className={styles.adminLink}>
-      <button className="button button--quiet" onClick={() => setShowingUsers(true)} type="button">
-        People
-      </button>
-    </nav>
-  ) : null
-
-  // Derived after the two navigation returns and before the four render
-  // branches, so every branch below can use them.
+  // Derived before the four render branches, so every branch below can use
+  // them.
   const archived = archivedCount(board.clients)
   const visible = visibleClients(board.clients, showArchived)
 
@@ -202,8 +132,6 @@ export function Board({ profile }: Props) {
   if (board.status === 'error') {
     return (
       <section className={styles.state}>
-        {adminLink}
-        {usersLink}
         <h2 className="t-header">Cannot reach the database</h2>
         <p className="alert prose" role="alert">
           {board.loadError}
@@ -218,8 +146,6 @@ export function Board({ profile }: Props) {
   if (board.status === 'loading') {
     return (
       <section className={styles.state}>
-        {adminLink}
-        {usersLink}
         <p className="t-body">Loading…</p>
       </section>
     )
@@ -228,8 +154,6 @@ export function Board({ profile }: Props) {
   if (visible.length === 0) {
     return (
       <section className={styles.state}>
-        {adminLink}
-        {usersLink}
         {/* The same sentence progressLine gives the populated board, so the two
             empty states cannot drift apart in wording. activeTotal, not
             visible.length: this line is about the roster, not about what the
@@ -252,8 +176,6 @@ export function Board({ profile }: Props) {
 
   return (
     <section className={styles.board}>
-      {adminLink}
-      {usersLink}
       <div className={styles.periodBar}>
         {/* The month is the heading AND the control -- one element, so there is
             nothing to keep in step with anything. It replaces a pair of arrows

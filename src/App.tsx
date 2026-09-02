@@ -4,9 +4,8 @@ import { useProfile } from './auth/useProfile'
 import { SignIn } from './auth/SignIn'
 import { PendingAccess } from './auth/PendingAccess'
 import { deriveAppState } from './appState'
-import { Board } from './board/Board'
+import { Shell } from './shell/Shell'
 import { useTheme } from './styles/useTheme'
-import { ThemeControl } from './styles/ThemeControl'
 import styles from './App.module.css'
 
 export default function App() {
@@ -64,34 +63,12 @@ export default function App() {
 
     case 'active':
       return (
-        <div className={styles.shell}>
-          <header className={styles.header}>
-            <div className={styles.wordmark}>
-              <p className="t-eyebrow">The Grounded Company</p>
-              <h1 className="t-header">Client Health</h1>
-            </div>
-            <div className={styles.identity}>
-              {/* Labelled, not a bare address. Without the label a screen
-                  reader announces an email address next to a Sign out button
-                  and leaves the listener to guess the relationship. */}
-              <p className="t-caption">Signed in as {state.profile.email}</p>
-              <ThemeControl onChange={setPreference} preference={preference} />
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={() => void supabase.auth.signOut()}
-              >
-                Sign out
-              </button>
-            </div>
-          </header>
-          <main className={styles.content}>
-            {/* Rendered inside the existing `active` case rather than behind any
-                new session/profile branching: deriveAppState stays the single
-                place that decides what the app is showing. */}
-            <Board profile={state.profile} />
-          </main>
-        </div>
+        <Shell
+          onSignOut={() => void supabase.auth.signOut()}
+          onThemeChange={setPreference}
+          preference={preference}
+          profile={state.profile}
+        />
       )
 
     default: {

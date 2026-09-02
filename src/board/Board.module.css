@@ -83,13 +83,6 @@
   max-width: var(--measure-prose);
 }
 
-/* The link to the clients admin, above whatever the board is showing. A flex
-   row of its own so it hugs its content and sits left, rather than stretching
-   across the column its parent is. */
-.adminLink {
-  display: flex;
-}
-
 /* The show-archived toggle on the empty-roster screen. In the populated board
    it sits inside .periodBar and needs no rule of its own; the empty screen has
    no such row, and .state is a column, so without this the button would

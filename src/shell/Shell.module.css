@@ -1,0 +1,41 @@
+/* The shell every signed-in screen sits inside. Moved here from App.module.css
+   when the shell became its own component: App keeps only .centred, which is
+   what its loading and failure branches use, so each file now holds the rules
+   its own component draws. */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  /* The bar sits in the middle. Without this the three groups distribute
+     evenly and the menu drifts away from the wordmark it belongs to. */
+  row-gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--rule-hairline);
+  background: var(--surface-raised);
+}
+
+.wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.content {
+  flex: 1;
+  padding: var(--space-6);
+}
