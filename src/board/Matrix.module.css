@@ -21,9 +21,17 @@
    THE BORDER MODEL. Two weights and no more, the way a spreadsheet rules a
    sheet -- owner's reference, 2026-09-01:
 
-     1px --rule-hairline    every cell, the grid itself
+     2px --rule-hairline    every cell, the grid itself -- and Advocacy's
+                            floor, which is grid rather than grouping
      2px --text-primary     the outer box, and the three rules that group it:
                             under the header, left of Overall, above Average
+
+   Both weights are 2px, and the summary above said 1px for the hairline until
+   2026-09-02 -- stale since the weights were equalised on 2026-09-01, and
+   contradicted by ONE EDGE, ONE OWNER a dozen lines below, which exists
+   precisely BECAUSE they are equal. The distinction is carried entirely by
+   colour now, which is what makes the dark theme's inversion of these two
+   worth knowing about: see the spec's §9.
 
    border-collapse: COLLAPSE is what makes this work, and it is load-bearing in
    two ways. It merges each pair of adjacent cell borders into one line, so a
@@ -200,12 +208,6 @@
   font-size: var(--step--1);
 }
 
-/* The Advocacy header, spanning its two sub-columns. Centred over the pair, so
-   it reads as their parent rather than as a label for the first of them. */
-.headGroup {
-  text-align: center;
-}
-
 /* The band fills. Background and ink only -- the border above is the grid's,
    and a fill has no business redrawing it. */
 .name[data-band],
@@ -261,6 +263,31 @@
    for the same reason. */
 .footRule {
   border-block-end: 2px solid var(--text-primary);
+}
+
+/* The Advocacy header, spanning its two sub-columns. Centred over the pair, so
+   it reads as their parent rather than as a label for the first of them.
+
+   Its floor is the GRID's weight, and putting that right is why this rule lives
+   down here rather than up with the other header styling where it reads like it
+   belongs.
+
+   Advocacy carries .head like every other column header, and .head's heavy
+   border-block-end above is the rule UNDER THE HEADER. That lands correctly for
+   every other column because those cells are rowSpan={2}: their block-end IS
+   the header's floor. Advocacy is not -- it spans two sub-columns instead -- so
+   its block-end falls INSIDE the header, between the group label and its two
+   children. Left heavy, that is a FOURTH grouping rule where the border model
+   at the top of this file sanctions exactly three. Owner demoted it 2026-09-02,
+   having spotted it on the deployed page once the dark theme made it cream.
+
+   BELOW the heavy rules, deliberately, and for the same reason their own header
+   gives: .head and .headGroup are both single classes, so they tie on
+   specificity and source order alone decides. Move this back up and .head wins
+   again, restoring the line with every declaration still present. */
+.headGroup {
+  text-align: center;
+  border-block-end: 2px solid var(--rule-hairline);
 }
 
 /* The footer cell under Overall. The Average row stops before it: an

@@ -168,3 +168,33 @@ describe('the heavy rule before Overall', () => {
     expect(tag).toContain('styles.divider')
   })
 })
+
+// Advocacy's floor is the GRID's weight, not one of the three heavy rules.
+//
+// It carries .head like every other column header, and .head's heavy
+// border-block-end is the rule UNDER THE HEADER. That lands correctly for
+// every other column because those cells are rowSpan={2}, so their block-end
+// IS the header's floor. Advocacy is not: it spans two sub-columns instead, so
+// its block-end falls INSIDE the header, between the group label and its two
+// children -- a FOURTH heavy rule, where the border model at the top of the
+// stylesheet sanctions exactly three. The owner demoted it on 2026-09-02.
+describe('the Advocacy group header floor', () => {
+  it('is the grid hairline, not a fourth heavy rule', () => {
+    expect(ruleBody('.headGroup')).toContain('border-block-end')
+    expect(ruleBody('.headGroup')).toContain('var(--rule-hairline)')
+    expect(ruleBody('.headGroup')).not.toContain('var(--text-primary)')
+  })
+
+  // The trap, and the reason this assertion is worth more than the one above.
+  // .head and .headGroup are both single classes, so they tie on specificity
+  // and SOURCE ORDER alone decides which border-block-end survives. Move this
+  // rule back up among the other header styling -- where it reads like it
+  // belongs -- and .head's heavy rule silently wins again, restoring the line
+  // with the stylesheet still containing every declaration this test checks.
+  it('is declared after the heavy rule it overrides, or it loses the tie', () => {
+    const heavy = CODE.indexOf('.head,\n.headName {')
+    const group = CODE.indexOf('.headGroup {')
+    expect(heavy).toBeGreaterThan(-1)
+    expect(group).toBeGreaterThan(heavy)
+  })
+})
