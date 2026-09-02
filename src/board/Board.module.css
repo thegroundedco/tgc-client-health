@@ -91,6 +91,24 @@
   display: flex;
 }
 
+/* The Add client button, pushed to the end of the period bar -- owner,
+   2026-09-02, so the one ACTION in that row stops reading as a fourth view
+   toggle sitting beside Cards and Matrix.
+
+   An auto inline-start margin on a wrapper, not justify-content on .periodBar
+   itself. The bar's other members -- the month, the progress line, the archive
+   toggle, the view switch -- have to stay grouped at the start, and the bar
+   WRAPS: a justify rule would redistribute every wrapped line rather than move
+   one item, so on a narrow window the month and the toggles would drift apart
+   from each other too.
+
+   Only the button gets this. The panel it opens is deliberately rendered
+   outside the bar -- see Board.tsx -- because .periodBar aligns on baseline and
+   a bordered card in that row drags everything else up against its heading. */
+.addBar {
+  margin-inline-start: auto;
+}
+
 /* The Cards | Matrix switch, in the period bar beside the month and the archive
    toggle. A flex row of its own so the two buttons sit together and read as one
    control rather than as two unrelated links. */

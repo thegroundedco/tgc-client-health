@@ -63,8 +63,29 @@ export function Board({ profile }: Props) {
   // Defined above the early returns and included in the empty-roster branch as
   // well as the populated one: a board with no clients is exactly when somebody
   // needs to add one.
-  const addClient = can(profile.role, 'manage_clients') ? (
-    adding ? (
+  const canAddClient = can(profile.role, 'manage_clients')
+
+  // Split into a button and a panel on 2026-09-02, and the split is the point.
+  // The button belongs in the period bar, at its end; the PANEL does not belong
+  // in that row at all. .periodBar aligns its members on their BASELINE, and the
+  // panel is a full bordered card, so leaving it there drags the month select
+  // and the view toggles up against the card's heading. Held as one value, both
+  // were forced into the same place.
+  const addClientButton =
+    canAddClient && !adding ? (
+      // The filled .button rather than .button--quiet, the treatment "Try again"
+      // already wears. Owner asked for a colour that reads as actionable, and
+      // every hue in this brand is spoken for -- teal healthy, amber watch, red
+      // risk, stone not scored, and blush is both the churned pill and the one
+      // colour tokens.css says never carries meaning. So the emphasis comes from
+      // FILL rather than from inventing a sixth brand colour for one button.
+      <button className="button" onClick={() => setAdding(true)} type="button">
+        Add client
+      </button>
+    ) : null
+
+  const addClientPanel =
+    canAddClient && adding ? (
       <AddClientPanel
         onClose={() => {
           setAdding(false)
@@ -75,12 +96,7 @@ export function Board({ profile }: Props) {
           board.reload()
         }}
       />
-    ) : (
-      <button className="button button--quiet" onClick={() => setAdding(true)} type="button">
-        Add client
-      </button>
-    )
-  ) : null
+    ) : null
 
   if (selected) {
     return (
@@ -193,7 +209,11 @@ export function Board({ profile }: Props) {
             exactly what somebody needs the moment they retire their last
             client -- whether or not there is anything archived to reveal. */}
         <p className="t-body prose">Add one to see it here.</p>
-        {addClient}
+        {/* Bare, without .addBar's auto margin: .state is a column aligned to
+            flex-start, so pushing the button to the inline end would strand it
+            away from the sentence that just told somebody to press it. */}
+        {addClientButton}
+        {addClientPanel}
         {archived > 0 && (
           // Reachable the moment somebody retires their last client. Without
           // this the roster looks permanently empty with no hint that anything
@@ -243,8 +263,10 @@ export function Board({ profile }: Props) {
         </p>
         {archiveToggle}
         {viewToggle}
-        {addClient}
+        {addClientButton && <div className={styles.addBar}>{addClientButton}</div>}
       </div>
+
+      {addClientPanel}
 
       {view === 'matrix' ? (
         // Every active client, not `visible`: the cards are the month's work

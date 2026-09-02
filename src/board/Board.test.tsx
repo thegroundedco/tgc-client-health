@@ -7,6 +7,7 @@ import type { Profile } from '../auth/useProfile'
 import { currentPeriod, defaultPeriod, formatPeriod, periodOptions, previousPeriod } from '../lib/month'
 import type { CardCheckin } from './cardSummary'
 import type { UseBoard } from './useBoard'
+import styles from './Board.module.css'
 
 // THREE mocks, and none of the three is optional.
 //
@@ -571,5 +572,57 @@ describe('adding a client from the Clients tab', () => {
     given({ clients: [], activeTotal: 0 })
 
     expect(screen.getByRole('button', { name: 'Add client' })).toBeTruthy()
+  })
+})
+
+// Owner, 2026-09-02, from the deployed page: "Move the Add Client button to be
+// right aligned and let's give it a color so it's noticeable as an actionable
+// thing."
+//
+// The colour question had one honest answer. Every hue in this brand already
+// carries health meaning -- teal healthy, amber watch, red risk, stone not
+// scored -- and blush is both the churned-client pill and documented in
+// tokens.css as the one colour that never means anything. So rather than invent
+// a sixth brand colour for a button, this uses the FILLED .button the app
+// already has for its primary action, the one "Try again" wears.
+describe('the add-client button as the primary action', () => {
+  it('is the filled button, not a quiet one', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    const add = screen.getByRole('button', { name: 'Add client' })
+    expect(add.className).toContain('button')
+    expect(add.className).not.toContain('button--quiet')
+  })
+
+  // The wrapper is what carries the auto margin that pushes it to the end of
+  // the row; tests/boardLayout.test.ts pins the margin itself, which no DOM
+  // test can see.
+  it('sits in the period bar, in the wrapper that right-aligns it', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    const bar = document.querySelector(`.${styles.periodBar}`)
+    expect(bar).not.toBeNull()
+    const addBar = bar?.querySelector(`.${styles.addBar}`)
+    expect(addBar).not.toBeNull()
+    expect(addBar?.contains(screen.getByRole('button', { name: 'Add client' }))).toBe(true)
+  })
+
+  // The panel is a full bordered card. Left inside .periodBar it would be a
+  // flex item in a row that aligns its members on their BASELINE, so the month
+  // select and the view toggles would line up against the top of a tall card.
+  // Right-aligning the button made that worse rather than better, so the panel
+  // moves out of the row entirely and the button alone stays in it.
+  it('opens the panel below the period bar, not inside it', async () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
+
+    const bar = document.querySelector(`.${styles.periodBar}`)
+    const nameField = screen.getByLabelText(/name/i)
+    expect(bar).not.toBeNull()
+    expect(bar?.contains(nameField)).toBe(false)
   })
 })
