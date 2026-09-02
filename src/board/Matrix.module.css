@@ -314,7 +314,7 @@
 
    At 0.72 three of the four fail. On red NO useful opacity passes, because the
    ink starts at 4.61:1 with no headroom to spend -- the brand red is why
-   --brand-red-dark exists for text elsewhere, and it cannot help here because
+   --brand-red-legible exists for text elsewhere, and it cannot help here because
    the red is the BACKGROUND. A quieter ink token has the same problem and adds
    an unmeasured colour on a coloured ground, which is the one thing tokens.css
    exists to prevent. So the subtlety is carried by weight alone, which costs no

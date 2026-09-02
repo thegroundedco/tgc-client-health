@@ -49,6 +49,12 @@
 }
 
 :root {
+  /* Not decoration. This is what makes the month <select>, the scrollbars and
+     the focus rings the PLATFORM draws follow the theme. Without it a dark app
+     has a white dropdown in the middle of it. It lives here rather than in
+     base.css so it sits beside the blocks it must stay in step with. */
+  color-scheme: light;
+
   /* ==========================================================================
      BRAND — identity, from Grounded_Styleguide_Final.ai
      ========================================================================== */
@@ -60,14 +66,50 @@
 
   /* Derived from the five above: same identity, adjusted for legibility. A
      rebrand replaces these too.
-     --brand-red-dark exists because the brand red measures 3.34:1 on the brand
-     paper, below the 4.5:1 needed for text. An error message set in #F9423A
-     would be brand-correct and unreadable. #B82B25 measures 5.75:1. */
+     --brand-red-legible exists because the brand red measures 3.34:1 on the
+     brand paper, below the 4.5:1 needed for text. An error message set in
+     #F9423A would be brand-correct and unreadable. #B82B25 measures 5.75:1.
+     The name says "legible", not "dark", because its dark-theme counterpart is
+     LIGHTER -- #FF6B60, 6.02:1 on the dark ground. A pleasing inversion falls
+     out of that: the brand red that fails as text on paper PASSES on the dark
+     ground at 4.69:1, while #B82B25 fails there at 2.73:1. The compromise and
+     the true colour swap places. */
   --brand-paper-raised: #FFFDF6;
   --brand-paper-sunken: #F2ECDA;
   --brand-rule: #CFC8B6;
   --brand-ink-muted: #6B6459;
-  --brand-red-dark: #B82B25;
+  --brand-red-legible: #B82B25;
+
+  /* PINNED — the same value in both schemes, and that is the whole point.
+     --brand-stone carries the same literal as --brand-rule, and that is NOT a
+     duplicate to be tidied away: a hairline grey and a light band fill are two
+     different jobs that happen to coincide on paper and diverge in the dark.
+     Merging them back is how spec §3.2's defect returns. */
+  --brand-ink-fixed: #1F1F1F;
+  --brand-stone: #CFC8B6;
+
+  /* ==========================================================================
+     DARK — the same roles at night. Paper is the ground and ink is the mark;
+     neither is a lightness, which is why the SEMANTIC layer below needs no
+     dark variant at all and the action button inverts for free at 12.74:1.
+
+     Measured 2026-09-02, same formula as the 2026-08-21 pass.
+                              page   raised  sunken
+       --dark-ink            14.22   12.74   15.27
+       --dark-ink-muted       6.32    5.66    6.78
+     --dark-rule is 1.74:1 on the page. That is a hairline, not text, and it is
+     marginally BETTER than light's accepted 1.56:1 equivalent.
+     --dark-red-legible is 6.02:1 on the page and 5.39:1 on raised.
+     Bands against the dark ground, unchanged: teal 8.28, amber 7.79, red 4.69,
+     stone 10.07. The ink labels on them are ground-independent and unchanged.
+     ========================================================================== */
+  --dark-paper: #201D18;
+  --dark-paper-raised: #2A2620;
+  --dark-paper-sunken: #191612;
+  --dark-ink: #F2ECDA;
+  --dark-ink-muted: #A69E8E;
+  --dark-rule: #4A443A;
+  --dark-red-legible: #FF6B60;
 
   /* ==========================================================================
      FUNCTIONAL — meaning without identity. Not brand, and must not move with
@@ -80,9 +122,10 @@
      SEMANTIC — the only layer components may reference. No literals here.
      ========================================================================== */
 
-  /* surfaces. --surface-raised measures 1.05:1 against the page, so it cannot
-     define a card edge on its own: the hairline is the actual boundary. Do not
-     "tidy up" a card border and expect the fill to hold the shape. */
+  /* surfaces. --surface-raised measures 1.05:1 against the page in light and
+     1.12:1 in dark, so it cannot define a card edge on its own: the hairline is
+     the actual boundary. Do not "tidy up" a card border and expect the fill to
+     hold the shape. */
   --surface-page: var(--brand-paper);
   --surface-raised: var(--brand-paper-raised);
   --surface-sunken: var(--brand-paper-sunken);
@@ -99,12 +142,15 @@
      Any two bands are also indistinguishable from one another — teal vs red
      1.76:1, teal vs amber 1.06:1, amber vs red 1.66:1 — which is why parent
      spec §9.3's rule that every band carries a TEXT label is load-bearing and
-     not a nicety. */
+     not a nicety.
+     --text-on-band and --band-none deliberately do NOT follow --brand-ink and
+     --brand-rule into the dark theme. Spec §3, and tests/themeParity.test.ts
+     fails if either is ever repointed. */
   --band-healthy: var(--brand-teal);
   --band-watch: var(--functional-amber);
   --band-risk: var(--brand-red);
-  --band-none: var(--brand-rule);
-  --text-on-band: var(--brand-ink);
+  --band-none: var(--brand-stone);
+  --text-on-band: var(--brand-ink-fixed);
 
   /* interaction */
   --action-face: var(--brand-ink);
@@ -115,7 +161,7 @@
   /* An error message on the page ground: 5.75:1. There is deliberately no
      filled-alert token — nothing in the app fills a surface with red, and an
      unused token is a colour waiting to be used without its contrast measured. */
-  --alert-text: var(--brand-red-dark);
+  --alert-text: var(--brand-red-legible);
 
   /* The one purely decorative brand colour. Never carries meaning, so nothing
      is lost if a rebrand drops it. Used by the sign-in screen's confirmation
@@ -216,4 +262,48 @@
      column is sized by the controls standing in it, which are themselves sized
      in rem, not by a count of characters. */
   --measure-column: 30rem;
+}
+
+/* ============================================================================
+   DARK, applied two ways, and both are needed.
+
+   The media query is the `system` state and needs no JavaScript: it is in a
+   stylesheet linked in <head> and is correct on the first paint. The attribute
+   is the manual override, stamped by the inline script in index.html.
+
+   The :not([data-theme='light']) guard is what makes the override win in BOTH
+   directions. Without it, somebody on a dark-preferring OS who chooses Light
+   gets the media query anyway and the button appears to do nothing.
+
+   The two blocks are duplicated on purpose. light-dark() would collapse them
+   into one declaration per token and was rejected on failure mode rather than
+   on browser support: where it is unsupported the custom property is invalid at
+   computed-value time and resolves to `unset` -- not a wrong colour, an ABSENT
+   one, on every token at once. See spec §4.1. Because the literals are defined
+   once above and these blocks only repoint, they cannot drift in value;
+   tests/themeParity.test.ts stops them drifting in membership.
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --brand-paper: var(--dark-paper);
+    --brand-paper-raised: var(--dark-paper-raised);
+    --brand-paper-sunken: var(--dark-paper-sunken);
+    --brand-ink: var(--dark-ink);
+    --brand-ink-muted: var(--dark-ink-muted);
+    --brand-rule: var(--dark-rule);
+    --brand-red-legible: var(--dark-red-legible);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --brand-paper: var(--dark-paper);
+  --brand-paper-raised: var(--dark-paper-raised);
+  --brand-paper-sunken: var(--dark-paper-sunken);
+  --brand-ink: var(--dark-ink);
+  --brand-ink-muted: var(--dark-ink-muted);
+  --brand-rule: var(--dark-rule);
+  --brand-red-legible: var(--dark-red-legible);
 }
