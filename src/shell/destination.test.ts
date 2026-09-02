@@ -8,6 +8,12 @@ import {
 } from './destination'
 
 describe('the destination list', () => {
+  // Note what this cannot catch, and where that is covered instead. This pins
+  // what IS in DESTINATIONS; a fifth DestinationKind added to the union with no
+  // entry here would leave this array untouched and this test green, and the
+  // destination would simply never appear in the bar -- reachable by nothing,
+  // with a clean build. That case is a type-level assertion in destination.ts,
+  // because no runtime test can see a value that was never listed.
   it('is the four the owner asked for, in his order', () => {
     expect(DESTINATIONS.map((entry) => entry.kind)).toEqual([
       'overview',

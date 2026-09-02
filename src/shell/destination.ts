@@ -26,12 +26,28 @@ export type DestinationKind = Destination['kind']
 // Ordered, and the order is the menu bar's reading order. The bar renders from
 // this array rather than repeating the four words, the same way ThemeControl
 // renders from THEME_PREFERENCES.
-export const DESTINATIONS: readonly { kind: DestinationKind; label: string }[] = [
+//
+// `satisfies` rather than a type annotation, so each entry keeps its literal
+// kind and the assertion below can see what is actually listed. An annotation
+// would widen every `kind` to DestinationKind and the check would be vacuous.
+export const DESTINATIONS = [
   { kind: 'overview', label: 'Overview' },
   { kind: 'clients', label: 'Clients' },
   { kind: 'revenue', label: 'Revenue' },
   { kind: 'admin', label: 'Admin' },
-]
+] as const satisfies readonly { kind: DestinationKind; label: string }[]
+
+// The other half of the compile-time safety the union is here for. `satisfies`
+// only proves every entry is a real destination; it says nothing about a
+// destination with no entry, so a fifth variant could be added to Destination,
+// handled in openDestination, and simply never appear in the bar -- reachable
+// by nothing, with a clean build and a green suite. This resolves to `never` the
+// moment a kind is missing, and `true` is not assignable to `never`.
+// `void` because the assertion IS the binding's purpose -- nothing reads it at
+// runtime, and the line exists only so the compiler has to check the type.
+type UnlistedKind = Exclude<DestinationKind, (typeof DESTINATIONS)[number]['kind']>
+const _everyKindIsInTheBar: UnlistedKind extends never ? true : never = true
+void _everyKindIsInTheBar
 
 // Spec §3.1. Overview is the homepage and will be this value -- but not while it
 // is still empty: making an empty page the first thing every person sees on

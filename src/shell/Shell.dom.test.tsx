@@ -31,7 +31,31 @@ vi.mock('../board/useBoard', () => ({ useBoard: vi.fn() }))
 // for the same reason.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../clients/ClientsAdmin', () => ({ ClientsAdmin: () => <p>client roster</p> }))
-vi.mock('../users/UsersAdmin', () => ({ UsersAdmin: () => <p>people and access</p> }))
+// UsersAdmin stands in for any destination that can have a write in flight. The
+// real screen reports its `writing` value from an effect; this one reports it on
+// demand, which is what lets a test hold the shell in the mid-write state and
+// look at what the bar is doing while it is there.
+vi.mock('../users/UsersAdmin', () => ({
+  UsersAdmin: ({ onWritingChange }: { onWritingChange?: (writing: boolean) => void }) => (
+    <>
+      <p>people and access</p>
+      <button onClick={() => onWritingChange?.(true)} type="button">
+        begin a write
+      </button>
+      <button onClick={() => onWritingChange?.(false)} type="button">
+        finish the write
+      </button>
+    </>
+  ),
+}))
+
+const ENTRIES = ['Overview', 'Clients', 'Revenue', 'Admin']
+
+function barDisabled(): boolean[] {
+  return ENTRIES.map((name) =>
+    (screen.getByRole('button', { name }) as HTMLButtonElement).disabled,
+  )
+}
 
 // Mounts, not renders: the counter is incremented from an effect with an empty
 // dependency array, so it moves only when React actually mounts the component.
@@ -221,5 +245,90 @@ describe('the shell', () => {
       screen.getByText('Add one to see it here.'),
     ).toBeTruthy()
     expect(screen.queryByText('client roster')).toBe(null)
+  })
+
+  // The guard the bar took away and this puts back. Before the shell, an admin
+  // screen owned the whole viewport and its own Back button was the only exit,
+  // so `disabled={writing}` on that one button was airtight. The bar draws four
+  // more exits above it: change a role, press Clients while the PATCH is in
+  // flight, and UsersAdmin unmounts with the refusal landing where nobody can
+  // read it -- a write that failed looking exactly like one that worked.
+  it('disables every menu entry while the screen below has a write in flight', async () => {
+    renderShell('admin')
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    expect(barDisabled()).toEqual([false, false, false, false])
+
+    await userEvent.click(screen.getByRole('button', { name: 'begin a write' }))
+    expect(barDisabled()).toEqual([true, true, true, true])
+  })
+
+  // The other half, and it is the half that makes the first one safe: a bar that
+  // latched would be worse than no guard at all.
+  it('re-enables the menu when the write finishes', async () => {
+    renderShell('admin')
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'begin a write' }))
+    expect(barDisabled()).toEqual([true, true, true, true])
+
+    await userEvent.click(screen.getByRole('button', { name: 'finish the write' }))
+    expect(barDisabled()).toEqual([false, false, false, false])
+  })
+
+  // A screen that has been unmounted cannot report itself idle, so the shell
+  // clears the flag on every destination change. Reached here through the
+  // section switcher, which is the one control still live while the bar is
+  // disabled: switching sections mid-write unmounts the screen that reported it.
+  it('clears the busy flag when the destination changes underneath it', async () => {
+    renderShell('admin')
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'begin a write' }))
+    expect(barDisabled()).toEqual([true, true, true, true])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clients roster' }))
+    expect(barDisabled()).toEqual([false, false, false, false])
+  })
+
+  // Spec §4: "The menu bar stays visible during a check-in", which is new --
+  // before this slice the check-in screen returned above the nav and Back was
+  // the only way out. Safe specifically because draftCache.ts writes every
+  // click and keystroke to local storage as they happen, so leaving mid-edit
+  // loses nothing.
+  //
+  // The REAL board and a REAL check-in, opened by clicking a client the way a
+  // person does. The test this replaces stubbed the board and never entered a
+  // check-in at all, so it asserted the bar was on screen on the screen that is
+  // not in question -- it would have passed with an early return above
+  // <MenuBar>, which is the single edit that breaks this behaviour.
+  it('keeps the menu bar on screen inside a check-in', async () => {
+    await useRealBoard({})
+    renderShell('admin')
+
+    // The check-in's own Back button, which no other screen renders now that the
+    // two admin screens say "Clients" -- so this is the assertion that says a
+    // check-in really is open rather than the board still being on screen.
+    await userEvent.click(screen.getByRole('button', { name: 'Acme' }))
+    expect(screen.getByRole('button', { name: 'Board' })).toBeTruthy()
+    expect(screen.queryByRole('list', { name: 'Clients' })).toBe(null)
+
+    expect(screen.getByRole('navigation', { name: 'Sections' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeTruthy()
+  })
+
+  // Visible is not the same as working. With a check-in open, Clients carries
+  // aria-current="page" and used to do nothing at all: same element, same
+  // position, so React kept Board mounted and `selected` with it -- the one
+  // button naming the screen you are on being the only one with no effect, and
+  // aria-current claiming a screen the press could not reach. The board's key is
+  // what makes the press a remount.
+  it('returns to the board when Clients is pressed inside a check-in', async () => {
+    await useRealBoard({})
+    renderShell('admin')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Acme' }))
+    expect(screen.getByRole('button', { name: 'Board' })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
+    expect(screen.getByRole('list', { name: 'Clients' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Board' })).toBe(null)
   })
 })

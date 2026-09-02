@@ -15,8 +15,11 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  /* The bar sits in the middle. Without this the three groups distribute
-     evenly and the menu drifts away from the wordmark it belongs to. */
+  /* Narrows the vertical gap only. `gap` above sets both axes, and on a narrow
+     viewport the three groups wrap onto separate lines; a full --space-4
+     between those lines makes the header tall enough to push the board's first
+     card off the fold. The horizontal distribution is justify-content:
+     space-between and this does not touch it. */
   row-gap: var(--space-3);
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--rule-hairline);
