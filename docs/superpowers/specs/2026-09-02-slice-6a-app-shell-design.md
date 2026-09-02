@@ -30,8 +30,10 @@ a separate conversation (§6), and nobody is going to invent them twice.
 ## 2. What is in this slice, and what is not
 
 **In.** The menu bar with four destinations. One navigation state, replacing five booleans. Every
-screen that exists today relocated under it. The theme pill moved into the bar. An Add client button
-on the Clients tab. Overview and Revenue as honest, short pages that say what they are for.
+screen that exists today relocated under it. The theme pill kept beside "Signed in as" and Sign out,
+where it already was — only its file changed, from `App.tsx` to `Shell.tsx`; it did **not** move into
+the bar, and §3 describes its position correctly. An Add client button on the Clients tab. Overview
+and Revenue as honest, short pages that say what they are for.
 
 **Not in.** Overview's actual content (§6, and it needs the owner). Revenue's actual content — it is
 blocked on a data model that does not exist (§6.2). The tenure and churn report, which was the
@@ -192,25 +194,46 @@ the tenure and churn work is scoped and waiting. It lands here in a later slice.
 
 ## 7. Modules
 
+> **Amended 2026-09-02, after implementation.** As written before the work, this list named three of
+> the five components that shipped and omitted `Shell.tsx`, `Admin.tsx` and `AddClientPanel.tsx` —
+> including the shell component the whole slice is named for. Completed here rather than quietly, so
+> that the gap is visible: a module list that omits the host component is not a small inaccuracy, it
+> is the map missing the building. The `Board.tsx` line count is corrected in the same pass.
+
 - `src/shell/destination.ts` — the `Destination` union and its transitions. Pure, unit-tested, the
-  same shape and for the same reasons as `src/appState.ts`.
+  same shape and for the same reasons as `src/appState.ts`. Also holds `DESTINATIONS`, the bar's
+  ordered entries, type-enforced to cover every `DestinationKind`.
+- `src/shell/Shell.tsx` + `.module.css` — the shell itself: the header, the bar, the identity block
+  and the one `switch` that turns a `Destination` into a screen. Holds the navigation state that
+  `Board.tsx` used to hold, and nothing else.
 - `src/shell/MenuBar.tsx` + `.module.css` — the bar. Renders from a list so the destinations and
   their order live in one place, the way `ThemeControl` renders from `THEME_PREFERENCES`.
-- `src/shell/Overview.tsx`, `src/shell/Revenue.tsx` — the two honest pages.
+- `src/shell/Admin.tsx` + `.module.css` — the Admin destination's two sections behind one value,
+  with the section switcher drawn only when there is something to switch between (§3).
+- `src/shell/Overview.tsx`, `src/shell/Revenue.tsx` + `Page.module.css` — the two honest pages.
+- `src/clients/AddClientPanel.tsx` — the Clients tab's Add client form, a component rather than a
+  branch inside `Board` so that `useClients` fetches its owner list only when the panel is opened.
 - `src/board/Board.tsx` — loses its five navigation booleans and its four early returns, keeping
-  `showArchived` and `view`. It is 329 lines today and doing two jobs, board and navigation host;
-  this removes the second.
+  `showArchived`, `view` and `selected`. It was 329 lines and doing two jobs, board and navigation
+  host; it is 282 lines now that the second is gone.
 
 The `src/shell/` directory is new and deliberate: the shell is not part of the board, and leaving it
 in `board/` is what let one file become both.
 
 ## 8. Testing
 
+Amended 2026-09-02, after implementation, for the same reason §7 was: the table named
+`src/board/Board.dom.test.tsx`, which does not exist — the board's DOM tests live in
+`src/board/Board.test.tsx` — and omitted three files that were written.
+
 | File | Covers |
 |---|---|
-| `src/shell/destination.test.ts` | every transition; that the union admits no impossible state |
+| `src/shell/destination.test.ts` | every transition; that the union admits no impossible state; that `DESTINATIONS` is the four in the owner's order. A kind added to the union with no entry in `DESTINATIONS` is caught by a type-level assertion in `destination.ts`, not by this file — no runtime test can see a value that was never listed |
 | `src/shell/MenuBar.dom.test.tsx` | four entries, current one marked, Admin hidden without either capability, Admin shown with only one |
-| `src/board/Board.dom.test.tsx` | Add client is gated by `manage_clients`; the board re-reads after an add |
+| `src/shell/Shell.dom.test.tsx` | where sign-in lands; moving between destinations; the board remounting on the way back, which is the reload; the bar surviving a failed read, an empty roster and an open check-in; the bar disabled while the screen below is writing |
+| `src/shell/pages.dom.test.tsx` | Overview and Revenue say what they are for and what they wait on, rather than "coming soon" |
+| `src/board/Board.test.tsx` | Add client is gated by `manage_clients`; the board re-reads after an add |
+| `src/clients/AddClientPanel.dom.test.tsx` | the panel fetches only when opened, and closing it re-reads the board |
 | existing suites | must pass unchanged — the screens themselves are not being rewritten |
 
 The capability tests matter more than their size suggests: `admin`, `account_manager` and `viewer`
