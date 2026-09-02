@@ -210,7 +210,7 @@ describe('the shell', () => {
 
     expect(screen.getByRole('navigation', { name: 'Sections' })).toBeTruthy()
     expect(
-      screen.getByText('Add one on the client admin screen to see it here.'),
+      screen.getByText('Add one to see it here.'),
     ).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
@@ -218,7 +218,7 @@ describe('the shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     expect(
-      screen.getByText('Add one on the client admin screen to see it here.'),
+      screen.getByText('Add one to see it here.'),
     ).toBeTruthy()
     expect(screen.queryByText('client roster')).toBe(null)
   })

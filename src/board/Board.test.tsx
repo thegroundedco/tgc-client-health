@@ -26,6 +26,21 @@ import type { UseBoard } from './useBoard'
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
 
+// Board now renders AddClientPanel when the Add client button is pressed, and
+// AddClientPanel calls useClients, which imports supabase at module scope. That
+// import is mocked above as `{}`, so an unmocked useClients would call
+// `.from(...)` on an empty object and throw the moment the panel mounts.
+// Stubbed to the four things AddClientForm consumes, same shape as
+// AddClientPanel.dom.test.tsx's mock.
+vi.mock('../clients/useClients', () => ({
+  useClients: () => ({
+    owners: [],
+    addState: { kind: 'idle' },
+    addClient: vi.fn(),
+    resetAdd: vi.fn(),
+  }),
+}))
+
 import { Board } from './Board'
 import { useBoard } from './useBoard'
 
@@ -261,7 +276,7 @@ describe('the board', () => {
   it('says the roster is empty, and how to fix it, rather than rendering nothing', () => {
     given({ clients: [], activeTotal: 0 })
     expect(screen.getByText('No active clients')).toBeTruthy()
-    expect(screen.getByText(/client admin screen/)).toBeTruthy()
+    expect(screen.getByText('Add one to see it here.')).toBeTruthy()
     expect(clientList()).toBeNull()
   })
 
@@ -384,7 +399,7 @@ describe('the show-archived toggle', () => {
     render(<Board profile={PROFILE} />)
 
     expect(screen.getByText('No active clients')).toBeTruthy()
-    expect(screen.getByText(/Add one on the client admin screen/)).toBeTruthy()
+    expect(screen.getByText('Add one to see it here.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Show 1 archived' })).toBeTruthy()
   })
 
@@ -500,5 +515,41 @@ describe('the Cards | Matrix toggle', () => {
 
     expect(screen.queryByTestId('matrix-table')).toBeNull()
     expect(screen.getByText(formatPeriod(shown))).toBeTruthy()
+  })
+})
+
+describe('adding a client from the Clients tab', () => {
+  it('offers the button to an account manager, who can manage clients', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    expect(screen.getByRole('button', { name: 'Add client' })).toBeTruthy()
+  })
+
+  // Convenience, not security -- spec §7.2. A viewer who reached the form anyway
+  // has the insert refused by clients_insert_manage_clients. The button is
+  // hidden because a control that always fails is worse than no control.
+  it('does not draw it for a viewer', () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={{ ...PROFILE, role: 'viewer' }} />)
+
+    expect(screen.queryByRole('button', { name: 'Add client' })).toBeNull()
+  })
+
+  it('reveals the form when pressed', async () => {
+    vi.mocked(useBoard).mockReturnValue(READY)
+    render(<Board profile={PROFILE} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
+    expect(screen.getByLabelText(/name/i)).toBeTruthy()
+  })
+
+  // The empty roster is exactly when somebody needs to add a client, which is
+  // why the button is defined above the early returns rather than inside the
+  // populated branch. The same argument the deleted adminLink comment made.
+  it('offers it when the roster is empty, which is when it is needed most', () => {
+    given({ clients: [], activeTotal: 0 })
+
+    expect(screen.getByRole('button', { name: 'Add client' })).toBeTruthy()
   })
 })

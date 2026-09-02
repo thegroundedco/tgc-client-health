@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { defaultPeriod, formatPeriod, periodOptions } from '../lib/month'
 import type { Profile } from '../auth/useProfile'
+import { can } from '../lib/capabilities'
 import { CheckIn } from '../checkin/CheckIn'
+import { AddClientPanel } from '../clients/AddClientPanel'
 import { ClientCard } from './ClientCard'
 import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
@@ -51,7 +53,34 @@ export function Board({ profile }: Props) {
   // state -- so it cannot disagree with the cards about a month or a number.
   const [view, setView] = useState<'cards' | 'matrix'>('cards')
 
+  // Whether the add-client form is open. Not persisted, matching every other
+  // view state on this screen.
+  const [adding, setAdding] = useState(false)
+
   const board = useBoard(period)
+
+  // Gated on manage_clients, like the admin screen this form also lives on.
+  // Defined above the early returns and included in the empty-roster branch as
+  // well as the populated one: a board with no clients is exactly when somebody
+  // needs to add one.
+  const addClient = can(profile.role, 'manage_clients') ? (
+    adding ? (
+      <AddClientPanel
+        onClose={() => {
+          setAdding(false)
+          // Re-read on the way out, so a client added here appears on the board
+          // immediately. Same reasoning as ClientsAdmin's onBack: without it the
+          // board shows what it read before the add, which is the same picture
+          // as an add that did nothing.
+          board.reload()
+        }}
+      />
+    ) : (
+      <button className="button button--quiet" onClick={() => setAdding(true)} type="button">
+        Add client
+      </button>
+    )
+  ) : null
 
   if (selected) {
     return (
@@ -163,7 +192,8 @@ export function Board({ profile }: Props) {
             the sentence is how to get a working roster back, and that is
             exactly what somebody needs the moment they retire their last
             client -- whether or not there is anything archived to reveal. */}
-        <p className="t-body prose">Add one on the client admin screen to see it here.</p>
+        <p className="t-body prose">Add one to see it here.</p>
+        {addClient}
         {archived > 0 && (
           // Reachable the moment somebody retires their last client. Without
           // this the roster looks permanently empty with no hint that anything
@@ -213,6 +243,7 @@ export function Board({ profile }: Props) {
         </p>
         {archiveToggle}
         {viewToggle}
+        {addClient}
       </div>
 
       {view === 'matrix' ? (
