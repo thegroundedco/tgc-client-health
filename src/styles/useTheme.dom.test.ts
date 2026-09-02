@@ -51,4 +51,16 @@ describe('useTheme', () => {
     expect(document.documentElement.hasAttribute(THEME_ATTRIBUTE)).toBe(false)
     expect(localStorage.getItem(THEME_KEY)).toBe(null)
   })
+
+  // Mounting must never WRITE storage -- only setPreference does that. A write
+  // in the effect (the exact regression the hook's comment warns against)
+  // would fire on every mount of every screen, and readPreference's job of
+  // normalising an unrecognised value to 'system' would come with a side
+  // effect of silently erasing whatever was actually stored: a garbage string
+  // here is not the hook's to correct, only to read past.
+  it('does not touch storage on mount when the stored value is unrecognised', () => {
+    localStorage.setItem(THEME_KEY, 'blah-garbage')
+    renderHook(() => useTheme())
+    expect(localStorage.getItem(THEME_KEY)).toBe('blah-garbage')
+  })
 })

@@ -27,9 +27,11 @@ export function useTheme(): {
   }, [preference])
 
   // Storage is written here rather than in the effect, deliberately. The effect
-  // also runs on mount, and writing there would persist a preference nobody
-  // chose -- turning "this browser has no opinion" into a stored 'system' on
-  // the first load of every screen.
+  // also runs on mount, and writing there would make every mount of every
+  // screen a storage write -- including one that only ever READ, when the
+  // stored value was something readPreference had to normalise (garbage, or
+  // an old shape). That normalisation would then come with a side effect of
+  // silently clearing the very value it was reading past.
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next)
     writePreference(next)
