@@ -12,6 +12,33 @@
          and rewrites them under the /tgc-client-health/ base. -->
     <link rel="stylesheet" href="/src/styles/tokens.css" />
     <link rel="stylesheet" href="/src/styles/base.css" />
+    <!-- Classic and inline, like the boot-slow timer below, and in <head> so it
+         runs before the first paint rather than after it.
+
+         main.tsx mounts React through a DYNAMIC import, deliberately -- that is
+         what turns a missing environment variable into a message instead of a
+         blank page. The cost is that the mount is late, so an attribute set by
+         React would leave somebody who chose Dark looking at a light page for
+         the whole bundle fetch.
+
+         Only the OVERRIDE needs this. The `system` state is the media query in
+         tokens.css, which is already correct on the first paint with no
+         JavaScript at all.
+
+         The key and the attribute are duplicated from src/styles/theme.ts,
+         which this cannot import because it runs before the bundle exists.
+         tests/bootTheme.test.ts fails if the two ever disagree. -->
+    <script>
+      try {
+        var stored = localStorage.getItem('theme')
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.setAttribute('data-theme', stored)
+        }
+      } catch (ignored) {
+        // Safari in private browsing throws on the access itself. No stored
+        // preference simply means follow the OS, which the media query does.
+      }
+    </script>
   </head>
   <body>
     <div id="root">
