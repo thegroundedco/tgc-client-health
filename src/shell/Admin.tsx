@@ -18,17 +18,25 @@ import styles from './Admin.module.css'
 // aria-pressed rather than aria-current here, unlike MenuBar: this switches
 // between two renderings WITHIN one destination, which is the board's
 // Cards | Matrix situation rather than a navigation one.
+//
+// onWritingChange is a pass-through, not a wrapper: the shell hands its own
+// setter down and the section screens call it from an effect, so the bar can be
+// disabled while a write is in flight. Passing the prop straight through keeps
+// its identity stable, which is what stops the child's effect re-firing on every
+// render of this component.
 export function Admin({
   section,
   role,
   onSection,
   onLeave,
+  onWritingChange,
   currentUserId,
 }: {
   section: AdminSection
   role: string
   onSection: (next: AdminSection) => void
   onLeave: () => void
+  onWritingChange?: (writing: boolean) => void
   currentUserId: string
 }) {
   const sections = adminSections(role)
@@ -36,6 +44,15 @@ export function Admin({
     people: 'People',
     clients: 'Clients roster',
   }
+
+  // Unreachable today -- MenuBar hides Admin from anybody with no sections and
+  // openDestination refuses to build the destination for them, so this is the
+  // third of three guards. It exists because the alternative is dishonest: with
+  // no early return, a role holding neither capability falls through the ternary
+  // below to ClientsAdmin, so a person who can manage nothing would be shown the
+  // client roster. Better to render nothing than to render the wrong screen if
+  // either guard above is ever loosened.
+  if (sections.length === 0) return null
 
   return (
     <>
@@ -56,9 +73,13 @@ export function Admin({
       ) : null}
 
       {section === 'people' ? (
-        <UsersAdmin currentUserId={currentUserId} onBack={onLeave} />
+        <UsersAdmin
+          currentUserId={currentUserId}
+          onBack={onLeave}
+          onWritingChange={onWritingChange}
+        />
       ) : (
-        <ClientsAdmin onBack={onLeave} />
+        <ClientsAdmin onBack={onLeave} onWritingChange={onWritingChange} />
       )}
     </>
   )

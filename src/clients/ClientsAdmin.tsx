@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatSavedAt } from '../lib/month'
 import { isChurned, reasonLabel, statusLabel } from './clientForm'
 import type { AdminClient } from './clientForm'
@@ -8,7 +8,7 @@ import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
 
-type Props = { onBack: () => void }
+type Props = { onBack: () => void; onWritingChange?: (writing: boolean) => void }
 
 // Spec §7: one screen, a list and a form, no modal. The list shows every client
 // regardless of status, because this is the screen where a former client has to
@@ -24,7 +24,7 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
     ?? 'Owner is not an active account'
 }
 
-export function ClientsAdmin({ onBack }: Props) {
+export function ClientsAdmin({ onBack, onWritingChange }: Props) {
   const admin = useClients()
 
   // Which row's form is open, by id rather than by row object: the hook replaces
@@ -40,15 +40,25 @@ export function ClientsAdmin({ onBack }: Props) {
   // each row's Edit button, were the omission.
   const writing = admin.editState.kind === 'saving' || admin.addState.kind === 'saving'
 
+  // Reported upward because this screen no longer owns every exit. Slice 6a put
+  // a permanently-enabled menu bar above it, so disabling the Back button below
+  // stopped being sufficient: an admin could press Clients in the bar mid-save,
+  // unmount this screen, and never see the confirmation or the refusal. The
+  // shell disables the bar while this is true. Told from an effect rather than
+  // from the call site, so it cannot get out of step with the value it reports.
+  useEffect(() => {
+    onWritingChange?.(writing)
+  }, [onWritingChange, writing])
+
   const back = (
-    <nav className={styles.nav}>
+    <nav aria-label="Leave client admin" className={styles.nav}>
       <button
         className="button button--quiet"
         disabled={writing}
         type="button"
         onClick={onBack}
       >
-        Board
+        Clients
       </button>
     </nav>
   )

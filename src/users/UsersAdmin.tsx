@@ -1,22 +1,36 @@
+import { useEffect } from 'react'
 import { formatSavedAt } from '../lib/month'
 import { InviteForm } from './InviteForm'
 import { useUsers } from './useUsers'
 import { ASSIGNABLE_ROLES, ROLE_LABELS, roleLabel } from './userForm'
 import styles from './UsersAdmin.module.css'
 
-type Props = { onBack: () => void; currentUserId: string }
+type Props = {
+  onBack: () => void
+  currentUserId: string
+  onWritingChange?: (writing: boolean) => void
+}
 
-export function UsersAdmin({ onBack, currentUserId }: Props) {
+export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
   const admin = useUsers()
   const writing = admin.inviteState.kind === 'saving' || admin.editState.kind === 'saving'
+
+  // Reported upward for the same reason ClientsAdmin reports it: Slice 6a drew a
+  // permanently-enabled menu bar above this screen, so the disabled Back button
+  // below is no longer the only way out. Changing a role and pressing Clients in
+  // the bar while the PATCH is in flight unmounts this screen, and the refusal
+  // is never seen. The shell disables the bar while this is true.
+  useEffect(() => {
+    onWritingChange?.(writing)
+  }, [onWritingChange, writing])
 
   // Disabled while either write is in flight, matching ClientsAdmin: leaving
   // unmounts this screen and the write then lands with nobody left to read its
   // confirmation -- a write that worked looking exactly like one that did not.
   const back = (
-    <nav className={styles.nav}>
+    <nav aria-label="Leave people admin" className={styles.nav}>
       <button className="button button--quiet" disabled={writing} type="button" onClick={onBack}>
-        Board
+        Clients
       </button>
     </nav>
   )

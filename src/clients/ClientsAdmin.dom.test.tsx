@@ -68,9 +68,13 @@ function hook(overrides: Partial<UseClients> = {}): UseClients {
   }
 }
 
-function mount(overrides: Partial<UseClients> = {}, onBack = vi.fn()) {
+function mount(
+  overrides: Partial<UseClients> = {},
+  onBack = vi.fn(),
+  onWritingChange = vi.fn(),
+) {
   vi.mocked(useClients).mockReturnValue(hook(overrides))
-  render(<ClientsAdmin onBack={onBack} />)
+  render(<ClientsAdmin onBack={onBack} onWritingChange={onWritingChange} />)
 }
 
 describe('the clients admin screen, reading', () => {
@@ -214,7 +218,7 @@ describe('the clients admin screen, reading', () => {
     const onBack = vi.fn()
     mount({}, onBack)
 
-    screen.getByRole('button', { name: 'Board' }).click()
+    screen.getByRole('button', { name: 'Clients' }).click()
     expect(onBack).toHaveBeenCalledTimes(1)
   })
 
@@ -767,13 +771,13 @@ describe('the clients admin screen, leaving', () => {
 
   it('will not leave for the board while an edit save is in flight', async () => {
     // Same root cause as the misattribution above, from the other side:
-    // pressing Save and then Board unmounts the screen while the update is
+    // pressing Save and then Clients unmounts the screen while the update is
     // still pending, so the write lands and its confirmation is never seen --
     // which is exactly "a write that worked looks like one that did not".
     const onBack = vi.fn()
     mount({ clients: [ACME], editState: { kind: 'saving' }, editStateFor: ACME.id }, onBack)
 
-    const back = screen.getByRole('button', { name: 'Board' })
+    const back = screen.getByRole('button', { name: 'Clients' })
     expect(back).toHaveProperty('disabled', true)
     await userEvent.click(back)
     expect(onBack).not.toHaveBeenCalled()
@@ -783,9 +787,28 @@ describe('the clients admin screen, leaving', () => {
     const onBack = vi.fn()
     mount({ clients: [ACME], addState: { kind: 'saving' } }, onBack)
 
-    const back = screen.getByRole('button', { name: 'Board' })
+    const back = screen.getByRole('button', { name: 'Clients' })
     expect(back).toHaveProperty('disabled', true)
     await userEvent.click(back)
     expect(onBack).not.toHaveBeenCalled()
+  })
+
+  // Disabling the Back button stopped being sufficient the moment the app shell
+  // drew a menu bar above this screen: it is four more exits, none of which this
+  // component owns. So the guard is reported outward as well as enforced here,
+  // and the shell disables the bar with it. Without this the same silent write
+  // failure is available again, one layer up.
+  it('reports a write in flight so the shell can shut its own exits', () => {
+    const onWritingChange = vi.fn()
+    mount({ clients: [ACME], addState: { kind: 'saving' } }, vi.fn(), onWritingChange)
+
+    expect(onWritingChange).toHaveBeenCalledWith(true)
+  })
+
+  it('reports itself idle again once nothing is in flight', () => {
+    const onWritingChange = vi.fn()
+    mount({ clients: [ACME] }, vi.fn(), onWritingChange)
+
+    expect(onWritingChange).toHaveBeenCalledWith(false)
   })
 })
