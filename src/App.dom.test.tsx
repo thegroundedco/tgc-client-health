@@ -5,8 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { THEME_ATTRIBUTE, THEME_KEY } from './styles/theme'
 
 // App reaches Supabase at module scope through useSession/useProfile, so both
-// hooks are stubbed. What is under test here is one thing only: that the theme
-// is applied on EVERY branch, and that the control appears on exactly one.
+// hooks are stubbed. This exercises one branch only -- signed-out -- because
+// that is the one with no control on screen to apply the theme some other
+// way; it is not proof that every branch applies it. The real assurance for
+// "every branch" is structural, not this test: useTheme() is called once,
+// above the switch that picks a branch, so there is no branch it could fail
+// to run for. What this test actually proves is narrower and still worth
+// having -- that the signed-out screen, which never renders ThemeControl,
+// still gets the theme applied to it.
 vi.mock('./auth/useSession', () => ({
   useSession: () => ({ session: null, status: 'ready', error: null }),
 }))

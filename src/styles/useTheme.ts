@@ -34,6 +34,15 @@ export function useTheme(): {
   // silently clearing the very value it was reading past.
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next)
+    // writePreference's returned boolean -- whether the write actually stuck
+    // -- is deliberately unread here, not forgotten. React state has already
+    // switched by the line above regardless of what storage does, so a person
+    // in Safari private browsing sees the theme change correctly for the rest
+    // of this visit; what silently fails is only the PERSISTENCE, and the next
+    // load falls back to system with no error surfaced anywhere. Wiring the
+    // return value up to anything -- a toast, a retry, a fallback surface --
+    // is a real option for whoever picks this up next; it just was not one
+    // this pass made, so do not assume it was an oversight if you go looking.
     writePreference(next)
   }, [])
 
