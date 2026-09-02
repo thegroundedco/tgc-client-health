@@ -104,14 +104,28 @@ So navigation becomes one union:
 type Destination =
   | { kind: 'overview' }
   | { kind: 'clients' }
-  | { kind: 'checkin'; client: BoardClient }
   | { kind: 'revenue' }
   | { kind: 'admin'; section: 'people' | 'clients' }
 ```
 
-**The check-in screen becomes a sub-state of Clients rather than a peer**, because that is what it
-is: you reach it from a client on the board and you return to the board from it. Modelling it as a
-sibling of Admin was an artefact of it being a boolean beside other booleans.
+**The check-in screen is a sub-state of Clients, and is therefore NOT a variant above.** An earlier
+draft of this section listed `{ kind: 'checkin'; client }` alongside the four, which contradicted
+the sentence it sat next to: a thing cannot be both a sub-state of Clients and a sibling of Admin.
+Resolved in favour of sub-state, for a reason the code makes concrete — `CheckIn` needs `period` and
+`board.reload()`, both of which live inside `Board`, so promoting it to a sibling would force
+`period` up into the shell and turn a navigation change into a data-ownership change.
+
+So `selected: BoardClient | null` stays in `Board`, where it already is. It cannot produce an
+impossible state on its own: one nullable value has two states and no way to disagree with itself.
+The overlaps this slice exists to remove were between the DESTINATIONS — `showingClients` and
+`showingUsers` both true, resolved silently by the order of two early returns — and those are gone
+because Admin's two screens become one destination with a section.
+
+**The menu bar stays visible during a check-in**, which is new: today the check-in screen returns
+before the nav is even defined, so there is no way out of it except Back. Being able to leave is
+better than being trapped, and it is safe here specifically because `draftCache.ts` writes every
+click and keystroke to local storage as they happen — leaving mid-edit loses nothing, which is not
+a claim this design could make in a tool without that cache.
 
 `{ kind: 'admin' }` carries its section because Admin has two, and **the section it opens on is the
 first the person can actually see**: `people` for somebody holding `manage_users`, otherwise
