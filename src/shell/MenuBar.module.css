@@ -1,0 +1,8 @@
+/* The four destinations, in the header beside the wordmark. A flex row so they
+   read as one control rather than as four unrelated links -- the same reason
+   Board's .viewToggle and ThemeControl's .group each have a rule. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
