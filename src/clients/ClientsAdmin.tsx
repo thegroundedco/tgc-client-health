@@ -8,7 +8,7 @@ import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
 
-type Props = { onBack: () => void; onWritingChange?: (writing: boolean) => void }
+type Props = { onWritingChange?: (writing: boolean) => void }
 
 // Spec §7: one screen, a list and a form, no modal. The list shows every client
 // regardless of status, because this is the screen where a former client has to
@@ -24,7 +24,7 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
     ?? 'Owner is not an active account'
 }
 
-export function ClientsAdmin({ onBack, onWritingChange }: Props) {
+export function ClientsAdmin({ onWritingChange }: Props) {
   const admin = useClients()
 
   // Which row's form is open, by id rather than by row object: the hook replaces
@@ -33,11 +33,14 @@ export function ClientsAdmin({ onBack, onWritingChange }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const editing = admin.clients.find((client) => client.id === editingId) ?? null
 
-  // Disabled while either write is in flight, for the same reason both forms
-  // disable their own controls: leaving unmounts this screen, and the update
-  // then lands with nobody left to read its confirmation -- a write that worked
-  // looking exactly like one that did not. The two navigation controls, this and
-  // each row's Edit button, were the omission.
+  // True while either write is in flight, for the same reason both forms disable
+  // their own controls: leaving unmounts this screen, and the update then lands
+  // with nobody left to read its confirmation -- a write that worked looking
+  // exactly like one that did not. It disables each row's Edit button, and it is
+  // reported upward so the shell can shut the menu bar's exits too. This screen's
+  // own Back button was removed on 2026-09-02: it was a third stacked navigation
+  // control under a bar that already leaves, and the guard it carried now lives
+  // in the effect below, which no button owns.
   const writing = admin.editState.kind === 'saving' || admin.addState.kind === 'saving'
 
   // Reported upward because this screen no longer owns every exit. Slice 6a put
@@ -49,19 +52,6 @@ export function ClientsAdmin({ onBack, onWritingChange }: Props) {
   useEffect(() => {
     onWritingChange?.(writing)
   }, [onWritingChange, writing])
-
-  const back = (
-    <nav aria-label="Leave client admin" className={styles.nav}>
-      <button
-        className="button button--quiet"
-        disabled={writing}
-        type="button"
-        onClick={onBack}
-      >
-        Clients
-      </button>
-    </nav>
-  )
 
   const masthead = (
     <div className="masthead">
@@ -76,7 +66,6 @@ export function ClientsAdmin({ onBack, onWritingChange }: Props) {
   if (admin.status === 'error') {
     return (
       <section className={styles.screen}>
-        {back}
         {masthead}
         <h3 className="t-header">Cannot reach the database</h3>
         <p className="alert prose" role="alert">
@@ -96,7 +85,6 @@ export function ClientsAdmin({ onBack, onWritingChange }: Props) {
   if (admin.status === 'loading') {
     return (
       <section className={styles.screen}>
-        {back}
         {masthead}
         <p className="t-body">Loading…</p>
       </section>
@@ -105,7 +93,6 @@ export function ClientsAdmin({ onBack, onWritingChange }: Props) {
 
   return (
     <section className={styles.screen}>
-      {back}
       {masthead}
 
       <AddClientForm

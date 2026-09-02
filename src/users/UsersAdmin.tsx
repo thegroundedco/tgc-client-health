@@ -6,12 +6,11 @@ import { ASSIGNABLE_ROLES, ROLE_LABELS, roleLabel } from './userForm'
 import styles from './UsersAdmin.module.css'
 
 type Props = {
-  onBack: () => void
   currentUserId: string
   onWritingChange?: (writing: boolean) => void
 }
 
-export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
+export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
   const admin = useUsers()
   const writing = admin.inviteState.kind === 'saving' || admin.editState.kind === 'saving'
 
@@ -24,17 +23,6 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
     onWritingChange?.(writing)
   }, [onWritingChange, writing])
 
-  // Disabled while either write is in flight, matching ClientsAdmin: leaving
-  // unmounts this screen and the write then lands with nobody left to read its
-  // confirmation -- a write that worked looking exactly like one that did not.
-  const back = (
-    <nav aria-label="Leave people admin" className={styles.nav}>
-      <button className="button button--quiet" disabled={writing} type="button" onClick={onBack}>
-        Clients
-      </button>
-    </nav>
-  )
-
   const masthead = (
     <div className="masthead">
       <p className="t-eyebrow">People</p>
@@ -45,7 +33,6 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
   if (admin.status === 'loading') {
     return (
       <section className={styles.screen}>
-        {back}
         {masthead}
         <p className="t-body">Loading…</p>
       </section>
@@ -55,7 +42,6 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
   if (admin.status === 'error') {
     return (
       <section className={styles.screen}>
-        {back}
         {masthead}
         <p className="t-body">{admin.loadError}</p>
       </section>
@@ -64,17 +50,20 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
 
   return (
     <section className={styles.screen}>
-      {back}
       {masthead}
 
-      <section>
-        <h3 className="t-subhead">People</h3>
+      <section className={styles.section}>
+        {/* "With access", not "People": the masthead above already says PEOPLE,
+            and a section heading repeating it named nothing. These two headings
+            now say what actually separates the lists -- who is in, and who has
+            been asked. */}
+        <h3 className="t-subhead">With access</h3>
         {/* role="list" because base.css removes markers globally, and WebKit
             drops a list's semantics when its markers are removed -- so in
             Safari with VoiceOver this would otherwise announce as a group of
             paragraphs with no count and no position. Matches ClientsAdmin's
             client list for the same reason. */}
-        <ul aria-label="People" role="list">
+        <ul aria-label="People" className={styles.list} role="list">
           {admin.profiles.map((row) => {
             const isSelf = row.id === currentUserId
             // The same value the row displays as its heading, so a
@@ -83,13 +72,23 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
             // ("Edit {client.name}"): a bare "Activate" or "Deactivate"
             // repeated down the list is unusable in a screen reader's
             // control list.
-            const rowName = row.full_name?.trim() || row.email
+            const name = row.full_name?.trim()
+            const rowName = name || row.email
 
             return (
-              <li key={row.id}>
-                <p className="t-body">{rowName}</p>
-                <p className="t-small">{row.email}</p>
+              <li className={styles.row} key={row.id}>
+                <div className={styles.identity}>
+                  <p className="t-body">{rowName}</p>
+                  {/* Only when there is a NAME sitting above it. rowName falls
+                      back to the address, so printing both unconditionally
+                      rendered the same address on two lines for everybody who
+                      has not set a full name -- which, on this roster, was
+                      everybody but the owner. Reported from the deployed page
+                      2026-09-02. */}
+                  {name && <p className={`t-small ${styles.email}`}>{row.email}</p>}
+                </div>
 
+                <div className={styles.actions}>
                 <select
                   aria-label={`Role for ${row.email}`}
                   value={row.role}
@@ -116,9 +115,10 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
                 >
                   {row.is_active ? 'Deactivate' : 'Activate'}
                 </button>
+                </div>
 
                 {isSelf && (
-                  <p className="t-small">
+                  <p className={`t-small ${styles.rowNote}`}>
                     You cannot change your own access. That is what makes it
                     impossible to lock every admin out. Another admin can.
                   </p>
@@ -144,10 +144,12 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
                     `admin.resetEdit` has no caller on this screen, and it is
                     deliberate rather than an omission. */}
                 {admin.editStateFor === row.id && admin.editState.kind === 'failed' && (
-                  <p className="t-small" role="status">{admin.editState.message}</p>
+                  <p className={`t-small ${styles.rowNote}`} role="status">
+                    {admin.editState.message}
+                  </p>
                 )}
                 {admin.editStateFor === row.id && admin.editState.kind === 'saved' && (
-                  <p className="t-small" role="status">
+                  <p className={`t-small ${styles.rowNote}`} role="status">
                     {admin.editState.what} {formatSavedAt(admin.editState.at)}.
                   </p>
                 )}
@@ -157,7 +159,7 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
         </ul>
       </section>
 
-      <section>
+      <section className={styles.section}>
         <h3 className="t-subhead">Invited — not yet signed in</h3>
 
         {/* An explicit empty state. A blank region reads as a failed load, which
@@ -171,13 +173,17 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
           // role="list" for the same reason as the People list above: base.css
           // strips markers globally, and Safari/VoiceOver drops list semantics
           // along with them.
-          <ul aria-label="Invitations" role="list">
+          <ul aria-label="Invitations" className={styles.list} role="list">
             {admin.invitations.map((row) => (
-              <li key={row.email}>
-                <p className="t-body">{row.email}</p>
-                <p className="t-small">
-                  {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
-                </p>
+              <li className={styles.row} key={row.email}>
+                <div className={styles.identity}>
+                  <p className="t-body">{row.email}</p>
+                  <p className={`t-small ${styles.email}`}>
+                    {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
+                  </p>
+                </div>
+
+                <div className={styles.actions}>
                 <button
                   aria-label={`Revoke invitation for ${row.email}`}
                   className="button button--quiet"
@@ -187,6 +193,7 @@ export function UsersAdmin({ onBack, currentUserId, onWritingChange }: Props) {
                 >
                   Revoke
                 </button>
+                </div>
               </li>
             ))}
           </ul>

@@ -1,0 +1,28 @@
+/* The invite form's own layout.
+   
+   It had none until 2026-09-02, which is the whole story of how it looked: a
+   <label> is inline and an <input> is inline-block, so with no rule between
+   them the four elements rendered as one run -- "EMAIL ADDRESS[input]ROLE
+   [select]" -- with the labels jammed against the controls they name. */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--measure-column);
+}
+
+/* One label above one control. The same shape ClientsAdmin.module.css uses for
+   its own fields, so the two admin screens ask for input the same way. */
+.fieldBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The role's plain-language hint, tied to the select above it rather than
+   floating after the form. It is a caption for that control and reads as one. */
+.hint {
+  margin: 0;
+  color: var(--text-secondary);
+}

@@ -114,7 +114,6 @@ export function Shell({
         return (
           <Admin
             currentUserId={profile.id}
-            onLeave={() => navigate('clients')}
             onSection={(section: AdminSection) =>
               setDestination({ kind: 'admin', section })
             }

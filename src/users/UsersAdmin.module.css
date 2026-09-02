@@ -1,17 +1,88 @@
-/* The users admin screen's own layout. Copied from src/clients/ClientsAdmin.module.css
-   rather than shared, so the two screens can drift independently -- but copied
-   verbatim for now, so the spacing matches on day one. Every colour and every
-   face still comes from a token; this file is not allowed to name either. */
+/* The people screen's own layout.
+
+   This file held exactly TWO rules until 2026-09-02 -- .screen and .nav -- and
+   its header said it had been copied from ClientsAdmin.module.css "verbatim for
+   now". It copied the two rules that existed at the time; that file then grew a
+   real layout and this one never did, so every row, every control and the whole
+   invite form below .screen was default block flow. That is the entire reason
+   the screen looked the way the owner photographed it.
+
+   The rules below are deliberately the SAME shapes ClientsAdmin already uses --
+   a bordered card per row, a head and an actions group inside it -- so the two
+   admin screens read as one place rather than as two designs. Every colour
+   comes from the semantic layer; this file is not allowed to name one. */
 
 .screen {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  /* --measure-prose, matching ClientsAdmin: this screen carries two lists and
-     a form, not a single field. */
-  max-width: var(--measure-prose);
+  gap: var(--space-6);
+  /* Wider than --measure-prose, unlike ClientsAdmin. These rows put an address
+     and two controls on ONE line; at prose width the controls wrap under the
+     address on every row and the column of them disappears. */
+  max-width: var(--measure-column);
+  inline-size: 100%;
 }
 
-.nav {
+/* A heading and the list it heads, held closer to each other than the sections
+   are to one another -- so the eye groups them without a rule or a box. */
+.section {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* One person, one card. Wrapping rather than fixed columns: the identity is a
+   name and an address of unpredictable length, and a table that cannot wrap
+   would either truncate an address or force a horizontal scroll on a screen
+   that is mostly reading. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Name over address, as one block. min-inline-size: 0 so a long address can
+   shrink and wrap instead of pushing the controls off the card -- a flex item's
+   default min-width is its content, which is what would otherwise happen. */
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.email {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The role and the activate control, kept together at the row's inline end so
+   they line up down the list and read as a column of controls. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* A line that belongs to one row: the self-edit explanation, a confirmation, a
+   refusal. Full width beneath both halves, so it never squeezes the controls
+   into wrapping and never sits between two people's names. */
+.rowNote {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-secondary);
 }

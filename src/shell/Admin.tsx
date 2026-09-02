@@ -28,14 +28,12 @@ export function Admin({
   section,
   role,
   onSection,
-  onLeave,
   onWritingChange,
   currentUserId,
 }: {
   section: AdminSection
   role: string
   onSection: (next: AdminSection) => void
-  onLeave: () => void
   onWritingChange?: (writing: boolean) => void
   currentUserId: string
 }) {
@@ -75,11 +73,10 @@ export function Admin({
       {section === 'people' ? (
         <UsersAdmin
           currentUserId={currentUserId}
-          onBack={onLeave}
           onWritingChange={onWritingChange}
         />
       ) : (
-        <ClientsAdmin onBack={onLeave} onWritingChange={onWritingChange} />
+        <ClientsAdmin onWritingChange={onWritingChange} />
       )}
     </>
   )
