@@ -1,0 +1,9 @@
+/* Shared by the two pages that have no contents yet. One rule rather than two
+   identical ones, and it stays shared only while they are the same shape -- the
+   moment either grows real contents it takes a stylesheet of its own. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: var(--measure-prose);
+}
