@@ -296,14 +296,16 @@ Ink labels on them are ground-independent and unchanged: 8.13 · 7.64 · 4.61 ·
   | against | heavy (`--text-primary`) light → dark | hairline (`--rule-hairline`) light → dark |
   |---|---|---|
   | teal | 8.13 → 1.72 | 1.22 → 4.75 |
-  | amber | 7.64 → 1.83 | 1.19 → 4.47 |
-  | red | 4.61 → 3.03 | 1.38 → 2.69 |
+  | amber | 7.64 → 1.83 | 1.29 → 4.47 |
+  | red | 4.61 → 3.03 | 2.15 → 2.69 |
   | stone | 9.88 → 1.41 | 1.00 → 5.78 |
 
   The heavy rule, which reads clearly against every fill in light, drops below 2:1 against three
-  of the four fills in dark. The hairline, which is barely there in light, becomes the more
-  visible of the two lines in dark. The grid does not merely read at a different weight — for the
-  cells it crosses, the two rules trade places.
+  of the four fills in dark. For teal, amber and stone, the two rules trade places: the heavy rule
+  falls to 1.72, 1.83 and 1.41 while the hairline, barely there in light, rises to 4.75, 4.47 and
+  5.78 — the more visible of the two lines in dark. Red is the one fill where this does not
+  invert: the heavy rule still falls, from 4.61 to 3.03, but it still leads the hairline's 2.69, so
+  the two lines do not swap places there.
 
   There is no trivial fix, and that is worth saying plainly rather than filing this as a one-line
   polish item. The heavy rule has to cross both the dark PAGE ground (where `--text-primary` is

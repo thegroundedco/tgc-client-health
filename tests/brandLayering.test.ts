@@ -58,7 +58,12 @@ function collect(directory: string, found: SourceFile[] = []): SourceFile[] {
   return found
 }
 
-const BRAND_REFERENCE = /var\(\s*--brand-[a-zA-Z0-9-]+\s*\)/g
+// The tail allows an optional `, fallback` before the closing paren -- CSS's
+// `var(--brand-x, var(--surface-y))` is the same layering bypass as the bare
+// form, just spelled with a fallback. `[^()]*(?:\([^()]*\)[^()]*)*` accepts one
+// level of nested parens (a fallback that is itself a var() call) without
+// running past this reference's own closing paren into unrelated text.
+const BRAND_REFERENCE = /var\(\s*--brand-[a-zA-Z0-9-]+\s*(?:,[^()]*(?:\([^()]*\)[^()]*)*)?\)/g
 
 describe('the brand layer', () => {
   const files: SourceFile[] = [
@@ -89,5 +94,27 @@ describe('the brand layer', () => {
         ),
       )
     expect(offenders).toEqual([])
+  })
+})
+
+describe('BRAND_REFERENCE', () => {
+  // The regex once required the closing paren immediately after the token
+  // name, so `var(--brand-blush, var(--surface-sunken))` -- the same layering
+  // bypass, spelled with a fallback -- slipped past it. These three cases are
+  // the hole and the two things widening it must not break.
+  it('catches the plain form', () => {
+    expect('var(--brand-blush)'.match(BRAND_REFERENCE)).toEqual(['var(--brand-blush)'])
+  })
+
+  it('catches the same reference written with a var() fallback', () => {
+    const source = 'background: var(--brand-blush, var(--surface-sunken));'
+    expect([...source.matchAll(BRAND_REFERENCE)].map((m) => m[0])).toEqual([
+      'var(--brand-blush, var(--surface-sunken))',
+    ])
+  })
+
+  it('does not match the token name in prose', () => {
+    const prose = '-- brand-blush and brand-stone are discussed here, never inside var().'
+    expect(prose.match(BRAND_REFERENCE)).toBeNull()
   })
 })
