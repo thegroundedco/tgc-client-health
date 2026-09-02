@@ -5,11 +5,20 @@ import { SignIn } from './auth/SignIn'
 import { PendingAccess } from './auth/PendingAccess'
 import { deriveAppState } from './appState'
 import { Board } from './board/Board'
+import { useTheme } from './styles/useTheme'
+import { ThemeControl } from './styles/ThemeControl'
 import styles from './App.module.css'
 
 export default function App() {
   const { session, status: sessionStatus, error: sessionError } = useSession()
   const { profile, status: profileStatus, error } = useProfile(session)
+
+  // Called here, above the switch, rather than inside the `active` case: the
+  // theme applies to every screen -- sign-in, access-pending, the database
+  // error -- and only the CONTROL is limited to the signed-in header. Hooks
+  // must run unconditionally anyway, and this is the reason that constraint
+  // and this requirement agree.
+  const { preference, setPreference } = useTheme()
 
   const state = deriveAppState(
     sessionStatus,
@@ -66,6 +75,7 @@ export default function App() {
                   reader announces an email address next to a Sign out button
                   and leaves the listener to guess the relationship. */}
               <p className="t-caption">Signed in as {state.profile.email}</p>
+              <ThemeControl onChange={setPreference} preference={preference} />
               <button
                 className="button button--quiet"
                 type="button"
