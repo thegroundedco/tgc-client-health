@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   adminSections,
   canSeeAdmin,
+  canSeeDestination,
   DESTINATIONS,
   LANDING,
   openDestination,
@@ -39,8 +40,10 @@ describe('the destination list', () => {
 })
 
 describe('who can see Admin', () => {
-  it('gives an admin both sections', () => {
-    expect(adminSections('admin')).toEqual(['people', 'clients'])
+  // Was "both sections" before slice 6c added edit_revenue, which admin also
+  // holds -- now three.
+  it('gives an admin all three sections', () => {
+    expect(adminSections('admin')).toEqual(['people', 'clients', 'revenue'])
     expect(canSeeAdmin('admin')).toBe(true)
   })
 
@@ -65,11 +68,14 @@ describe('who can see Admin', () => {
 })
 
 describe('openDestination', () => {
-  it('opens the three simple destinations for anybody', () => {
+  // Revenue used to be a third unconditional destination here, open to anybody
+  // who pressed it. Slice 6c gates it on view_revenue, so it moved out of this
+  // blanket loop and into 'the revenue gates' below, where a viewer's refusal
+  // is the point being tested rather than an oversight.
+  it('opens the two simple destinations for anybody', () => {
     for (const role of ['admin', 'account_manager', 'viewer']) {
       expect(openDestination('overview', role)).toEqual({ kind: 'overview' })
       expect(openDestination('clients', role)).toEqual({ kind: 'clients' })
-      expect(openDestination('revenue', role)).toEqual({ kind: 'revenue' })
     }
   })
 
@@ -87,5 +93,52 @@ describe('openDestination', () => {
   it('refuses to open Admin for somebody with neither capability', () => {
     expect(openDestination('admin', 'viewer')).toBe(null)
     expect(openDestination('admin', 'pirate')).toBe(null)
+  })
+})
+
+describe('the revenue gates', () => {
+  it('offers the revenue admin section to an admin and not to an account manager', () => {
+    // edit_revenue, not view_revenue. An account manager who reached this
+    // screen would see an entry grid the database refuses -- the exact thing
+    // parent spec section 7.2 forbids drawing.
+    expect(adminSections('admin')).toContain('revenue')
+    expect(adminSections('account_manager')).not.toContain('revenue')
+    expect(adminSections('viewer')).not.toContain('revenue')
+  })
+
+  it('puts Revenue in the bar for an account manager and takes it from a viewer', () => {
+    // view_revenue. The reports are the account manager's; the entry screen is
+    // not. A viewer sees neither.
+    expect(canSeeDestination('revenue', 'admin')).toBe(true)
+    expect(canSeeDestination('revenue', 'account_manager')).toBe(true)
+    expect(canSeeDestination('revenue', 'viewer')).toBe(false)
+  })
+
+  it('refuses to open Revenue for somebody who cannot see it', () => {
+    // Null means the press does nothing. Returning a Destination anyway and
+    // letting the screen render an error is the failure openDestination exists
+    // to prevent.
+    expect(openDestination('revenue', 'viewer')).toBe(null)
+    expect(openDestination('revenue', 'account_manager')).toEqual({ kind: 'revenue' })
+  })
+
+  // The admin case the test above does not carry: admin holds view_revenue
+  // too, so the gate must not accidentally read as "account managers only".
+  it('opens Revenue for an admin', () => {
+    expect(openDestination('revenue', 'admin')).toEqual({ kind: 'revenue' })
+  })
+
+  it('leaves the destinations every role can see alone', () => {
+    for (const role of ['admin', 'account_manager', 'viewer']) {
+      expect(canSeeDestination('overview', role)).toBe(true)
+      expect(canSeeDestination('clients', role)).toBe(true)
+    }
+  })
+
+  it('answers false for a role it does not know', () => {
+    // Closed by default, matching `can`. An unknown role must not be handed
+    // the revenue screens by a lookup that missed.
+    expect(canSeeDestination('revenue', 'sales')).toBe(false)
+    expect(adminSections('sales')).toEqual([])
   })
 })

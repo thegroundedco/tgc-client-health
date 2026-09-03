@@ -1,4 +1,4 @@
-import { canSeeAdmin, DESTINATIONS } from './destination'
+import { canSeeDestination, DESTINATIONS } from './destination'
 import type { Destination, DestinationKind } from './destination'
 import styles from './MenuBar.module.css'
 
@@ -37,7 +37,7 @@ export function MenuBar({
 }) {
   return (
     <nav aria-label="Sections" className={styles.bar}>
-      {DESTINATIONS.filter((entry) => entry.kind !== 'admin' || canSeeAdmin(role)).map(
+      {DESTINATIONS.filter((entry) => canSeeDestination(entry.kind, role)).map(
         (entry) => (
           <button
             aria-current={current.kind === entry.kind ? 'page' : undefined}

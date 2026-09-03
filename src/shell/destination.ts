@@ -13,7 +13,7 @@ import { can } from '../lib/capabilities'
 // states, most of them nonsense, and a fourth destination would have made it
 // sixteen. Here each impossible combination is a compile error instead.
 
-export type AdminSection = 'people' | 'clients'
+export type AdminSection = 'people' | 'clients' | 'revenue'
 
 export type Destination =
   | { kind: 'overview' }
@@ -55,19 +55,39 @@ void _everyKindIsInTheBar
 // and destination.test.ts names it so it is changed deliberately.
 export const LANDING: Destination = { kind: 'clients' }
 
-// The sections a role can actually reach, in the bar's order. Admin holds all
-// four capabilities; account_manager holds everything EXCEPT manage_users;
-// viewer holds only view_scores. So an account manager gets one section here,
-// which is the case everything below exists to handle.
+// The sections a role can actually reach, in the bar's order. Revenue entry is
+// gated on edit_revenue and not on view_revenue, deliberately: an account
+// manager can read every figure on the Revenue destination and cannot enter
+// one, so showing them the grid would be drawing a control the database will
+// refuse.
 export function adminSections(role: string): readonly AdminSection[] {
   const sections: AdminSection[] = []
   if (can(role, 'manage_users')) sections.push('people')
   if (can(role, 'manage_clients')) sections.push('clients')
+  if (can(role, 'edit_revenue')) sections.push('revenue')
   return sections
 }
 
 export function canSeeAdmin(role: string): boolean {
   return adminSections(role).length > 0
+}
+
+// Whether a destination appears in the menu bar for this role. Admin was a
+// special case in MenuBar's filter -- `entry.kind !== 'admin' || canSeeAdmin`
+// -- and Revenue makes it two, at which point the rule belongs beside the
+// destinations it is about rather than inside the component that draws them.
+// The switch is exhaustive, so a fifth destination stops compiling here until
+// somebody decides who can see it, rather than defaulting to everybody.
+export function canSeeDestination(kind: DestinationKind, role: string): boolean {
+  switch (kind) {
+    case 'overview':
+    case 'clients':
+      return true
+    case 'revenue':
+      return can(role, 'view_revenue')
+    case 'admin':
+      return canSeeAdmin(role)
+  }
 }
 
 // Null means "this person cannot go there", which the caller must treat as the
@@ -83,7 +103,7 @@ export function openDestination(
     case 'clients':
       return { kind: 'clients' }
     case 'revenue':
-      return { kind: 'revenue' }
+      return canSeeDestination('revenue', role) ? { kind: 'revenue' } : null
     case 'admin': {
       // The FIRST section this person can see, never a hardcoded one.
       const [first] = adminSections(role)
