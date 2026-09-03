@@ -20,7 +20,7 @@ import { isChurned } from '../clients/clientForm'
 //    UTC-7 zone it is already tomorrow in UTC, so "today" would be a day ahead
 //    for part of every evening -- and every test written at a UTC-safe hour
 //    would pass. todayISO reads the LOCAL fields instead. Proven -- but only
-//    because tenure.test.ts pins a non-UTC zone: under UTC itself the naive
+//    because tenureMath.test.ts pins a non-UTC zone: under UTC itself the naive
 //    `toISOString().slice(0, 10)` and the local-fields form name the same
 //    calendar day, so this project's CI (ubuntu-latest, UTC by default) could
 //    not have caught a regression here without that pin.
@@ -84,9 +84,12 @@ export function daysBetween(from: string, to: string): number {
   // ever receives something other than a zero-padded YYYY-MM-DD string, but
   // for that exact shape JS already parses it as UTC midnight on its own, so
   // this and the naive millisecond subtraction agree, and the tests below
-  // cannot tell them apart. What the tests DO prove is the arithmetic: that a
-  // calendar day spanning a daylight-saving change -- where one local day is
-  // 23 or 25 hours -- still counts as exactly one day.
+  // cannot tell them apart. Because both ends are UTC, a local DST transition
+  // is structurally unreachable here -- there is no local clock in this
+  // subtraction for it to disturb -- so the tests below prove only the plain
+  // arithmetic on ordinary calendar spans, nothing about DST and nothing about
+  // parsing. The DST-dated cases are kept anyway because a two-day span is
+  // still worth asserting; they just are not what makes this function safe.
   return Math.round((toUTC(to) - toUTC(from)) / DAY_MS)
 }
 
@@ -118,7 +121,7 @@ export function formatTenure(days: number | null): string {
 // `timeZone: 'UTC'` is load-bearing, not decoration. Without it toLocaleDateString
 // converts the UTC midnight back into local time and lands on the previous day
 // again, which is the very bug this function exists to avoid. Proven -- but,
-// like trap 1, only because tenure.test.ts pins a non-UTC zone: under UTC
+// like trap 1, only because tenureMath.test.ts pins a non-UTC zone: under UTC
 // itself, dropping `timeZone: 'UTC'` renders the same day, so this project's
 // CI (ubuntu-latest, UTC by default) could not have caught that regression
 // without the pin.
