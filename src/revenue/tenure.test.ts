@@ -20,9 +20,10 @@ import {
 //
 // `process` is a real Node global at runtime, but this file compiles under
 // tsconfig.app.json (types: ["vite/client"], no node types -- that's
-// tsconfig.node.json, which does not cover src), so it is reached through
-// globalThis, the same way src/board/Matrix.tsx and src/styles/theme.ts reach
-// other runtime globals this bundler target does not type for source files.
+// tsconfig.node.json, which does not cover src), so it is cast through
+// globalThis the same way src/lib/supabase.ts and src/lib/rls.test.ts cast
+// import.meta.env: a runtime value this bundler target does not type for
+// source files.
 const nodeProcess = (globalThis as unknown as { process: { env: Record<string, string | undefined> } })
   .process
 const ORIGINAL_TZ = nodeProcess.env.TZ
@@ -34,7 +35,13 @@ beforeAll(() => {
 afterAll(() => {
   // Vitest reuses workers across files: a leaked TZ here would silently
   // change the meaning of every date-touching test that runs after this one.
-  nodeProcess.env.TZ = ORIGINAL_TZ
+  // A plain assignment is not enough when TZ was unset before this file ran
+  // (true on this machine and on ubuntu-latest CI): process.env stringifies
+  // an undefined assignment to the literal text "undefined", which is a
+  // zone identifier that resolves to no zone at all -- worse than merely the
+  // wrong one. Only delete actually restores "unset".
+  if (ORIGINAL_TZ === undefined) delete nodeProcess.env.TZ
+  else nodeProcess.env.TZ = ORIGINAL_TZ
 })
 
 function client(over: Partial<LifecycleClient> = {}): LifecycleClient {
