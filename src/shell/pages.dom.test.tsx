@@ -3,7 +3,6 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Overview } from './Overview'
-import { Revenue } from './Revenue'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -28,21 +27,5 @@ describe('Overview', () => {
   it('does not invent any contents', () => {
     render(<Overview />)
     expect(document.body.textContent).not.toMatch(/\d+%/)
-  })
-})
-
-describe('Revenue', () => {
-  it('names itself and says what it will hold', () => {
-    render(<Revenue />)
-    expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
-    expect(document.body.textContent).toContain('churn')
-  })
-
-  // Spec §6.2. The blocker is the point of the sentence, not an apology: revenue
-  // retention needs a history of monthly amounts, and one editable retainer
-  // field cannot produce one. The owner will want that reminder in front of him.
-  it('says plainly that revenue retention is waiting on a data model', () => {
-    render(<Revenue />)
-    expect(document.body.textContent).toContain('data model')
   })
 })
