@@ -1,0 +1,75 @@
+/* The tenure and churn sections. Shared by both, because they are two lists of
+   the same shape on one page -- a name on the inline start, a measurement on
+   the inline end -- and giving them separate stylesheets would let two halves
+   of one screen drift apart.
+
+   The row shape is deliberately the one src/users/UsersAdmin.module.css and
+   src/clients/ClientsAdmin.module.css already use: a bordered card on a raised
+   surface. Three screens now read as one place. Every colour comes from the
+   semantic layer; this file is not allowed to name one. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.summary {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Name and any marker beside it. min-inline-size: 0 so a long client name
+   wraps instead of pushing the measurement off the card -- a flex item's
+   default minimum is its content width, which is what would otherwise happen. */
+.who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+/* The measurement, at the row's inline end so the column of them lines up and
+   can be read down rather than hunted for. Tabular figures for the same reason
+   the board's scores use them: a column of numbers with different digit widths
+   wobbles. */
+.measure {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A quiet marker, not a health band. Paused is a lifecycle fact, and dressing
+   it in a band fill would put it in the vocabulary that means "how this client
+   is doing" -- which it is not. */
+.marker {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+/* The reason and note under a departed client, on their own line so a long
+   note never squeezes the date and the tenure into wrapping. */
+.detail {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+}
