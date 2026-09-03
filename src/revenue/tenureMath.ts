@@ -1,5 +1,13 @@
 import { isChurned } from '../clients/clientForm'
 
+// Named tenureMath rather than tenure, for a reason worth stating so nobody
+// "corrects" it back: macOS's filesystem is case-INSENSITIVE, so `./tenure`
+// and `./Tenure` are the same path. With a tenure.ts beside a Tenure.tsx, the
+// resolver takes .ts first and BOTH imports land here -- Tenure.tsx imports
+// itself, `Tenure` is undefined, and every DOM test for it fails with
+// "Element type is invalid". src/board/matrixMath.ts carries the same name
+// for the same reason: this collision already happened once, in Slice 5.
+//
 // The tenure report's arithmetic, sorting and summary. Pure: no React, no
 // network, no clock of its own except the one you hand it. That is what makes
 // the date handling below testable, and the date handling is the reason this is

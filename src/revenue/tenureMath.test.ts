@@ -9,7 +9,7 @@ import {
   tenureDays,
   todayISO,
   type LifecycleClient,
-} from './tenure'
+} from './tenureMath'
 
 // todayISO and formatDay each exist to fix a UTC-vs-local bug, but under UTC
 // itself the correct and naive forms of BOTH render the same calendar day --

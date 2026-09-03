@@ -2,8 +2,8 @@
 
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Tenure } from './Tenure.tsx'
-import type { CurrentRow, LifecycleClient } from './tenure'
+import { Tenure } from './Tenure'
+import type { CurrentRow, LifecycleClient } from './tenureMath'
 
 afterEach(() => {
   document.body.innerHTML = ''

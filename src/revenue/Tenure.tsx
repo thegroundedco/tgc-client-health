@@ -1,5 +1,5 @@
-import { formatTenure, summarise } from './tenure'
-import type { CurrentRow } from './tenure'
+import { formatTenure, summarise } from './tenureMath'
+import type { CurrentRow } from './tenureMath'
 import styles from './Revenue.module.css'
 
 // How long each current client has been with the firm, longest-standing first.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
-import type { LifecycleClient } from './tenure'
+import type { LifecycleClient } from './tenureMath'
 
 // One read of every client's lifecycle columns. A seam, in the same shape as
 // useBoard: the screen's fetch has to be mockable, which is the whole reason
