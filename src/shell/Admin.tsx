@@ -1,4 +1,5 @@
 import { ClientsAdmin } from '../clients/ClientsAdmin'
+import { RevenueAdmin } from '../revenue/RevenueAdmin'
 import { UsersAdmin } from '../users/UsersAdmin'
 import { adminSections } from './destination'
 import type { AdminSection } from './destination'
@@ -70,10 +71,7 @@ export function Admin({
       case 'clients':
         return <ClientsAdmin onWritingChange={onWritingChange} />
       case 'revenue':
-        // Placeholder only. Task 6 replaces this with the real revenue entry
-        // grid; it exists so this exhaustiveness check does not block Task 5 on
-        // a component that has not landed yet.
-        return <p className="t-body">Revenue entry is not built yet.</p>
+        return <RevenueAdmin onWritingChange={onWritingChange} />
       default: {
         const _exhaustive: never = section
         throw new Error(`Unhandled admin section: ${JSON.stringify(_exhaustive)}`)
