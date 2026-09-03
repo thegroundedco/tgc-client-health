@@ -6,17 +6,25 @@ import { isChurned } from '../clients/clientForm'
 // a module rather than a few subtractions in a component.
 //
 // Every date here is a YYYY-MM-DD string, which is what a Postgres `date`
-// renders as. Two traps live in that, and this file exists to avoid both:
+// renders as. Two traps live in that:
 //
 // 1. `new Date().toISOString()` reports the UTC calendar day. At 18:00 in a
 //    UTC-7 zone it is already tomorrow in UTC, so "today" would be a day ahead
 //    for part of every evening -- and every test written at a UTC-safe hour
-//    would pass. todayISO reads the LOCAL fields instead.
+//    would pass. todayISO reads the LOCAL fields instead. Proven: the tests
+//    fail under `toISOString().slice(0, 10)`.
 //
 // 2. Mixing a UTC-parsed date with a local one puts a whole timezone offset
-//    inside a subtraction. daysBetween sends BOTH ends through Date.UTC, so no
-//    zone enters it at all. src/lib/gate.ts documents the same technique for
-//    the 90-day Advocacy gate; this is that lesson, one report over.
+//    inside a subtraction, so daysBetween sends BOTH ends through Date.UTC as
+//    a deliberate discipline -- the same one src/lib/gate.ts documents for the
+//    90-day Advocacy gate. NOT proven by this file's tests: a bare zero-padded
+//    YYYY-MM-DD string is already parsed as UTC midnight by JS itself, in
+//    every engine and zone, so for this module's actual input domain the naive
+//    `new Date(to).getTime() - new Date(from).getTime()` form agrees with the
+//    careful one, and no test here can tell the two apart. The Date.UTC
+//    parsing stays anyway, as defence for the day something other than a
+//    zero-padded date string reaches it -- not as a guard the tests can show
+//    is doing anything today.
 
 export type LifecycleClient = {
   id: number
@@ -61,9 +69,13 @@ function toUTC(day: string): number {
 }
 
 export function daysBetween(from: string, to: string): number {
-  // Both ends are UTC midnight, so the difference is a whole number of days and
-  // a daylight-saving transition -- which makes one local day 23 or 25 hours --
-  // cannot round it to the wrong answer.
+  // Both ends go through Date.UTC before subtracting -- real defence if this
+  // ever receives something other than a zero-padded YYYY-MM-DD string, but
+  // for that exact shape JS already parses it as UTC midnight on its own, so
+  // this and the naive millisecond subtraction agree, and the tests below
+  // cannot tell them apart. What the tests DO prove is the arithmetic: that a
+  // calendar day spanning a daylight-saving change -- where one local day is
+  // 23 or 25 hours -- still counts as exactly one day.
   return Math.round((toUTC(to) - toUTC(from)) / DAY_MS)
 }
 
