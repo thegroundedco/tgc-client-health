@@ -71,4 +71,15 @@ describe('parseMoney', () => {
     // number the person never entered; refusing shows them the field.
     expect(parseMoney('4000.005')).toBe(null)
   })
+
+  it('rounds a value that floating point multiplies inexactly', () => {
+    // Math.round, not Math.trunc, and this is the test that proves it.
+    // 19.99 * 100 is 1998.9999999999998, so truncation gives $19.98 -- a real
+    // amount, silently one cent light, on a column that feeds a retention
+    // figure. Every other fixture in this file multiplies exactly, so before
+    // this test existed the whole suite passed with Math.trunc.
+    expect(parseMoney('19.99')).toBe(1999)
+    expect(parseMoney('0.29')).toBe(29)
+    expect(parseMoney('2.03')).toBe(203)
+  })
 })

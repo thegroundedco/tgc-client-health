@@ -45,8 +45,8 @@ export function parseMoney(input: string): number | null {
   // number the person never entered.
   if (!/^\d+(\.\d{1,2})?$/.test(stripped)) return null
 
-  // Rounded, not truncated, and via a string-free path: 4000.10 * 100 is
-  // 400009.99999999994 in IEEE 754, which truncation would turn into $4,000.09.
+  // Rounded, not truncated, and via a string-free path: 19.99 * 100 is
+  // 1998.9999999999998 in IEEE 754, which truncation would turn into $19.98.
   const cents = Math.round(Number(stripped) * 100)
   if (!Number.isFinite(cents) || cents > MAX_CENTS) return null
   return cents
