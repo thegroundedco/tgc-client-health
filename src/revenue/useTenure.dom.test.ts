@@ -63,6 +63,26 @@ describe('useTenure', () => {
     expect(result.current.loadError).toContain('offline')
   })
 
+  // THE test for the comment above the error branch in useTenure.ts: "the list
+  // left alone, never fallen through to an empty array." The existing error
+  // test above only checks that `clients` equals `[]` -- which is also the
+  // hook's INITIAL state, so it cannot distinguish "left alone" from "wiped".
+  // This loads successfully first, so there is something to leave alone, then
+  // fails a reload and checks the earlier clients are still there.
+  it('leaves the previously-loaded clients in place when a reload fails', async () => {
+    order.mockResolvedValueOnce({ data: [ROW], error: null })
+    const { result } = renderHook(() => useTenure())
+
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.clients).toEqual([ROW])
+
+    order.mockResolvedValueOnce({ data: null, error: { message: 'permission denied' } })
+    result.current.reload()
+
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.clients).toEqual([ROW])
+  })
+
   it('reads again on demand', async () => {
     order.mockResolvedValue({ data: [ROW], error: null })
     const { result } = renderHook(() => useTenure())
