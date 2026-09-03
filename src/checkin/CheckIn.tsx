@@ -149,7 +149,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
       <section className={styles.screen}>
         {back}
         {masthead}
-        <h3 className="t-header">Cannot reach the database</h3>
+        <h3 className="t-subhead">Cannot reach the database</h3>
         <p className="alert prose" role="alert">
           {loadError}
         </p>
@@ -279,7 +279,7 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
           const shut = bucket === GATED_BUCKET && !advocacyApplies
           return (
             <section className={styles.bucket} data-testid={`bucket-${bucket}`} key={bucket}>
-              <h3 className="t-header" data-testid="bucket-heading">
+              <h3 className="t-subhead" data-testid="bucket-heading">
                 {definition.label}
               </h3>
 

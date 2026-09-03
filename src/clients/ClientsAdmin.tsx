@@ -67,7 +67,7 @@ export function ClientsAdmin({ onWritingChange }: Props) {
     return (
       <section className={styles.screen}>
         {masthead}
-        <h3 className="t-header">Cannot reach the database</h3>
+        <h3 className="t-subhead">Cannot reach the database</h3>
         <p className="alert prose" role="alert">
           {admin.loadError}
         </p>

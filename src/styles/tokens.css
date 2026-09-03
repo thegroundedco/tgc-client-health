@@ -239,6 +239,13 @@
      them gets missed. */
   --tracking-display: -0.015em;
   --tracking-header: 0.02em;
+  /* Positive, but a fifth of the header's. --tracking-header is tuned for
+     caps, which need the extra room between letters; the subhead is set in
+     sentence case, where that same value reads as a gap. It stays positive
+     rather than dropping to zero because the subhead is condensed to 70%,
+     and --tracking-caption does the same small opening-up for the same
+     reason at 62%. */
+  --tracking-subhead: 0.004em;
   --tracking-eyebrow: 0.18em;
   --tracking-caption: 0.01em;
   --tracking-label: 0.08em;

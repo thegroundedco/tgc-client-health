@@ -100,10 +100,15 @@ describe('daysBetween', () => {
     expect(daysBetween('2025-12-30', '2026-01-02')).toBe(3)
   })
 
-  // A DST transition. In a zone that springs forward, one calendar day is 23
-  // hours long -- so a naive millisecond division would return 0.958 days and
-  // round to the wrong answer for the spans that cross it.
-  it('counts a calendar day across a daylight-saving change as one day', () => {
+  // A pair of dates that happen to straddle a DST transition. This does NOT
+  // exercise any DST handling: both ends go through Date.UTC before
+  // subtracting, so a local clock's spring-forward or fall-back hour never
+  // enters the arithmetic, and even a naive millisecond subtraction here would
+  // land on the same whole-day answer (2 days = exactly 2 * DAY_MS regardless
+  // of what a local wall clock did on either date). Kept because a two-day
+  // span is worth asserting on its own; it just proves ordinary arithmetic,
+  // not DST safety.
+  it('counts a two-day span that happens to straddle a daylight-saving change', () => {
     expect(daysBetween('2026-03-07', '2026-03-09')).toBe(2)
     expect(daysBetween('2026-10-31', '2026-11-02')).toBe(2)
   })

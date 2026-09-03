@@ -188,6 +188,37 @@ a {
   text-wrap: balance;
 }
 
+/* The second-level heading: every h3 in the app. It speaks in the header's
+   voice -- same face, same 70% condensed width, same bold weight -- and is
+   subordinate in two ways at once, one step down the scale and in sentence
+   case rather than caps. Size alone was the alternative and it is the weaker
+   one: at a glance a reader compares a heading to its neighbours by shape long
+   before measuring it, and 25px caps beside 20px caps is a measurement.
+
+   It reuses --face-header, --wdth-header and --wght-header rather than
+   declaring a sixth set of its own, the way .t-label reuses the caption's:
+   this is the same cut of the same family at a different size, and a role that
+   re-derived those values would be free to drift away from the heading it is
+   supposed to be a quieter version of. Only the tracking is its own, because
+   only the tracking actually differs -- see the note in tokens.css.
+
+   Added 2026-09-03. Five h3s had been asking for `t-subhead` since the tenure
+   report shipped and nothing defined it, so they fell through to the browser's
+   own h3: bold, ~18.7px, and in the BODY width, which is the one thing a
+   heading in this system must never be. Four more h3s were borrowing
+   .t-header, which rendered them identically to the h2 above them and flattened
+   the hierarchy on screens that had one. tests/typeRoles.test.ts now fails on
+   any type role a component asks for and no global stylesheet defines. */
+.t-subhead {
+  font-family: var(--face-header);
+  font-stretch: var(--wdth-header);
+  font-weight: var(--wght-header);
+  font-size: var(--step-1);
+  line-height: var(--leading-header);
+  letter-spacing: var(--tracking-subhead);
+  text-wrap: balance;
+}
+
 .t-eyebrow {
   font-family: var(--face-eyebrow);
   font-stretch: var(--wdth-eyebrow);

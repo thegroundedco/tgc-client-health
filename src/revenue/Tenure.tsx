@@ -32,7 +32,7 @@ export function Tenure({ rows }: { rows: readonly CurrentRow[] }) {
           counted but not measured -- said out loud, because a summary that
           quietly measured two of three would be a true sentence about a group
           the reader thinks is bigger than it is. Spec §3. */}
-      <p className={`t-small ${styles.summary}`} data-testid="tenure-summary">
+      <p className={`t-caption ${styles.summary}`} data-testid="tenure-summary">
         {summary.total} {summary.total === 1 ? 'client' : 'clients'}
         {summary.medianDays !== null && ` · median ${formatTenure(summary.medianDays)}`}
         {summary.longestDays !== null && ` · longest ${formatTenure(summary.longestDays)}`}
@@ -49,7 +49,7 @@ export function Tenure({ rows }: { rows: readonly CurrentRow[] }) {
           <li className={styles.row} key={row.client.id}>
             <span className={styles.who}>
               <span className="t-body">{row.client.name}</span>
-              {row.paused && <span className={`t-small ${styles.marker}`}>Paused</span>}
+              {row.paused && <span className={`t-caption ${styles.marker}`}>Paused</span>}
             </span>
             <span className={`t-body ${styles.measure}`}>{formatTenure(row.days)}</span>
           </li>

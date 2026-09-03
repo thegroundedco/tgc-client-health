@@ -34,6 +34,11 @@ describe('Churn', () => {
     const item = screen.getByRole('list', { name: 'Departures' }).querySelector('li')
     const text = item?.textContent ?? ''
     expect(text).toContain('Delta')
+    // The "when" this test is named for. row()'s fixed ended_on is
+    // '2026-08-25', which formatDay renders as 'Aug 25, 2026' -- previously
+    // unasserted, so deleting the date expression from Churn.tsx entirely
+    // still passed this test.
+    expect(text).toContain('Aug 25, 2026')
     expect(text).toContain('Price')
     expect(text).toContain('1 yr 1 mo')
   })
@@ -85,9 +90,14 @@ describe('Churn', () => {
     expect(text).toContain('start date')
   })
 
-  it('says so when nobody has left', () => {
+  // Spec §6 IA calls this destination "revenue retention and churn" -- and the
+  // word only appeared inside the non-empty branch, so on the day the ledger
+  // empties the page would stop saying the word "churn" anywhere, with nothing
+  // to notice. The empty state has to say it too.
+  it('says so when nobody has left, and still names churn', () => {
     render(<Churn rows={[]} />)
 
     expect(screen.getByText(/nobody has left/i)).toBeTruthy()
+    expect(document.body.textContent).toMatch(/churn/i)
   })
 })

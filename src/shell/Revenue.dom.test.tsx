@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../revenue/useTenure', () => ({ useTenure: vi.fn() }))
 
 import { Revenue } from './Revenue'
+import { formatTenure, tenureDays, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 
 afterEach(() => {
@@ -13,11 +14,15 @@ afterEach(() => {
   vi.mocked(useTenure).mockReset()
 })
 
+// Started in 2020, deliberately, and far enough back that the tenure it
+// produces is nowhere near any of formatTenure's boundaries -- so the asOf
+// tripwire below is measuring the wiring, not sitting on the edge of a
+// rounding rule that could flip between one run and the next.
 const ACTIVE = {
   id: 1,
   name: 'Acme',
   status: 'active',
-  started_on: '2026-01-01',
+  started_on: '2020-01-01',
   ended_on: null,
   end_reason_code: null,
   end_reason_note: null,
@@ -66,6 +71,31 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('list', { name: 'Departures' }).textContent).toContain('Delta')
   })
 
+  // THE tripwire for `asOf`. Revenue.tsx computes `asOf` itself (`todayISO()`)
+  // rather than taking it as a prop, and nothing else here checks a measurement
+  // -- only client names -- so a broken `asOf` rendered every list correctly
+  // while every number on it was nonsense, and no test noticed.
+  //
+  // The expected string is DERIVED from todayISO() rather than written out.
+  // That is deliberate, and it is the whole point: a literal like /\d+ yr/
+  // passes against any hardcoded date in the last few years -- freezing `asOf`
+  // to '2023-06-15' left the entire suite green -- so it proved only that the
+  // epoch was not grossly wrong, never that the page measures against TODAY.
+  //
+  // Deriving it does mean this test shares tenureMath's arithmetic with the
+  // component and so cannot catch an arithmetic bug. It is not meant to:
+  // tenureMath.test.ts owns the arithmetic, against hand-computed values. What
+  // only this test can see is the WIRING -- that Revenue.tsx asks for the
+  // current day instead of freezing or fabricating one -- and a derived
+  // expectation is exactly what makes a frozen date fail here.
+  it('measures tenure against today, not against a date frozen into the page', () => {
+    const expected = formatTenure(tenureDays(ACTIVE.started_on, todayISO()))
+
+    given()
+
+    expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toContain(expected)
+  })
+
   // The paragraph that was on this page before the report existed. It is still
   // true -- revenue retention needs a history of monthly amounts, which one
   // editable retainer field cannot produce -- and it is the reminder the owner
@@ -81,6 +111,17 @@ describe('the Revenue destination', () => {
 
     expect(screen.getByText(/loading/i)).toBeTruthy()
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
+  })
+
+  // Spec §6 forbids a percentage anywhere on this page, not just inside Churn.
+  // Churn.dom.test.tsx already guards its own component, but that guard is
+  // scoped there -- a percentage added to Tenure.tsx, or to Revenue.tsx's own
+  // markup, would pass every existing test. Overview carries the same
+  // page-level guard at src/shell/pages.dom.test.tsx for the same reason.
+  it('renders no percentage anywhere on the page', () => {
+    given()
+
+    expect(document.body.textContent).not.toMatch(/\d\s*%/)
   })
 
   // A failed read must never fall through to a screen that looks merely empty.
