@@ -48,7 +48,15 @@ describe('Tenure', () => {
   it('says how many could not be measured, when any could not', () => {
     render(<Tenure rows={[row('Acme', 90), row('Ember', null)]} />)
 
-    expect(screen.getByTestId('tenure-summary').textContent).toContain('1 without a start date')
+    const summary = screen.getByTestId('tenure-summary').textContent ?? ''
+    // The headline counts everybody -- both rows -- even though only one of
+    // them could be measured. Asserted alongside the "without a start date"
+    // fact because together they ARE the mismatch this test exists to catch:
+    // a summary that quietly reported the smaller, measured-only number would
+    // still contain the phrase below and slip past a check that looked at
+    // only one of the two.
+    expect(summary).toContain('2 clients')
+    expect(summary).toContain('1 without a start date')
   })
 
   it('says nothing about unmeasured clients when every one is measured', () => {
