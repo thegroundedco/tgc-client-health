@@ -21,8 +21,8 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
         // An explicit empty state rather than a blank region, which reads as a
         // failed load.
         <p className="t-body prose">
-          Nobody has left yet. When a client is marked cancelled or former on the Admin screen,
-          they appear here with the reason recorded at the time.
+          No churn yet: nobody has left. When a client is marked cancelled or former on the Admin
+          screen, they appear here with the reason recorded at the time.
         </p>
       ) : (
         <>
