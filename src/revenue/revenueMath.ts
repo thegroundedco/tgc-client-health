@@ -25,9 +25,10 @@ export type ConcentrationEntry = {
   share: number | null
 }
 
-// Named ConcentrationReport, not Concentration: the component that renders it
-// is Concentration.tsx and exports `function Concentration`, and a module
-// cannot import a type whose name its own export shadows.
+// Named ConcentrationReport, not Concentration: the component that will render
+// it arrives in a later task as Concentration.tsx exporting `function
+// Concentration`, and a module cannot import a type whose name its own export
+// shadows.
 export type ConcentrationReport = {
   named: ConcentrationEntry[]
   rest: { count: number; cents: number; share: number | null } | null

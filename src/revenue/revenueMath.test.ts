@@ -172,4 +172,24 @@ describe('concentration', () => {
     expect(result.totalCents).toBe(400000)
     expect(result.named).toHaveLength(1)
   })
+
+  it('breaks a tie by name, so equal amounts cannot swap between renders', () => {
+    // Two clients billing exactly the same. Without the name tie-break the
+    // comparator returns 0 for this pair and the order falls through to
+    // whatever the roster happened to hand over -- so the same month renders
+    // in a different order on a different read, for no reason the reader can
+    // see. Asserted from BOTH input orderings, because a single ordering
+    // passes on a comparator that merely preserves input order.
+    const tied = [
+      { id: 1, name: 'Zeta' },
+      { id: 2, name: 'Alpha' },
+    ]
+    const rows = [row(1, 300000), row(2, 300000)]
+
+    expect(concentration(tied, rows).named.map((entry) => entry.name)).toEqual(['Alpha', 'Zeta'])
+    expect(concentration([...tied].reverse(), rows).named.map((entry) => entry.name)).toEqual([
+      'Alpha',
+      'Zeta',
+    ])
+  })
 })
