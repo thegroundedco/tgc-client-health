@@ -61,7 +61,7 @@ export function AddClientForm({ owners, state, onAdd, onEdited }: Props) {
 
   return (
     <div className={styles.panel}>
-      <h3 className="t-header">Add a client</h3>
+      <h3 className="t-subhead">Add a client</h3>
 
       <div className={styles.fieldBlock}>
         <label className="t-label" htmlFor="add-client-name">
