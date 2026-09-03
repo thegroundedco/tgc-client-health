@@ -13,11 +13,16 @@ afterEach(() => {
   vi.mocked(useTenure).mockReset()
 })
 
+// Started in 2020, deliberately: `formatTenure` renders anything past a year
+// as "N yr" (or "N yr N mo"), and it will keep saying "yr" for a long time
+// from any date this suite actually runs on. That is what lets the assertion
+// below check the SHAPE of a real measurement (a year count) without pinning
+// an exact string that would drift and need updating as real time passes.
 const ACTIVE = {
   id: 1,
   name: 'Acme',
   status: 'active',
-  started_on: '2026-01-01',
+  started_on: '2020-01-01',
   ended_on: null,
   end_reason_code: null,
   end_reason_note: null,
@@ -66,6 +71,19 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('list', { name: 'Departures' }).textContent).toContain('Delta')
   })
 
+  // THE tripwire for `asOf`. Revenue.tsx computes `asOf` itself (`todayISO()`)
+  // rather than taking it as a prop, and nothing above ever checks a
+  // measurement -- only client names -- so a broken `asOf` (even the wrong
+  // epoch entirely) rendered every list correctly while every number on it was
+  // nonsense, and no test noticed. ACTIVE started in 2020, so a real `asOf`
+  // renders a year count; a wrong one (e.g. before ACTIVE's start date) falls
+  // into formatTenure's `days < 7` branch and reads "under a week" instead.
+  it('renders an actual measurement for the tenure it computed, not just a name', () => {
+    given()
+
+    expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toMatch(/\d+ yr/)
+  })
+
   // The paragraph that was on this page before the report existed. It is still
   // true -- revenue retention needs a history of monthly amounts, which one
   // editable retainer field cannot produce -- and it is the reminder the owner
@@ -81,6 +99,17 @@ describe('the Revenue destination', () => {
 
     expect(screen.getByText(/loading/i)).toBeTruthy()
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
+  })
+
+  // Spec §6 forbids a percentage anywhere on this page, not just inside Churn.
+  // Churn.dom.test.tsx already guards its own component, but that guard is
+  // scoped there -- a percentage added to Tenure.tsx, or to Revenue.tsx's own
+  // markup, would pass every existing test. Overview carries the same
+  // page-level guard at src/shell/pages.dom.test.tsx for the same reason.
+  it('renders no percentage anywhere on the page', () => {
+    given()
+
+    expect(document.body.textContent).not.toMatch(/\d\s*%/)
   })
 
   // A failed read must never fall through to a screen that looks merely empty.
