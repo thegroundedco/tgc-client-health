@@ -11,8 +11,11 @@ import { isChurned } from '../clients/clientForm'
 // 1. `new Date().toISOString()` reports the UTC calendar day. At 18:00 in a
 //    UTC-7 zone it is already tomorrow in UTC, so "today" would be a day ahead
 //    for part of every evening -- and every test written at a UTC-safe hour
-//    would pass. todayISO reads the LOCAL fields instead. Proven: the tests
-//    fail under `toISOString().slice(0, 10)`.
+//    would pass. todayISO reads the LOCAL fields instead. Proven -- but only
+//    because tenure.test.ts pins a non-UTC zone: under UTC itself the naive
+//    `toISOString().slice(0, 10)` and the local-fields form name the same
+//    calendar day, so this project's CI (ubuntu-latest, UTC by default) could
+//    not have caught a regression here without that pin.
 //
 // 2. Mixing a UTC-parsed date with a local one puts a whole timezone offset
 //    inside a subtraction, so daysBetween sends BOTH ends through Date.UTC as
@@ -106,7 +109,11 @@ export function formatTenure(days: number | null): string {
 //
 // `timeZone: 'UTC'` is load-bearing, not decoration. Without it toLocaleDateString
 // converts the UTC midnight back into local time and lands on the previous day
-// again, which is the very bug this function exists to avoid.
+// again, which is the very bug this function exists to avoid. Proven -- but,
+// like trap 1, only because tenure.test.ts pins a non-UTC zone: under UTC
+// itself, dropping `timeZone: 'UTC'` renders the same day, so this project's
+// CI (ubuntu-latest, UTC by default) could not have caught that regression
+// without the pin.
 export function formatDay(day: string): string {
   const [year, month, date] = day.split('-').map(Number)
   return new Date(Date.UTC(year, month - 1, date)).toLocaleDateString('en-US', {

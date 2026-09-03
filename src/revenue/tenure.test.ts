@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   currentRows,
   daysBetween,
@@ -10,6 +10,32 @@ import {
   todayISO,
   type LifecycleClient,
 } from './tenure'
+
+// todayISO and formatDay each exist to fix a UTC-vs-local bug, but under UTC
+// itself the correct and naive forms of BOTH render the same calendar day --
+// so a suite that runs in UTC cannot tell a regression apart from the fix,
+// and this project's CI (ubuntu-latest) runs in UTC by default. Pinning a
+// non-UTC zone here is what lets these tests actually fail when either bug
+// comes back, instead of only failing on a developer's own non-UTC machine.
+//
+// `process` is a real Node global at runtime, but this file compiles under
+// tsconfig.app.json (types: ["vite/client"], no node types -- that's
+// tsconfig.node.json, which does not cover src), so it is reached through
+// globalThis, the same way src/board/Matrix.tsx and src/styles/theme.ts reach
+// other runtime globals this bundler target does not type for source files.
+const nodeProcess = (globalThis as unknown as { process: { env: Record<string, string | undefined> } })
+  .process
+const ORIGINAL_TZ = nodeProcess.env.TZ
+
+beforeAll(() => {
+  nodeProcess.env.TZ = 'America/Denver'
+})
+
+afterAll(() => {
+  // Vitest reuses workers across files: a leaked TZ here would silently
+  // change the meaning of every date-touching test that runs after this one.
+  nodeProcess.env.TZ = ORIGINAL_TZ
+})
 
 function client(over: Partial<LifecycleClient> = {}): LifecycleClient {
   return {
