@@ -75,14 +75,30 @@ where "two weeks" belongs would assert something the data does not say.
 
 ### 3.1 The arithmetic, and the bug it must not have
 
-Dates here are `YYYY-MM-DD` strings, which is what a Postgres `date` renders as. **A bare
-`YYYY-MM-DD` parsed with `new Date()` is UTC midnight, and in any western zone its local calendar
-day is the day before.** `src/lib/gate.ts` documents this exact trap and solves it with `Date.UTC`
-for the 90-day Advocacy gate; the same approach is used here.
+Dates here are `YYYY-MM-DD` strings, which is what a Postgres `date` renders as, and a bare
+zero-padded `YYYY-MM-DD` is parsed as UTC midnight by `new Date()` in every JS engine and zone. So
+`daysBetween`, which only ever subtracts two such strings, has no zone error in it at all — that
+subtraction is correct as written, naive or not. (`src/revenue/tenureMath.ts` sends both ends
+through `Date.UTC` anyway, the same discipline `src/lib/gate.ts` uses for the 90-day Advocacy gate,
+as defence for the day something other than a date-only string reaches it — not because today's
+input needs it.)
 
-Left naive, every tenure would be a day short for roughly half the year, and every test written in
-UTC would pass. That is why the arithmetic is a pure module with its own tests rather than a few
-inline subtractions.
+The actual zone traps sit where a date crosses the boundary between a `Date` and the local clock,
+not in that subtraction:
+
+- **`todayISO`** — `new Date().toISOString()` reports the UTC calendar day, and in any zone west of
+  Greenwich that is already tomorrow for the part of the evening after UTC midnight has passed
+  locally. "Today" would be a day **ahead** for that stretch of every evening, and a test run at a
+  UTC-safe hour would not catch it. The fix is reading the local year/month/day fields instead of
+  going through `toISOString`.
+- **`formatDay`** — a date-only string parses to UTC midnight, and handing that straight to
+  `toLocaleDateString` without pinning `timeZone: 'UTC'` converts it back to local time first, which
+  in any zone west of Greenwich lands on the **previous** day. The fix is passing `timeZone: 'UTC'`
+  explicitly so the render stays on the day the string named.
+
+Both bugs are invisible to a test suite that runs in UTC (this project's CI does, by default), since
+under UTC itself the naive and correct forms of each function agree — which is why the tests for
+both pin a non-UTC zone rather than trusting the runner's own.
 
 Tenure is rendered in whole units — "1 yr 2 mo", "9 mo", "2 wk" — because a client relationship is
 not a precise quantity and "0.53 months" would claim a precision nobody has.
@@ -143,8 +159,12 @@ missing and why. It stops being a page that only apologises.
 
 ## 8. Modules
 
-- `src/revenue/tenure.ts` — pure arithmetic and sorting. Tenure from a start date to today, the
+- `src/revenue/tenureMath.ts` — pure arithmetic and sorting. Tenure from a start date to today, the
   summary figures, the split into current and departed. No React, no network, zone-safe dates.
+  Named `tenureMath`, not `tenure`: macOS's filesystem is case-insensitive, so a `tenure.ts` beside
+  `Tenure.tsx` resolve to the same path, the resolver takes the `.ts` file first, and both imports
+  land there — `Tenure.tsx` ends up importing itself. `src/board/matrixMath.ts` carries the same
+  suffix for the same reason.
 - `src/revenue/useTenure.ts` — one read of every client's lifecycle columns. Mirrors `useBoard`'s
   shape (`status` / `loadError` / rows / `reload`) so the screen's read can be mocked, which is the
   reason that hook exists at all.
@@ -162,7 +182,7 @@ all of it would be coupled to every future change made for the admin screen's be
 
 | File | Covers |
 |---|---|
-| `src/revenue/tenure.test.ts` | tenure across a month and a year boundary; **a date that would be a day short under naive parsing**; a null start date yielding "unknown", never zero; the sort; median with even and odd counts; paused included, departed excluded |
+| `src/revenue/tenureMath.test.ts` | tenure across a month and a year boundary; `todayISO` and `formatDay` each under a pinned non-UTC zone, per §3.1; a null start date yielding "unknown", never zero; the sort; median with even and odd counts; paused included, departed excluded |
 | `src/revenue/useTenure.dom.test.ts` | loading, error and ready; that a failed read reports an error rather than an empty list |
 | `src/revenue/Tenure.dom.test.tsx` | order, the summary line, the paused marker, "unknown" for a missing start date |
 | `src/revenue/Churn.dom.test.tsx` | a row's five parts; "unknown" tenure-at-churn; the empty state; that no percentage is rendered |
