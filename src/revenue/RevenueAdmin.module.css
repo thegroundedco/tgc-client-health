@@ -1,0 +1,95 @@
+/* The revenue entry grid's own layout. Shapes borrowed from
+   UsersAdmin.module.css and ClientsAdmin.module.css on purpose -- a bordered
+   card, a labelled control, a row of actions -- so this reads as the same
+   place as the other two admin screens rather than a fourth design. Every
+   colour comes from the semantic layer; this file names none of its own. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* Wider than --measure-prose: the grid has three columns across, and prose
+     width wraps the table into an unreadable stack of single-column rows. */
+  max-width: var(--measure-column);
+  inline-size: 100%;
+}
+
+.monthRow {
+  display: flex;
+  align-items: center;
+}
+
+.monthLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.monthSelect {
+  font-family: var(--face-body);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-body);
+  font-size: var(--step-0);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* A wrapper with its own horizontal scroll, not the page's -- the same
+   reflex tokens.css's own rules ask of any wide content, so a narrow viewport
+   scrolls the table instead of the whole screen. */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table thead th {
+  font-family: var(--face-body);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-body);
+  font-size: var(--step-0);
+  color: var(--text-secondary);
+}
+
+.moneyInput {
+  font-family: var(--face-body);
+  font-stretch: var(--wdth-body);
+  font-weight: var(--wght-body);
+  font-size: var(--step-0);
+  color: var(--text-primary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  /* A width sized for dollars, not a full-width field that stretches to fill
+     a table cell and reads as though it expects a name or an address. */
+  max-width: 8rem;
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
