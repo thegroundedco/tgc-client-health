@@ -51,7 +51,7 @@ begin
     and p.pronargs = 1;
 
   if body is null then
-    raise exception E'verify:capability COULD NOT VERIFY -- private.has_capability(text) does not exist on this project.\n\nNO DISAGREEMENT WAS FOUND; nothing was checked. This is the expected result where supabase/migrations/20260824160306_has_capability.sql has not been applied yet. Apply it and re-run.';
+    raise exception E'verify:capability COULD NOT VERIFY -- private.has_capability(text) does not exist on this project.\n\nNO DISAGREEMENT WAS FOUND; nothing was checked. This is the expected result where neither supabase/migrations/20260824160306_has_capability.sql nor 20260903120000_revenue_has_capability.sql (which replaces the function) has been applied yet -- either one missing produces this state. Apply them and re-run.';
   end if;
 
   -- The deployed CASE, not a copy of it. \y is a Postgres word boundary, so the

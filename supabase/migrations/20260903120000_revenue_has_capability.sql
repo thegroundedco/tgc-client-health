@@ -55,15 +55,23 @@ $$;
 -- 2. The table
 ----------------------------------------------------------------------------
 
+-- The client_id foreign key is named explicitly rather than left to
+-- Postgres's <table>_<column>_fkey auto-naming. The auto-generated name would
+-- almost certainly come out identical, but this migration is authored and
+-- never applied here -- the owner applies it -- so a wrong guess would surface
+-- as a failed `comment on constraint` against production rather than as a
+-- failed test on this machine. Naming it removes the guess.
 create table public.client_month_revenue (
-  client_id       bigint  not null references public.clients(id) on delete restrict,
+  client_id       bigint  not null,
   period          date    not null check (period = date_trunc('month', period)::date),
   retainer_cents  integer not null default 0 check (retainer_cents >= 0),
   project_cents   integer not null default 0 check (project_cents >= 0),
   entered_by      uuid    references public.profiles(id) on delete set null,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
-  primary key (client_id, period)
+  primary key (client_id, period),
+  constraint client_month_revenue_client_id_fkey
+    foreign key (client_id) references public.clients(id) on delete restrict
 );
 
 -- on delete RESTRICT, deliberately unlike checkins.client_id, which cascades.
@@ -95,7 +103,23 @@ comment on table public.client_month_revenue is
   'One row per client per month. A MISSING ROW IS NOT A ZERO: absent means unentered, not unbilled.';
 
 ----------------------------------------------------------------------------
--- 3. Privileges
+-- 3. The updated_at trigger
+----------------------------------------------------------------------------
+
+-- Every other table in this schema with an updated_at column wires one of
+-- these: public.profiles (20260820225355), public.clients and public.checkins
+-- (20260821021840). Without it, updated_at never advances past insert time,
+-- which would quietly gut the audit story parent spec section 8.6 claims for
+-- this table -- "who changed a figure and when is recorded" -- while Task 6's
+-- upsert path makes every row look like it was just written. No grant needed:
+-- trigger-function EXECUTE is checked at CREATE TRIGGER time against the
+-- creator, not against the caller at query time.
+create trigger client_month_revenue_touch_updated_at
+  before update on public.client_month_revenue
+  for each row execute function private.touch_updated_at();
+
+----------------------------------------------------------------------------
+-- 4. Privileges
 ----------------------------------------------------------------------------
 
 -- Before the grants, per the standing rule for every new table in public: on

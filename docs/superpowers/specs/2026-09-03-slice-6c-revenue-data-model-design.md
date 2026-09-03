@@ -65,7 +65,16 @@ create table public.client_month_revenue (
   updated_at      timestamptz not null default now(),
   primary key (client_id, period)
 );
+
+create trigger client_month_revenue_touch_updated_at
+  before update on public.client_month_revenue
+  for each row execute function private.touch_updated_at();
 ```
+
+Every other table in this schema with an `updated_at` column wires one of these triggers
+(`profiles`, `clients`, `checkins`); without it `updated_at` never advances past insert time, which
+would quietly gut the audit story §8.6 claims for this table while Task 6's upsert path made every
+row look freshly written.
 
 The migration opens with `revoke all on public.client_month_revenue from anon, authenticated;`
 before its grants, per the standing rule for every new table in `public`.
