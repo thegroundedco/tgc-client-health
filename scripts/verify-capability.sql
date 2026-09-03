@@ -98,22 +98,23 @@ begin
               case r.role
                 when 'admin' then true
                 when 'account_manager'
-                  then c.cap in ('view_scores', 'edit_scores', 'manage_clients')
+                  then c.cap in ('view_scores', 'edit_scores', 'manage_clients', 'view_revenue')
                 when 'viewer' then c.cap = 'view_scores'
                 else false
               end),
        E',\n      ')
      from (values ('admin'), ('account_manager'), ('viewer'), ('sales')) as r(role)
      cross join (values
-       ('view_scores'), ('edit_scores'), ('manage_clients'), ('manage_users')
+       ('view_scores'), ('edit_scores'), ('manage_clients'), ('manage_users'),
+       ('view_revenue'), ('edit_revenue')
      ) as c(cap)))
   into mismatches, combinations;
 
   -- Assert a positive expected count, so "0 mismatches" cannot read as success
   -- when the reason is that nothing was compared. A cross join that lost a leg
   -- would otherwise pass silently.
-  if combinations <> 16 then
-    raise exception 'verify:capability FAILED to build its own input: expected 16 combinations, built %. Nothing about the deployed function was checked.',
+  if combinations <> 24 then
+    raise exception 'verify:capability FAILED to build its own input: expected 24 combinations, built %. Nothing about the deployed function was checked.',
       combinations;
   end if;
 

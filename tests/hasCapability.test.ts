@@ -57,7 +57,17 @@ const EXPECTED_DROPS = [
 ]
 
 describe('the has_capability migration', () => {
-  const sql = migration('_has_capability.sql')
+  // This file pins ONE specific, historical migration -- the one that created
+  // has_capability and dropped is_active_user -- not "whatever migration
+  // currently defines has_capability". Slice 6c's 20260903120000 migration
+  // replaces the function too and, by the drift guard's own design in
+  // capabilities.test.ts, also ends in `_has_capability.sql` so that guard's
+  // newest-match search finds it. That makes the generic suffix ambiguous
+  // here -- searching by it now matches two files -- so this reads the
+  // original migration by its full filename instead, keeping this test
+  // pointed at it regardless of how many later migrations also touch
+  // has_capability.
+  const sql = migration('20260824160306_has_capability.sql')
   const statements = withoutComments(sql)
 
   describe('the function', () => {

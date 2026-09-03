@@ -26,23 +26,41 @@
 // pure function of their role -- and the drift guard is what will force both
 // halves to be edited together.
 
-export type Capability = 'view_scores' | 'edit_scores' | 'manage_clients' | 'manage_users'
+export type Capability =
+  | 'view_scores'
+  | 'edit_scores'
+  | 'manage_clients'
+  | 'manage_users'
+  | 'view_revenue'
+  | 'edit_revenue'
 
 export type Role = 'admin' | 'account_manager' | 'viewer'
 
-// Phase 1's four. Exported so the test can assert the count, not only the
-// membership: a fifth capability is a change to the permission model and should
-// have to be made in more than one place.
+// Phase 1's four plus slice 6c's revenue pair. Exported so the test can assert
+// the count, not only the membership: a seventh capability is a change to the
+// permission model and should have to be made in more than one place.
 export const CAPABILITIES: readonly Capability[] = [
   'view_scores',
   'edit_scores',
   'manage_clients',
   'manage_users',
+  'view_revenue',
+  'edit_revenue',
 ]
 
+// account_manager reads revenue and does not write it -- the first capability
+// in this model where a role that is not `viewer` views without editing. Owner's
+// decision, 2026-09-03.
 export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
-  admin: ['view_scores', 'edit_scores', 'manage_clients', 'manage_users'],
-  account_manager: ['view_scores', 'edit_scores', 'manage_clients'],
+  admin: [
+    'view_scores',
+    'edit_scores',
+    'manage_clients',
+    'manage_users',
+    'view_revenue',
+    'edit_revenue',
+  ],
+  account_manager: ['view_scores', 'edit_scores', 'manage_clients', 'view_revenue'],
   viewer: ['view_scores'],
 }
 
