@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../revenue/useTenure', () => ({ useTenure: vi.fn() }))
 
 import { Revenue } from './Revenue'
+import { formatTenure, tenureDays, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 
 afterEach(() => {
@@ -13,11 +14,10 @@ afterEach(() => {
   vi.mocked(useTenure).mockReset()
 })
 
-// Started in 2020, deliberately: `formatTenure` renders anything past a year
-// as "N yr" (or "N yr N mo"), and it will keep saying "yr" for a long time
-// from any date this suite actually runs on. That is what lets the assertion
-// below check the SHAPE of a real measurement (a year count) without pinning
-// an exact string that would drift and need updating as real time passes.
+// Started in 2020, deliberately, and far enough back that the tenure it
+// produces is nowhere near any of formatTenure's boundaries -- so the asOf
+// tripwire below is measuring the wiring, not sitting on the edge of a
+// rounding rule that could flip between one run and the next.
 const ACTIVE = {
   id: 1,
   name: 'Acme',
@@ -72,16 +72,28 @@ describe('the Revenue destination', () => {
   })
 
   // THE tripwire for `asOf`. Revenue.tsx computes `asOf` itself (`todayISO()`)
-  // rather than taking it as a prop, and nothing above ever checks a
-  // measurement -- only client names -- so a broken `asOf` (even the wrong
-  // epoch entirely) rendered every list correctly while every number on it was
-  // nonsense, and no test noticed. ACTIVE started in 2020, so a real `asOf`
-  // renders a year count; a wrong one (e.g. before ACTIVE's start date) falls
-  // into formatTenure's `days < 7` branch and reads "under a week" instead.
-  it('renders an actual measurement for the tenure it computed, not just a name', () => {
+  // rather than taking it as a prop, and nothing else here checks a measurement
+  // -- only client names -- so a broken `asOf` rendered every list correctly
+  // while every number on it was nonsense, and no test noticed.
+  //
+  // The expected string is DERIVED from todayISO() rather than written out.
+  // That is deliberate, and it is the whole point: a literal like /\d+ yr/
+  // passes against any hardcoded date in the last few years -- freezing `asOf`
+  // to '2023-06-15' left the entire suite green -- so it proved only that the
+  // epoch was not grossly wrong, never that the page measures against TODAY.
+  //
+  // Deriving it does mean this test shares tenureMath's arithmetic with the
+  // component and so cannot catch an arithmetic bug. It is not meant to:
+  // tenureMath.test.ts owns the arithmetic, against hand-computed values. What
+  // only this test can see is the WIRING -- that Revenue.tsx asks for the
+  // current day instead of freezing or fabricating one -- and a derived
+  // expectation is exactly what makes a frozen date fail here.
+  it('measures tenure against today, not against a date frozen into the page', () => {
+    const expected = formatTenure(tenureDays(ACTIVE.started_on, todayISO()))
+
     given()
 
-    expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toMatch(/\d+ yr/)
+    expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toContain(expected)
   })
 
   // The paragraph that was on this page before the report existed. It is still
