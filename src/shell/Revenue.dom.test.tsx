@@ -77,7 +77,7 @@ describe('the Revenue destination', () => {
   })
 
   it('says it is loading rather than showing an empty report', () => {
-    given({ status: 'loading', clients: [] })
+    given({ status: 'loading', clients: [ACTIVE, GONE] })
 
     expect(screen.getByText(/loading/i)).toBeTruthy()
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
@@ -85,7 +85,7 @@ describe('the Revenue destination', () => {
 
   // A failed read must never fall through to a screen that looks merely empty.
   it('shows a failed read as an error, not as an empty roster', () => {
-    given({ status: 'error', loadError: 'permission denied', clients: [] })
+    given({ status: 'error', loadError: 'permission denied', clients: [ACTIVE, GONE] })
 
     expect(screen.getByRole('alert').textContent).toContain('permission denied')
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
