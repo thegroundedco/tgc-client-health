@@ -1333,9 +1333,14 @@ vi.mock('./useRevenue', () => ({ useRevenue: vi.fn() }))
 import { RevenueAdmin } from './RevenueAdmin'
 import { useRevenue } from './useRevenue'
 
+// Three clients and one row, deliberately: with two clients and one row the
+// entered count and the missing count are both 1, so an assertion on "1 of 2"
+// passes whichever of the two the component actually renders. Three makes them
+// 1 and 2, and only the intended number matches.
 const CLIENTS = [
   { id: 1, name: 'Acme' },
   { id: 2, name: 'Delta' },
+  { id: 3, name: 'East Bay' },
 ]
 const ROW = { client_id: 1, period: '2026-09-01', retainer_cents: 400000, project_cents: 0 }
 
@@ -1381,7 +1386,10 @@ describe('the revenue entry grid', () => {
   it('says how many clients the month is still missing', () => {
     given()
 
-    expect(document.body.textContent).toContain('1 of 2')
+    // MISSING of total, matching Concentration's wording -- two of the three
+    // eligible clients have no row. The two screens must not disagree about
+    // which number "N of M" names.
+    expect(document.body.textContent).toContain('2 of 3')
   })
 
   it('refuses to save a field it cannot parse, and says which', async () => {
@@ -1488,8 +1496,9 @@ git commit -m "revenue: a month at a time, every eligible client, and an empty f
 
 **Files:**
 - Create: `src/revenue/Concentration.tsx`, `src/revenue/Concentration.dom.test.tsx`
-- Modify: `src/revenue/Revenue.module.css` (add the concentration rules), `src/shell/Revenue.tsx`, `src/shell/Revenue.dom.test.tsx:109-113` (the page-level regex)
-- Test: `src/revenue/Concentration.dom.test.tsx`, `src/shell/Revenue.dom.test.tsx`
+- Modify: `src/revenue/Revenue.module.css` (add the concentration rules), `src/shell/Revenue.tsx`, `src/shell/Revenue.dom.test.tsx:109-113` (delete the page-level regex)
+- Create: `tests/revenueLiterals.test.ts`
+- Test: `src/revenue/Concentration.dom.test.tsx`, `tests/revenueLiterals.test.ts`
 
 **Interfaces:**
 - Consumes: `concentration`, `ConcentrationReport` type, `NAMED_CLIENTS` from `./revenueMath`; `formatMoney` from `./money`; `useRevenue`.
@@ -1641,7 +1650,9 @@ It reads `useRevenue(month)`, passes `clients` and `rows` to `concentration()`, 
 
 - [ ] **Step 4: Replace the page-level percentage guard**
 
-In `src/shell/Revenue.dom.test.tsx`, replace the `renders no percentage anywhere on the page` test:
+**Controller ruling, pre-flight:** this guard goes in `tests/revenueLiterals.test.ts`, NOT in `src/shell/Revenue.dom.test.tsx`. It needs `node:fs`, and `tsconfig.app.json` gives `src/` no Node types on purpose — a `src/` test that reads the filesystem passes `npm test` and fails `npm run build`. `tests/tokens.test.ts`, `tests/typeRoles.test.ts` and `tests/capabilities.test.ts` all live there for this reason.
+
+**Delete** the `renders no percentage anywhere on the page` test from `src/shell/Revenue.dom.test.tsx`, and create `tests/revenueLiterals.test.ts`:
 
 ```tsx
   // Spec section 9. The old rule here was "no percentage anywhere on this
@@ -1655,18 +1666,22 @@ In `src/shell/Revenue.dom.test.tsx`, replace the `renders no percentage anywhere
   // threshold is relaxed. What remains here is the half a compute-site guard
   // cannot cover: that no percentage is written into this page as a literal,
   // bypassing the arithmetic entirely.
-  it('renders no percentage that did not come from the arithmetic', () => {
-    given()
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
 
-    const source = readFileSync(
-      join(import.meta.dirname, 'Revenue.tsx'),
-      'utf8',
-    )
+const ROOT = join(import.meta.dirname, '..')
+
+describe('the Revenue page', () => {
+  it('writes no percentage into its own markup', () => {
+    const source = readFileSync(join(ROOT, 'src', 'shell', 'Revenue.tsx'), 'utf8')
+    expect(source.length).toBeGreaterThan(200)
     expect(source).not.toMatch(/\d\s*%/)
   })
+})
 ```
 
-If reading the file from a `src/` test breaks the build for want of Node types, move this assertion into `tests/` beside the other repo-walking guards and say so in your report — do not delete it.
+The `source.length` assertion is not filler: if the path ever stops resolving, `readFileSync` throws — but if the file were ever emptied or replaced by a stub, the regex would pass over nothing and this guard would go quietly green.
 
 - [ ] **Step 5: Mount Concentration on the Revenue page**
 
@@ -1685,7 +1700,7 @@ Add the literal text `87%` to a paragraph in `src/shell/Revenue.tsx`. Confirm th
 
 ```bash
 npm test && npm run lint && npm run build
-git add src/revenue/Concentration.tsx src/revenue/Concentration.dom.test.tsx src/revenue/Revenue.module.css src/shell/Revenue.tsx src/shell/Revenue.dom.test.tsx
+git add src/revenue/Concentration.tsx src/revenue/Concentration.dom.test.tsx src/revenue/Revenue.module.css src/shell/Revenue.tsx src/shell/Revenue.dom.test.tsx tests/revenueLiterals.test.ts
 git commit -m "revenue: who we are most exposed to, and a percentage rule that moved to the arithmetic"
 ```
 
