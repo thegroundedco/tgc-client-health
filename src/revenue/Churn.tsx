@@ -31,7 +31,7 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
               <li className={styles.row} key={row.client.id}>
                 <span className={styles.who}>
                   <span className="t-body">{row.client.name}</span>
-                  <span className={`t-small ${styles.marker}`}>
+                  <span className={`t-caption ${styles.marker}`}>
                     {reasonLabel(row.client.end_reason_code)}
                   </span>
                 </span>
@@ -43,7 +43,7 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
                     coded reason alone loses the story and free text alone
                     cannot be counted. */}
                 {row.client.end_reason_note !== null && (
-                  <p className={`t-small ${styles.detail}`} data-testid="churn-note">
+                  <p className={`t-caption ${styles.detail}`} data-testid="churn-note">
                     {row.client.end_reason_note}
                   </p>
                 )}
@@ -51,7 +51,7 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
             ))}
           </ul>
 
-          <p className="t-small prose">
+          <p className="t-caption prose">
             No churn rate and no tenure-at-churn breakdown yet: a rate needs more than one
             departure to mean anything, and the breakdown needs the clients who left to have a
             recorded start date.

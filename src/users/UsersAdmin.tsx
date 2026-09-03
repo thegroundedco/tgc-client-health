@@ -85,7 +85,7 @@ export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
                       has not set a full name -- which, on this roster, was
                       everybody but the owner. Reported from the deployed page
                       2026-09-02. */}
-                  {name && <p className={`t-small ${styles.email}`}>{row.email}</p>}
+                  {name && <p className={`t-caption ${styles.email}`}>{row.email}</p>}
                 </div>
 
                 <div className={styles.actions}>
@@ -118,7 +118,7 @@ export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
                 </div>
 
                 {isSelf && (
-                  <p className={`t-small ${styles.rowNote}`}>
+                  <p className={`t-caption ${styles.rowNote}`}>
                     You cannot change your own access. That is what makes it
                     impossible to lock every admin out. Another admin can.
                   </p>
@@ -144,12 +144,12 @@ export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
                     `admin.resetEdit` has no caller on this screen, and it is
                     deliberate rather than an omission. */}
                 {admin.editStateFor === row.id && admin.editState.kind === 'failed' && (
-                  <p className={`t-small ${styles.rowNote}`} role="status">
+                  <p className={`t-caption ${styles.rowNote}`} role="status">
                     {admin.editState.message}
                   </p>
                 )}
                 {admin.editStateFor === row.id && admin.editState.kind === 'saved' && (
-                  <p className={`t-small ${styles.rowNote}`} role="status">
+                  <p className={`t-caption ${styles.rowNote}`} role="status">
                     {admin.editState.what} {formatSavedAt(admin.editState.at)}.
                   </p>
                 )}
@@ -178,7 +178,7 @@ export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
               <li className={styles.row} key={row.email}>
                 <div className={styles.identity}>
                   <p className="t-body">{row.email}</p>
-                  <p className={`t-small ${styles.email}`}>
+                  <p className={`t-caption ${styles.email}`}>
                     {roleLabel(row.role)} · invited {formatSavedAt(row.created_at)}
                   </p>
                 </div>
@@ -216,10 +216,10 @@ export function UsersAdmin({ currentUserId, onWritingChange }: Props) {
         />
 
         {admin.inviteState.kind === 'failed' && (
-          <p className="t-small" role="status">{admin.inviteState.message}</p>
+          <p className="t-caption" role="status">{admin.inviteState.message}</p>
         )}
         {admin.inviteState.kind === 'saved' && (
-          <p className="t-small" role="status">
+          <p className="t-caption" role="status">
             {admin.inviteState.what} {formatSavedAt(admin.inviteState.at)}.
           </p>
         )}

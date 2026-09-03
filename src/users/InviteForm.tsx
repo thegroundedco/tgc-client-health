@@ -104,13 +104,13 @@ export function InviteForm({ profiles, state, onInvite, onEdited }: Props) {
         </select>
         {/* Inside the field block, so it reads as a caption for the select it
             describes rather than as a stray sentence after the form. */}
-        <p className={`t-small ${styles.hint}`}>{ROLE_HINTS[draft.role] ?? ''}</p>
+        <p className={`t-caption ${styles.hint}`}>{ROLE_HINTS[draft.role] ?? ''}</p>
       </div>
 
       {/* Shown, not merely used to disable the button. A control that is dead
           for a reason nobody states is the defect this project keeps finding. */}
       {problems.map((problem) => (
-        <p key={problem.field} className="t-small">{problem.text}</p>
+        <p key={problem.field} className="t-caption">{problem.text}</p>
       ))}
 
       <button className="button" type="submit" disabled={saving || problems.length > 0}>
