@@ -78,12 +78,28 @@ export function share(part: number, whole: number): number | null {
 // render -- this must not manufacture a column of zeroes for a state that has
 // none, which is what an unconditional divide would do the moment totalCents
 // is 0.
+//
+// PRECONDITION: `amounts` must sum to EXACTLY `totalCents` -- it is the whole
+// roster of a total, not a selection from it. That is what bounds the
+// shortfall below to one point per row, and it is the only input this returns
+// a column for. Both ways of breaking it are silent otherwise: pass a SUBSET
+// (the four named rows without the rest row, say) and the shortfall exceeds
+// the number of rows, the distribution loop walks off the end of `order`, and
+// a TypeError lands inside a render; pass amounts totalling MORE and the
+// shortfall goes negative, the loop never runs, and the function returns a
+// column reading 120. Null instead, for both -- Concentration already renders
+// amounts with no percentage beside them, and a report built to be
+// trustworthy about exact shares must print no share rather than a wrong one.
 export function allocatePercentages(
   amounts: readonly number[],
   totalCents: number,
 ): number[] | null {
   if (totalCents === 0) return null
   if (amounts.length === 0) return []
+
+  // Exact integer comparison: money is integer cents everywhere, so there is
+  // no tolerance to allow for here and none should be invented.
+  if (amounts.reduce((sum, value) => sum + value, 0) !== totalCents) return null
 
   const exact = amounts.map((cents) => (cents / totalCents) * 100)
   const floors = exact.map(Math.floor)

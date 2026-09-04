@@ -79,6 +79,34 @@ describe('allocatePercentages', () => {
     // share is meaningful to show.
     expect(allocatePercentages([0, 0, 0], 0)).toBe(null)
   })
+
+  it('refuses amounts that do not add up to the total, rather than throwing inside a render', () => {
+    // OUT OF CONTRACT, and it used to be a blank screen. The allocation only
+    // terminates correctly when `amounts` sums to `totalCents`: that is what
+    // bounds the shortfall to one point per row. Hand it Concentration's
+    // fixture with only the four NAMED rows and no rest row -- "I just need
+    // percentages for the named clients", the obvious next call -- and the
+    // four sum to 1700000 of 2000000. Floors are 22 + 12 + 30 + 20 = 84, so
+    // the shortfall is 16 with only 4 rows to give it to, and the loop walked
+    // off the end of `order` and read `.index` off undefined. A TypeError
+    // thrown in a render is how a screen on this project goes blank.
+    const namedOnly = [450000, 250000, 600000, 400000]
+
+    expect(() => allocatePercentages(namedOnly, 2000000)).not.toThrow()
+    expect(allocatePercentages(namedOnly, 2000000)).toBe(null)
+  })
+
+  it('refuses amounts that add up to more than the total, rather than printing a column over 100', () => {
+    // The same broken precondition the other way, and the reason this is a
+    // sum check rather than a clamp on the loop. Two 600000 rows against a
+    // 1000000 total floor to 60 + 60: the shortfall is negative, so the loop
+    // never runs, nothing walks off the end, and the function happily returns
+    // a column reading 60% and 60%. Clamping the loop leaves that untouched.
+    // Null is the honest answer -- Concentration already renders dollar
+    // amounts with no percentage beside them for it, the same way it handles
+    // a month where nothing was billed.
+    expect(allocatePercentages([600000, 600000], 1000000)).toBe(null)
+  })
 })
 
 describe('rate', () => {
