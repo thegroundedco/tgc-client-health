@@ -48,6 +48,10 @@ declare
   -- Section 10 (policy behaviour) only.
   active_uid      uuid;
   n_seen          bigint;
+  -- Rows an impersonated UPDATE actually touched. Section 10f2 needs this and
+  -- the sentinel-exception probes around it do not: see the long comment there
+  -- for why an UPDATE cannot be probed the way an INSERT can.
+  n_updated       bigint;
   n_clients_total bigint;
   n_checkins_total bigint;
   n_profiles_total bigint;
@@ -1336,22 +1340,57 @@ begin
         -- half, against the row seeded above, which the select probe just
         -- proved an account manager can see -- so a refusal here is the
         -- policy refusing, not an empty table hiding the question.
+        --
+        -- THIS PROBE COUNTS ROWS. It does not wait for an exception, and that
+        -- is not a style choice -- it is the RLS asymmetry between the two
+        -- verbs. An INSERT that fails a `with check` raises
+        -- insufficient_privilege, which is why the probe above can use the
+        -- sentinel. An UPDATE whose `using` predicate is false matches NO ROWS
+        -- and raises NOTHING AT ALL: it is a wholly successful statement that
+        -- happens to affect zero rows. Both halves of
+        -- client_month_revenue_update_edit_revenue gate on edit_revenue, so an
+        -- account manager fails the `using` half first and takes that silent
+        -- path.
+        --
+        -- Written as a copy of the insert probe -- which is how it first
+        -- shipped -- this check reported the boundary WIDE OPEN on a database
+        -- where it was correctly closed. The update raised nothing, execution
+        -- fell through to the sentinel, and the sentinel means "the policy
+        -- allowed it". Measured against staging on 2026-09-04: the account
+        -- manager's update affected 0 rows and the probe still called it
+        -- ALLOWED. A security check whose failure mode is crying wolf gets
+        -- switched off, so this is not a cosmetic bug.
+        --
+        -- The neighbouring profiles probes keep the sentinel shape and are
+        -- RIGHT to. public.profiles carries a second update policy,
+        -- profiles_update_own, whose `using` is `auth.uid() = id`; policies are
+        -- OR'd, so a viewer updating their OWN row passes `using`, reaches the
+        -- `with check`, and is refused with a real exception. This table has
+        -- one update policy and no such second path. Do not "make them
+        -- consistent" in either direction without checking which shape each
+        -- table's policies actually produce.
+        --
+        -- insufficient_privilege is still caught, and deliberately: it is what
+        -- a future admin-visible row would raise if `using` ever passed while
+        -- `with check` refused. Both refusal shapes therefore read as refusal.
         begin
           update public.client_month_revenue
              set retainer_cents = 999999
            where client_id = probe_client_id and period = probe_period;
-          raise exception 'probe rollback';
+          get diagnostics n_updated = row_count;
+
+          if n_updated > 0 then
+            problems := problems || format(
+              'an active ACCOUNT MANAGER was ALLOWED to UPDATE public.client_month_revenue -- %s row(s) changed, so client_month_revenue_update_edit_revenue is not gating on edit_revenue and every account manager can rewrite a revenue figure only an admin was meant to touch (the row was rolled back by this check, not by the policy)',
+              n_updated)::text;
+          end if;
         exception
           when insufficient_privilege then
             null;
           when others then
-            if sqlerrm = 'probe rollback' then
-              problems := problems || 'an active ACCOUNT MANAGER was ALLOWED to UPDATE public.client_month_revenue -- client_month_revenue_update_edit_revenue is not gating on edit_revenue, so every account manager can rewrite a revenue figure only an admin was meant to touch (the row was rolled back by this check, not by the policy)'::text;
-            else
-              problems := problems || format(
-                'the account-manager revenue UPDATE probe failed for an unexpected reason: %s %s',
-                sqlstate, sqlerrm)::text;
-            end if;
+            problems := problems || format(
+              'the account-manager revenue UPDATE probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
         end;
 
         reset role;
