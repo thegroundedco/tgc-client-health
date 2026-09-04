@@ -130,6 +130,26 @@ describe('concentration', () => {
     expect(document.body.textContent).not.toMatch(/\d+%/)
   })
 
+  it('distinguishes having no clients from having no entries', () => {
+    // Both states satisfy `entered === 0`, and until now both rendered the
+    // same sentence. They are different facts and they point at different
+    // actions: "nobody has entered September yet" sends a person to the entry
+    // screen, which is right when there ARE clients waiting. With an EMPTY
+    // roster that sentence is a wrong instruction -- there is nothing to enter
+    // and the entry grid would be blank too.
+    //
+    // It also matters because of HOW an empty roster arises. The eligibility
+    // filter in useRevenue returns nothing at all if its `ended_on.is.null`
+    // arm is ever lost, which is a live mutation covered in that hook's own
+    // tests -- and this page saying "no revenue has been entered" would send
+    // the reader hunting for missing data entry instead of a bug.
+    given({ clients: [], rows: [] })
+
+    const text = document.body.textContent ?? ''
+    expect(text).toMatch(/no clients/i)
+    expect(text).not.toMatch(/has been entered/i)
+  })
+
   it('shows a failed read as an error rather than an empty chart', () => {
     given({ status: 'error', loadError: 'permission denied', clients: [], rows: [] })
 

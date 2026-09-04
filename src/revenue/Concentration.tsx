@@ -51,6 +51,25 @@ function ConcentrationReady({
   const result = concentration(clients, rows)
   const total = result.entered + result.missing
 
+  // NO CLIENTS AT ALL, which is not the same fact as no entries and must not
+  // borrow the sentence below. Both satisfy `entered === 0`, so this branch has
+  // to come first.
+  //
+  // The distinction is an instruction, not a nicety: "nobody has entered
+  // September yet" tells a reader to go and enter it, which is right when
+  // clients are waiting and wrong when the roster is empty -- the entry grid
+  // would be blank too. And an empty roster is exactly what a broken
+  // eligibility filter produces (useRevenue's `ended_on.is.null` arm going
+  // missing returns no clients whatsoever), so the entry sentence would send
+  // somebody hunting for missing data entry instead of for the bug.
+  if (total === 0) {
+    return (
+      <p className="t-body prose">
+        No clients were on the books for {formatPeriod(month)}, so there is nothing to rank.
+      </p>
+    )
+  }
+
   // Nobody has entered anything for the month yet. Rendered as a ranking of
   // zeroes this would read as every client billing nothing at once -- total
   // collapse of the business, and the single most alarming way this page
