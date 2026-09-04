@@ -18,9 +18,9 @@ type Entry = { retainer: string; project: string }
 
 // The whole reason this file exists, expressed as a pure function so it can be
 // re-run from two places without drifting: once when a fetch lands (a fresh
-// month, or the reload after a save), and once from the Back button, which
-// discards whatever a person has typed and returns every field to what the
-// server last held.
+// month, or the reload after a save), and once from the Discard changes
+// button, which throws away whatever a person has typed and returns every
+// field to what the server last held.
 //
 // A client with NO row gets '', never '0'. Money.ts's own header says an empty
 // field IS zero to parseMoney -- that is what makes leaving nine of ten fields
@@ -80,7 +80,7 @@ export function RevenueAdmin({ onWritingChange }: Props) {
   // fetch actually holds. Disabled while saving for the same reason Save is:
   // resetting the fields out from under a write already in flight would leave
   // the person staring at numbers that no longer describe what was sent.
-  function handleBack() {
+  function handleDiscard() {
     setValidationError(null)
     setSaveError(null)
     setEntries(buildEntries(revenue.clients, revenue.rows))
@@ -206,24 +206,31 @@ export function RevenueAdmin({ onWritingChange }: Props) {
     </div>
   )
 
-  // The Back button. UsersAdmin and ClientsAdmin no longer render one of their
-  // own -- the 2026-09-02 shell rewrite gave the menu bar a permanent presence
-  // above every admin screen, so a screen-local exit stopped being the only
-  // way out and both dropped theirs in favour of reporting `onWritingChange`
-  // upward for the bar to guard instead. This screen keeps one anyway, because
-  // the task-6 brief and its test both require one and neither hands this
-  // component an onBack destination to leave to (its whole prop surface is
-  // `onWritingChange`) -- so "Back" here means back to what the server holds,
-  // discarding a draft rather than leaving the page. Disabled while saving for
-  // the same reason the field inputs are.
-  const backButton = (
+  // Named "Discard changes", not "Back" -- review round 1 caught that the
+  // brief asking for a Back button here was itself wrong. UsersAdmin and
+  // ClientsAdmin both removed theirs on 2026-09-02: the shell rewrite gave the
+  // menu bar a permanent presence above every admin screen, so a screen-local
+  // exit stopped being the only way out, and both screens dropped their button
+  // in favour of reporting `onWritingChange` upward for the bar to guard
+  // instead. A button labelled Back that silently threw away a month of
+  // typing without navigating anywhere would be a trap wearing a safe name.
+  //
+  // This screen keeps a discard control anyway, because it earns its keep
+  // here in a way it did not on either sibling: those screens edit one row at
+  // a time, saved as it is typed, with nothing left to lose by leaving. This
+  // one holds up to a whole roster's worth of unsaved typing at once, and
+  // "throw it all away and start from what is actually saved" is a real,
+  // separate action from navigating -- which is also why it has nowhere to
+  // navigate TO: this component's whole prop surface is `onWritingChange`.
+  // Disabled while saving for the same reason the field inputs are.
+  const discardButton = (
     <button
       className="button button--quiet"
       disabled={saving}
-      onClick={handleBack}
+      onClick={handleDiscard}
       type="button"
     >
-      Back
+      Discard changes
     </button>
   )
 
@@ -232,7 +239,7 @@ export function RevenueAdmin({ onWritingChange }: Props) {
       <section className={styles.screen}>
         {masthead}
         <p className="t-body">Loading…</p>
-        {backButton}
+        {discardButton}
       </section>
     )
   }
@@ -244,7 +251,7 @@ export function RevenueAdmin({ onWritingChange }: Props) {
         <p className="alert prose" role="alert">
           {revenue.loadError}
         </p>
-        {backButton}
+        {discardButton}
       </section>
     )
   }
@@ -259,7 +266,6 @@ export function RevenueAdmin({ onWritingChange }: Props) {
         <label className={styles.monthLabel} htmlFor="revenue-period">
           <span className="t-body">Month</span>
           <select
-            aria-label="Month"
             className={styles.monthSelect}
             id="revenue-period"
             onChange={(event) => setPeriod(event.target.value)}
@@ -355,7 +361,7 @@ export function RevenueAdmin({ onWritingChange }: Props) {
         <button className="button" disabled={saving} onClick={() => void handleSave()} type="button">
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {backButton}
+        {discardButton}
       </div>
     </section>
   )

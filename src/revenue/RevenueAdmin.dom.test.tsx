@@ -156,10 +156,17 @@ describe('the revenue entry grid', () => {
     expect(screen.getByText(/loading/i)).toBeTruthy()
   })
 
-  it('keeps the Back button, which carries the in-flight-write guard', () => {
+  it('offers a Discard changes control, not a Back button', () => {
     given()
 
-    expect(screen.getByRole('button', { name: /back/i })).toBeTruthy()
+    // Review round 1: the brief's ask for a Back button here was itself
+    // wrong. UsersAdmin and ClientsAdmin both removed theirs on 2026-09-02 --
+    // the shell's menu bar now carries every admin screen's exit, guarded by
+    // onWritingChange -- so a screen-local Back has nowhere left to go. A
+    // control THAT throws away a month of typing has to say so; "Back" would
+    // read as navigation and silently discard instead.
+    expect(screen.getByRole('button', { name: /discard/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^back$/i })).toBeNull()
   })
 
   it('writes only the client that changed, leaving an untouched client unwritten rather than zeroed', async () => {
