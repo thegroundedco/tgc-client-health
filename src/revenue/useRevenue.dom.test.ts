@@ -118,4 +118,42 @@ describe('useRevenue', () => {
       expect(vi.mocked(supabase.from).mock.calls.length).toBeGreaterThan(before),
     )
   })
+
+  it('goes back to loading while the new month is in flight', async () => {
+    // The half the test above does not cover. That one proves a refetch was
+    // ISSUED; this one proves the stale month is HIDDEN while it runs.
+    //
+    // Without setStatus('loading') at the top of load, `status` stays 'ready'
+    // holding the previous month's rows for the whole fetch. RevenueAdmin then
+    // renders September's amounts in the inputs and September's missing-count
+    // in the caption, under an August heading, with Save still enabled -- and a
+    // click in that window writes September's values into August. The screen
+    // looks correct throughout, which is what makes it dangerous.
+    given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW], error: null },
+    })
+
+    const { result, rerender } = renderHook(({ period }) => useRevenue(period), {
+      initialProps: { period: '2026-09-01' },
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    // A read that never resolves, so the in-flight window stays open long
+    // enough to assert on. Without it the fetch settles before any assertion
+    // can run and the test passes whatever the hook does.
+    vi.mocked(supabase.from).mockImplementation(() => {
+      const chain = {
+        select: () => chain,
+        eq: () => chain,
+        or: () => chain,
+        order: () => new Promise(() => {}),
+      }
+      return chain as never
+    })
+
+    rerender({ period: '2026-08-01' })
+
+    await waitFor(() => expect(result.current.status).toBe('loading'))
+  })
 })

@@ -32,6 +32,16 @@ export function useRevenue(period: string): UseRevenue {
 
   const load = useCallback(
     async (isCancelled: () => boolean) => {
+      // Back to 'loading' at the TOP, matching useBoard. Without this, `status`
+      // stays 'ready' for the whole of a month change while `rows` still holds
+      // the PREVIOUS month -- so RevenueAdmin renders last month's amounts in
+      // the inputs, last month's missing-count in the caption, under the new
+      // month's heading, and leaves Save enabled. A click inside that window
+      // builds the upsert with the NEW period and the OLD values and writes one
+      // month's revenue into another, silently. The screen looks right the whole
+      // time, which is what makes it dangerous.
+      setStatus('loading')
+
       try {
         // Eligible for THIS month: everyone whose ended_on is null or falls on
         // or after the first of it. The boundary is inclusive on purpose -- the
