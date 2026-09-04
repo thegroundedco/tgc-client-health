@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  allocatePercentages,
   concentration,
   MIN_RATE_PERIODS,
   NAMED_CLIENTS,
@@ -33,6 +34,50 @@ describe('share', () => {
     // A real state: a month where nothing was billed. Not an error, and not
     // NaN, which would render as the literal text "NaN%".
     expect(share(0, 0)).toBe(null)
+  })
+})
+
+describe('allocatePercentages', () => {
+  it('sums to exactly 100 on the named-clients example, where independent rounding gives 101', () => {
+    // Concentration's own fixture: 450000, 250000, 600000, 400000, 200000,
+    // 100000 of 2000000 -- exact percentages 22.5, 12.5, 30, 20, 10, 5. Two
+    // rows sit on the .5 boundary and Math.round on each independently sends
+    // both up, landing the column at 101.
+    const amounts = [450000, 250000, 600000, 400000, 200000, 100000]
+    const total = amounts.reduce((sum, value) => sum + value, 0)
+
+    const allocated = allocatePercentages(amounts, total)
+
+    expect(allocated?.reduce((sum, value) => sum + value, 0)).toBe(100)
+  })
+
+  it('sums to exactly 100 on an equal three-way split, where independent rounding gives 99', () => {
+    // The opposite failure from the case above: 33.33 + 33.33 + 33.33 floors
+    // to 33 + 33 + 33, three points short of 100, with no row anywhere near a
+    // .5 boundary to round up on its own.
+    const allocated = allocatePercentages([1, 1, 1], 3)
+
+    expect(allocated?.reduce((sum, value) => sum + value, 0)).toBe(100)
+  })
+
+  it('never moves a row more than one point from its unrounded share', () => {
+    const amounts = [450000, 250000, 600000, 400000, 200000, 100000]
+    const total = amounts.reduce((sum, value) => sum + value, 0)
+
+    const allocated = allocatePercentages(amounts, total)
+
+    allocated?.forEach((points, index) => {
+      const exact = (amounts[index] / total) * 100
+      expect(Math.abs(points - exact)).toBeLessThanOrEqual(1)
+    })
+  })
+
+  it('returns null for a month where nothing was billed, rather than a row of zeroes', () => {
+    // share() returns null when the whole is zero for the same reason: a
+    // column of "0%" reads as a fact about the month -- nobody billed
+    // anything -- when the truth is that the total itself is zero and no
+    // share is meaningful to show.
+    expect(allocatePercentages([0, 0, 0], 0)).toBe(null)
   })
 })
 

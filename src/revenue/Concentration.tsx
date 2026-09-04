@@ -1,15 +1,16 @@
 import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
-import { concentration } from './revenueMath'
+import { allocatePercentages, concentration } from './revenueMath'
 import { useRevenue } from './useRevenue'
 import styles from './Revenue.module.css'
 
-// Round to a whole percent for display. The underlying share is never
-// pre-multiplied (revenueMath.share's own comment), so the multiplying and the
-// rounding both belong here, at the one place that has decided it wants a
-// percentage rather than a bar width or a raw fraction.
-function formatShare(share: number): string {
-  return `${Math.round(share * 100)}%`
+// Points are already the reconciled, whole-number output of
+// allocatePercentages -- never a fraction rounded independently per row. See
+// that function's own comment for why: rounding row by row does not
+// guarantee the column sums to 100, and this is the one report in the app
+// built specifically to be trustworthy about exact shares.
+function formatPoints(points: number): string {
+  return `${points}%`
 }
 
 // Who the firm is most exposed to: the largest clients by this month's
@@ -64,6 +65,19 @@ function ConcentrationReady({
     )
   }
 
+  // Every row that will show a percentage, named entries then the rest row,
+  // allocated together so the column they form sums to exactly 100 -- see
+  // allocatePercentages's own comment. Null when totalCents is 0, which
+  // happens when every entered client billed exactly nothing; the individual
+  // entry.share values are null in that case too (share()'s zero-whole rule),
+  // so the percentage text below disappears on its own without a separate
+  // check here.
+  const displayCents = [
+    ...result.named.map((entry) => entry.cents),
+    ...(result.rest !== null ? [result.rest.cents] : []),
+  ]
+  const points = allocatePercentages(displayCents, result.totalCents)
+
   return (
     <>
       <p className="t-caption" data-testid="concentration-month">
@@ -71,7 +85,7 @@ function ConcentrationReady({
       </p>
 
       <ul aria-label="Concentration" className={styles.list} role="list">
-        {result.named.map((entry) => (
+        {result.named.map((entry, index) => (
           <li className={styles.row} key={entry.clientId}>
             <span className={styles.who}>
               <span className="t-body" data-testid="concentration-name">
@@ -80,11 +94,13 @@ function ConcentrationReady({
             </span>
             <span className={`t-body ${styles.measure}`}>
               {formatMoney(entry.cents)}
-              {entry.share !== null && ` · ${formatShare(entry.share)}`}
+              {points !== null && ` · ${formatPoints(points[index])}`}
             </span>
             {/* Decoration for the number above, not a second source of it: the
                 figure is already in the text, so the bar itself carries
-                aria-hidden and contributes nothing to the accessible name. */}
+                aria-hidden and contributes nothing to the accessible name.
+                The bar's own width stays the raw, unrounded share -- only the
+                printed percentage needs the whole roster reconciled to 100. */}
             <span aria-hidden="true" className={styles.barTrack}>
               <span
                 className={styles.barFill}
@@ -103,7 +119,7 @@ function ConcentrationReady({
             </span>
             <span className={`t-body ${styles.measure}`}>
               {formatMoney(result.rest.cents)}
-              {result.rest.share !== null && ` · ${formatShare(result.rest.share)}`}
+              {points !== null && ` · ${formatPoints(points[result.named.length])}`}
             </span>
             <span aria-hidden="true" className={styles.barTrack}>
               <span

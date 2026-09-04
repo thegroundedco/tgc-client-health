@@ -59,6 +59,58 @@ export function share(part: number, whole: number): number | null {
   return part / whole
 }
 
+// Largest-remainder allocation: turns a set of amounts that share one total
+// into integer percentages that sum to EXACTLY 100, which independent
+// rounding of each row does not guarantee. Concentration's own named-clients
+// example proves it both ways: 30 + 22.5 + 20 + 12.5 + 15 sums to precisely
+// 100, but Math.round on each row independently gives 30 + 23 + 20 + 13 + 15
+// -- 101 -- because both .5s round up with nothing to reconcile the total.
+// Three equal thirds show the opposite failure: 33 + 33 + 33 is 99.
+//
+// This is the one report in the app built specifically to be trustworthy
+// about exact shares -- the whole argument of spec section 9's amendment is
+// that a share of a complete month is honest in a way an inferred rate is
+// not. A reader who adds up the column and gets 101 has every reason to stop
+// believing the number, even though the underlying fraction was exact.
+//
+// Null when there is nothing to allocate. A month where nothing was billed
+// has null shares (share() above, for the same reason) and no percentages to
+// render -- this must not manufacture a column of zeroes for a state that has
+// none, which is what an unconditional divide would do the moment totalCents
+// is 0.
+export function allocatePercentages(
+  amounts: readonly number[],
+  totalCents: number,
+): number[] | null {
+  if (totalCents === 0) return null
+  if (amounts.length === 0) return []
+
+  const exact = amounts.map((cents) => (cents / totalCents) * 100)
+  const floors = exact.map(Math.floor)
+  const flooredTotal = floors.reduce((sum, value) => sum + value, 0)
+
+  // The shortfall is always a whole number of points, 0..amounts.length - 1:
+  // each row's floor is within one point of its exact share, so the floors
+  // together undershoot 100 by less than one point per row.
+  const shortfall = 100 - flooredTotal
+
+  // Largest fractional remainder first, so the rows closest to rounding up
+  // are the ones that do. Ties -- the three-way equal split is the case that
+  // forces this -- broken by the larger amount, and anything still tied after
+  // that keeps its original order: Array.prototype.sort is stable, so two
+  // equal amounts resolve to whichever came first in `amounts`, the same way
+  // on every run.
+  const order = amounts
+    .map((cents, index) => ({ index, cents, remainder: exact[index] - floors[index] }))
+    .sort((left, right) => right.remainder - left.remainder || right.cents - left.cents)
+
+  const allocated = [...floors]
+  for (let i = 0; i < shortfall; i++) {
+    allocated[order[i].index] += 1
+  }
+  return allocated
+}
+
 // A rate across periods, oldest first. Null -- not a number -- until there are
 // enough periods for it to mean anything.
 //

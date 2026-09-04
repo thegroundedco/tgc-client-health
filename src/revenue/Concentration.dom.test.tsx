@@ -75,6 +75,24 @@ describe('concentration', () => {
     expect(document.body.textContent).toMatch(/30%/)
   })
 
+  it('shows percentages that sum to exactly 100, not 101 or 99', () => {
+    // The bug this guards: rounding each row's share independently
+    // (Math.round(share * 100) per row) sends the FULL fixture's column to
+    // 101 -- Acme's 22.5 and Delta's 12.5 both round up on the .5 boundary
+    // with nothing to reconcile the total against. Reading every percentage
+    // off the actual rendered page, rather than re-deriving the figure by
+    // hand, is what would have caught it: a hand-computed expectation shares
+    // the same rounding mistake as the code under test.
+    given()
+
+    const points = [...document.body.textContent!.matchAll(/(\d+)%/g)].map((match) =>
+      Number(match[1]),
+    )
+
+    expect(points.length).toBeGreaterThan(0)
+    expect(points.reduce((sum, value) => sum + value, 0)).toBe(100)
+  })
+
   it('collapses the tail into one row naming how many', () => {
     given()
 
