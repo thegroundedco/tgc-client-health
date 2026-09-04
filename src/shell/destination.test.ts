@@ -114,6 +114,26 @@ describe('the revenue gates', () => {
     expect(canSeeDestination('revenue', 'viewer')).toBe(false)
   })
 
+  it('puts Admin in the bar for an account manager as well as an admin, and takes it from a viewer', () => {
+    // The direct test of the arm that is now the SOLE gate on the Admin
+    // button -- MenuBar's own `entry.kind !== 'admin' || canSeeAdmin` special
+    // case moved in here, and nothing exercised the replacement through this
+    // function.
+    //
+    // The account_manager row is the one that matters, and it is the project's
+    // standing trap: that role holds manage_clients but NOT manage_users, so
+    // an arm written as `can(role, 'manage_users')` reads correct, gives an
+    // admin the button, and silently hides Clients admin from the person whose
+    // job it is. It must be EITHER capability, which is what canSeeAdmin's
+    // length check says.
+    expect(canSeeDestination('admin', 'admin')).toBe(true)
+    expect(canSeeDestination('admin', 'account_manager')).toBe(true)
+    // And a viewer holds none of the three, so an arm hardcoded to `true`
+    // -- the other way this breaks -- puts a button on their bar that opens
+    // nothing, since openDestination returns null for them.
+    expect(canSeeDestination('admin', 'viewer')).toBe(false)
+  })
+
   it('refuses to open Revenue for somebody who cannot see it', () => {
     // Null means the press does nothing. Returning a Destination anyway and
     // letting the screen render an error is the failure openDestination exists
