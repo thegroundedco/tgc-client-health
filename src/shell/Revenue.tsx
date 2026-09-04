@@ -1,5 +1,7 @@
 import { Churn } from '../revenue/Churn'
+import { Concentration } from '../revenue/Concentration'
 import { Tenure } from '../revenue/Tenure'
+import { defaultPeriod } from '../lib/month'
 import { currentRows, departedRows, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 import styles from './Page.module.css'
@@ -19,6 +21,8 @@ export function Revenue() {
     <section className={styles.page}>
       <h2 className="t-header">Revenue</h2>
 
+      <Concentration month={defaultPeriod()} />
+
       {report.status === 'loading' && <p className="t-body">Loading…</p>}
 
       {report.status === 'error' && (
@@ -34,11 +38,15 @@ export function Revenue() {
         </>
       )}
 
-      {/* Still true, and still the reminder the owner asked for. */}
+      {/* Revenue.tsx no longer has an excuse: the monthly history slice 6c
+          built is what retention needs, and it is here. What is left is
+          arithmetic waiting on a calendar, not a missing data model --
+          revenueMath.rate() refuses to run until it has thirteen months to
+          measure across, one period and the twelve behind it, and the
+          earliest month that can supply them is April 2027. */}
       <p className="t-body prose">
-        Revenue retention is not here yet: it needs a data model that does not exist, and the hard
-        part is that retention needs a history of monthly amounts — which a single editable
-        retainer field cannot produce.
+        Revenue retention is not here yet: it needs thirteen months of entered revenue to measure
+        a rate across, and the earliest month that will have them is April 2027.
       </p>
     </section>
   )

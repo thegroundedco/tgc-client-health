@@ -137,7 +137,7 @@ describe('the shell', () => {
   it('moves between destinations', async () => {
     renderShell()
     await userEvent.click(screen.getByRole('button', { name: 'Revenue' }))
-    expect(document.body.textContent).toContain('data model')
+    expect(document.body.textContent).toContain('April 2027')
     await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
     expect(document.body.textContent).toContain('snapshot')
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))

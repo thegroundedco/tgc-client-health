@@ -1,17 +1,36 @@
 // @vitest-environment jsdom
 
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../revenue/useTenure', () => ({ useTenure: vi.fn() }))
+// Concentration now mounts on this page and owns its own useRevenue read.
+// Left unmocked it would hit the real Supabase client during every test in
+// this file -- including the ones that assert there is exactly one alert on
+// screen -- so it gets the same seam as Concentration.dom.test.tsx, defaulted
+// to a ready, empty read that renders nothing this file's assertions collide
+// with.
+vi.mock('../revenue/useRevenue', () => ({ useRevenue: vi.fn() }))
 
 import { Revenue } from './Revenue'
 import { formatTenure, tenureDays, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
+import { useRevenue } from '../revenue/useRevenue'
+
+beforeEach(() => {
+  vi.mocked(useRevenue).mockReturnValue({
+    status: 'ready',
+    loadError: null,
+    clients: [],
+    rows: [],
+    reload: vi.fn(),
+  })
+})
 
 afterEach(() => {
   document.body.innerHTML = ''
   vi.mocked(useTenure).mockReset()
+  vi.mocked(useRevenue).mockReset()
 })
 
 // Started in 2020, deliberately, and far enough back that the tenure it
@@ -96,14 +115,16 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toContain(expected)
   })
 
-  // The paragraph that was on this page before the report existed. It is still
-  // true -- revenue retention needs a history of monthly amounts, which one
-  // editable retainer field cannot produce -- and it is the reminder the owner
-  // asked to keep in front of him. Spec §7.
+  // The paragraph that was on this page before the report existed said the
+  // history of monthly amounts retention needs did not exist. As of slice 6c
+  // it does, so the sentence changed on 2026-09-03 to name what is actually
+  // still missing: enough calendar time for revenueMath.rate() to run, which
+  // it refuses to do below MIN_RATE_PERIODS. Spec §7.
   it('keeps saying what is still missing and why', () => {
     given()
 
-    expect(document.body.textContent).toContain('data model')
+    expect(document.body.textContent).toContain('thirteen months')
+    expect(document.body.textContent).toContain('April 2027')
   })
 
   it('says it is loading rather than showing an empty report', () => {
@@ -113,16 +134,13 @@ describe('the Revenue destination', () => {
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
   })
 
-  // Spec §6 forbids a percentage anywhere on this page, not just inside Churn.
-  // Churn.dom.test.tsx already guards its own component, but that guard is
-  // scoped there -- a percentage added to Tenure.tsx, or to Revenue.tsx's own
-  // markup, would pass every existing test. Overview carries the same
-  // page-level guard at src/shell/pages.dom.test.tsx for the same reason.
-  it('renders no percentage anywhere on the page', () => {
-    given()
-
-    expect(document.body.textContent).not.toMatch(/\d\s*%/)
-  })
+  // The "no percentage anywhere on this page" guard that lived here moved to
+  // tests/revenueLiterals.test.ts, source-level rather than rendered-output.
+  // Spec section 9's amendment: an exact share of a complete period is now
+  // allowed on this page (Concentration says one), so a DOM regex can no
+  // longer forbid every digit-percent -- it would have to bless Concentration's
+  // true "30% of September" and a fabricated "91.2% GRR" alike. See
+  // tests/revenueLiterals.test.ts for the guard this replaced it with.
 
   // A failed read must never fall through to a screen that looks merely empty.
   it('shows a failed read as an error, not as an empty roster', () => {
