@@ -403,7 +403,28 @@ begin
         -- this file. This entry says only that the view's own SELECT grant to
         -- authenticated is the intended, measured state now that the sweep
         -- below sees views at all.
-        ('checkin_scores', 'authenticated', 'SELECT')
+        ('checkin_scores', 'authenticated', 'SELECT'),
+
+        -- public.client_month_revenue: added by Slice 6c
+        -- (20260903120000_revenue_has_capability.sql). SELECT, INSERT and
+        -- UPDATE are all granted at the table level to authenticated, same as
+        -- clients and checkins above -- WHO can actually read or write a row is
+        -- RLS's job (client_month_revenue_select_view_revenue and the two
+        -- edit_revenue policies, gated on private.has_capability()), same
+        -- caveat as clients: these three entries say only that the verbs exist
+        -- at all, not that an account manager can reach them. That distinction
+        -- is 10f's business, extended below to cover this table specifically --
+        -- an account manager holds view_revenue but not edit_revenue, which is
+        -- the one asymmetry this migration's whole reason for existing rests
+        -- on.
+        --
+        -- No DELETE, matching the migration's own comment: removing a month is
+        -- not an operation the screen offers, and a month entered in error is
+        -- corrected by editing it, not erasing it. There is no delete policy
+        -- either, so the absence here and the absence there agree.
+        ('client_month_revenue', 'authenticated', 'SELECT'),
+        ('client_month_revenue', 'authenticated', 'INSERT'),
+        ('client_month_revenue', 'authenticated', 'UPDATE')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
@@ -1232,6 +1253,121 @@ begin
         problems := problems || format(
           'the account-manager capability check could not run: %s %s -- whether an account manager can still write is UNVERIFIED',
           sqlstate, sqlerrm)::text;
+      end;
+    end if;
+
+    -- 10f2. The account manager's REVENUE boundary specifically -- view_revenue
+    -- is in the preset, edit_revenue is not, and that asymmetry is the whole
+    -- reason 20260903120000_revenue_has_capability.sql exists (see its own
+    -- comment, restated at the top of this migration). Everything else in
+    -- section 10f predates that migration; this proves ITS boundary the same
+    -- way -- against a REAL policy evaluation, not against the migration's
+    -- TEXT, which is what tests/revenueMigration.test.ts pins instead and
+    -- which cannot see what Postgres actually does with a `with check` clause.
+    --
+    -- PROVEN NECESSARY BY MUTATION. Either policy's `with check` flipped from
+    -- edit_revenue to view_revenue -- making every account manager able to
+    -- write revenue -- and the entire Vitest suite (41 files, 345 tests at the
+    -- time) stayed green, because nothing else in this repository touches
+    -- client_month_revenue. This check, and tests/revenueMigration.test.ts's
+    -- text pin, are now the only two things that would catch it.
+    --
+    -- A ROW IS SEEDED, AS OWNER, before the update probe below -- the same
+    -- vacuity 10a2 exists to prevent for SELECT applies to UPDATE too: a
+    -- statement that matches zero rows "succeeds" whether the policy would
+    -- have refused it or not, so a refusal against an empty table proves
+    -- nothing. Every other update probe in this file (10h) targets a profile
+    -- row proven to exist -- the caller's own; this table has no such
+    -- guarantee, so the row is created here, as the table owner, who bypasses
+    -- RLS entirely. The whole block undoes itself with its own `raise
+    -- exception 'probe rollback'` at the end, the same technique 10c's
+    -- negative insert uses, so the seed row is gone regardless of how the
+    -- probes below come out.
+    if to_regclass('public.client_month_revenue') is null then
+      preconditions := preconditions || 'public.client_month_revenue does not exist, so the account-manager revenue boundary went UNEXERCISED -- apply 20260903120000_revenue_has_capability.sql and re-run'::text;
+    elsif am_uid is not null then
+      begin
+        insert into public.client_month_revenue (client_id, period, retainer_cents, project_cents)
+        values (probe_client_id, probe_period, 0, 0);
+
+        perform set_config(
+          'request.jwt.claims',
+          json_build_object('sub', am_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+          true);
+        set local role authenticated;
+
+        -- view_revenue IS in the account_manager preset -- the read half of
+        -- the asymmetry. Compared against 1, the row seeded above, not against
+        -- a table-wide total: this probe cares only about THIS account
+        -- manager's own reachable rows, and the table may hold real data on a
+        -- live project that this run has no business counting.
+        select count(*) into n_seen
+        from public.client_month_revenue
+        where client_id = probe_client_id and period = probe_period;
+
+        if n_seen <> 1 then
+          problems := problems || format(
+            'an active ACCOUNT MANAGER sees %s of 1 seeded row(s) in public.client_month_revenue -- client_month_revenue_select_view_revenue is denying rows the view_revenue preset is meant to expose, so the Revenue page would be empty for every account manager',
+            n_seen)::text;
+        end if;
+
+        -- edit_revenue is NOT in the account_manager preset -- the write half,
+        -- and the half this check exists to pin. A different period than the
+        -- seed row, so a wrongly-allowed insert cannot collide with the seed
+        -- row's primary key and be mistaken for the update probe below.
+        begin
+          insert into public.client_month_revenue (client_id, period, retainer_cents, project_cents)
+          values (probe_client_id, (probe_period + interval '1 month')::date, 1, 1);
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active ACCOUNT MANAGER was ALLOWED to INSERT into public.client_month_revenue -- client_month_revenue_insert_edit_revenue is not gating on edit_revenue, so every account manager can write revenue figures the owner decided only admins should enter (the row was rolled back by this check, not by the policy)'::text;
+            else
+              problems := problems || format(
+                'the account-manager revenue INSERT probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        -- edit_revenue is NOT in the account_manager preset -- the update
+        -- half, against the row seeded above, which the select probe just
+        -- proved an account manager can see -- so a refusal here is the
+        -- policy refusing, not an empty table hiding the question.
+        begin
+          update public.client_month_revenue
+             set retainer_cents = 999999
+           where client_id = probe_client_id and period = probe_period;
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active ACCOUNT MANAGER was ALLOWED to UPDATE public.client_month_revenue -- client_month_revenue_update_edit_revenue is not gating on edit_revenue, so every account manager can rewrite a revenue figure only an admin was meant to touch (the row was rolled back by this check, not by the policy)'::text;
+            else
+              problems := problems || format(
+                'the account-manager revenue UPDATE probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        reset role;
+
+        -- Undo the seed insert at the top of this block. See the header
+        -- comment above for why this cannot simply rely on the table having
+        -- stayed empty.
+        raise exception 'probe rollback';
+      exception when others then
+        if sqlerrm = 'probe rollback' then
+          null;
+        else
+          problems := problems || format(
+            'the account-manager revenue boundary check could not run: %s %s -- whether an account manager can read revenue and is refused writing it is UNVERIFIED',
+            sqlstate, sqlerrm)::text;
+        end if;
       end;
     end if;
   end if;

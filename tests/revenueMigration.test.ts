@@ -78,4 +78,44 @@ describe('the revenue migration', () => {
     // would notice.
     expect(statements.toLowerCase()).not.toContain('for delete')
   })
+
+  // The permission boundary this migration adds is that account_manager gets
+  // view_revenue but not edit_revenue -- comment lines 22-25 above call that
+  // "the owner's decision". Nothing before this pinned the three policies to
+  // the capability each is SUPPOSED to name, as opposed to some capability or
+  // other: a `with check` quietly rewritten from edit_revenue to view_revenue
+  // would make every account manager able to write revenue, and the suite
+  // would not notice -- proven by mutation, not assumed.
+  it('pins the select policy to view_revenue', () => {
+    const created = statements.match(/create policy client_month_revenue_select_view_revenue[\s\S]*?;/)
+    expect(created, 'create policy client_month_revenue_select_view_revenue').not.toBeNull()
+
+    const body = created![0]
+    expect(body).toContain('for select')
+    expect(body).toMatch(/using\s*\(\(select private\.has_capability\('view_revenue'\)\)\)/)
+  })
+
+  it('pins the insert policy to edit_revenue, not view_revenue', () => {
+    const created = statements.match(/create policy client_month_revenue_insert_edit_revenue[\s\S]*?;/)
+    expect(created, 'create policy client_month_revenue_insert_edit_revenue').not.toBeNull()
+
+    const body = created![0]
+    expect(body).toContain('for insert')
+    expect(body).toMatch(/with check\s*\(\(select private\.has_capability\('edit_revenue'\)\)\)/)
+  })
+
+  it('pins the update policy to edit_revenue on both using and with check', () => {
+    // Both halves matter: `using` gates which existing rows the statement can
+    // even see, `with check` gates what the row is allowed to become. Loosening
+    // either one to view_revenue would let an account manager overwrite a row
+    // they can already see, which is exactly the boundary this table exists to
+    // hold.
+    const created = statements.match(/create policy client_month_revenue_update_edit_revenue[\s\S]*?;/)
+    expect(created, 'create policy client_month_revenue_update_edit_revenue').not.toBeNull()
+
+    const body = created![0]
+    expect(body).toContain('for update')
+    expect(body).toMatch(/using\s*\(\(select private\.has_capability\('edit_revenue'\)\)\)/)
+    expect(body).toMatch(/with check\s*\(\(select private\.has_capability\('edit_revenue'\)\)\)/)
+  })
 })
