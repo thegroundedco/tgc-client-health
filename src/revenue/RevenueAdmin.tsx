@@ -104,8 +104,40 @@ export function RevenueAdmin({ onWritingChange }: Props) {
     }
     const pending: PendingRow[] = []
 
+    // Rows already on file, so the skip below can tell "nobody has touched
+    // this yet" apart from "this was entered and is being corrected back to
+    // nothing".
+    const existingRowIds = new Set(revenue.rows.map((row) => row.client_id))
+
     for (const client of revenue.clients) {
       const entry = entries[client.id] ?? { retainer: '', project: '' }
+
+      // A client with BOTH fields blank and no row already on file is
+      // untouched, not billed zero -- writing it anyway is the exact false
+      // zero spec section 3.3 forbids, and it is what the review round 1 probe
+      // caught: editing only one client's field and saving wrote real 0/0 rows
+      // for every OTHER eligible client, because parseMoney('') legitimately
+      // returns 0 and nothing upstream of it knew the difference between "this
+      // field is blank because nobody has entered anything" and "this field is
+      // blank because the person just cleared it".
+      //
+      // No touch-tracking needed to fix it: one field filled and the other
+      // left blank still writes, with the blank read as parseMoney's zero --
+      // that is its documented contract. A typed `0` is not blank, so it still
+      // writes too, which is what stops this from overshooting into "never
+      // write a zero": a client billed nothing this month has to be able to
+      // SAY so. And an existing row cleared back to blank on both fields still
+      // writes 0/0 rather than being skipped, because clearing an entered row
+      // is how "actually billed nothing" gets recorded on a table with no
+      // delete policy -- skipping it here would silently leave the OLD figure
+      // standing under a field that now reads empty.
+      if (
+        entry.retainer.trim() === '' &&
+        entry.project.trim() === '' &&
+        !existingRowIds.has(client.id)
+      ) {
+        continue
+      }
 
       const retainerCents = parseMoney(entry.retainer)
       if (retainerCents === null) {
