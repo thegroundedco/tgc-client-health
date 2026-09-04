@@ -215,4 +215,35 @@ describe('the revenue entry grid', () => {
     // test does not accidentally pass because the skip was removed entirely.
     expect(rows.some((row) => row.client_id === 3)).toBe(false)
   })
+
+  it('writes 0/0 for an existing row cleared back to blank, rather than leaving the old figure standing', async () => {
+    const user = userEvent.setup()
+    const upsert = givenUpsert()
+    given()
+
+    // The third case, and the one the skip guard's `!existingRowIds.has` half
+    // exists for. Acme is on file at $4,000; both its fields are cleared and
+    // nothing is typed back. Blank-and-blank is exactly the shape the skip
+    // catches for Delta and East Bay, so without the row check Acme would be
+    // skipped too -- the save would report success, the reload would re-render
+    // $4,000 off the untouched server row, and Concentration would go on
+    // ranking Acme at $4,000 under two fields that read empty.
+    await user.clear(screen.getByLabelText('Acme retainer'))
+    await user.clear(screen.getByLabelText('Acme project work'))
+    await user.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1))
+
+    const rows = upsert.mock.calls[0][0] as Array<{
+      client_id: number
+      retainer_cents: number
+      project_cents: number
+    }>
+    const acme = rows.find((row) => row.client_id === 1)
+    // Present at all is the assertion that fails without the row check; the
+    // two zeroes are what makes it the RIGHT write rather than any write.
+    expect(acme).toBeTruthy()
+    expect(acme?.retainer_cents).toBe(0)
+    expect(acme?.project_cents).toBe(0)
+  })
 })
