@@ -82,12 +82,63 @@ describe('Churn', () => {
     expect(document.body.textContent).not.toMatch(/\d\s*%/)
   })
 
-  it('explains what it is not showing, and what that would take', () => {
+  // THE CAPTION IS COMPUTED, NOT WRITTEN. The test this replaces asserted only
+  // that the words 'rate' and 'start date' appeared, which is why the sentence
+  // was free to go false on the live site: it said "a rate needs more than one
+  // departure" and "the breakdown needs the clients who left to have a recorded
+  // start date" while production held TWO departures, one of them WITH a start
+  // date. Both stated reasons were wrong and 977 tests passed.
+  //
+  // Every assertion below pins a NUMBER the component has to derive from its
+  // own rows, so static prose cannot satisfy them.
+
+  it('counts the departures it is not computing a rate from', () => {
+    render(<Churn rows={[row('Delta', 396), row('Echo', null)]} />)
+
+    const text = document.body.textContent ?? ''
+    // Two, from the rows. Static prose claiming one departure fails here, which
+    // is the exact defect this test exists for.
+    expect(text).toContain('2 departures are too few')
+  })
+
+  it('counts how many of the departed have no recorded start date', () => {
+    render(<Churn rows={[row('Delta', 396), row('Echo', null)]} />)
+
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('1 of them has no recorded start date')
+  })
+
+  it('stops claiming a missing start date once every departed client has one', () => {
+    // The half that cannot be faked with a reworded sentence: when the reason
+    // evaporates, the clause has to disappear. It also stops the caption
+    // claiming a breakdown is impossible when it has become possible, which is
+    // a decision for the owner rather than something to assert either way.
+    render(<Churn rows={[row('Delta', 396), row('Echo', 200)]} />)
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain('no recorded start date')
+    expect(text).toContain('Every client who left has a recorded start date')
+  })
+
+  it('reads as a singular departure when there is only one', () => {
     render(<Churn rows={[row('Delta', null)]} />)
 
     const text = document.body.textContent ?? ''
-    expect(text).toContain('rate')
-    expect(text).toContain('start date')
+    expect(text).toContain('1 departure is too few')
+    expect(text).toContain('1 of them has no recorded start date')
+  })
+
+  it('does not mistake a missing END date for a missing start date', () => {
+    // `days` is null for BOTH -- no start date and no end date -- so a caption
+    // computed from `days` would report this client as having no recorded start
+    // date when it has one. The row below started on a known day and has no
+    // recorded end, which is why the list beside it renders 'unknown' for the
+    // date. Only started_on may drive the start-date clause.
+    render(<Churn rows={[row('Delta', null, { started_on: '2025-01-01', ended_on: null })]} />)
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain('no recorded start date')
+    expect(text).toContain('Every client who left has a recorded start date')
   })
 
   // Spec §6 IA calls this destination "revenue retention and churn" -- and the
