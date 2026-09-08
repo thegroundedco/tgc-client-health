@@ -6,13 +6,19 @@ import { describe, expect, it } from 'vitest'
 // process CWD, so the guard holds however vitest is invoked.
 const ROOT = join(import.meta.dirname, '..')
 
-// scripts/score-parity.mjs is run by plain `node`, which cannot resolve this
-// codebase's extensionless relative imports. Any module it reaches must
-// therefore be a leaf. Adding an import -- a value import, a re-export, or a
-// dynamic import -- to either file below breaks `npm run verify:score` with
-// an ERR_MODULE_NOT_FOUND that looks like a Node bug rather than what it is --
-// so it is caught here instead.
-const LEAVES = ['src/lib/scoreMath.ts', 'src/lib/buckets.ts']
+// scripts/score-parity.mjs and scripts/revenue-import-plan.mjs are run by plain
+// `node`, which cannot resolve this codebase's extensionless relative imports.
+// Any module they reach must therefore be a leaf. Adding an import -- a value
+// import, a re-export, or a dynamic import -- to any file below breaks
+// `npm run verify:score` or the revenue import with an ERR_MODULE_NOT_FOUND
+// that looks like a Node bug rather than what it is -- so it is caught here
+// instead.
+//
+// money.ts joined the list when the revenue importer began importing
+// parseMoney rather than reimplementing it. That reuse is the point: the
+// float trap it solves (19.99 * 100 is 1998.9999999999998, and truncating
+// bills $19.98) is not one to solve twice, and a second copy would drift.
+const LEAVES = ['src/lib/scoreMath.ts', 'src/lib/buckets.ts', 'src/revenue/money.ts']
 
 // Every line form that is a genuine ESM module-resolution dependency: a value
 // import, a re-export (`export ... from ...`, including `export * from`), or
