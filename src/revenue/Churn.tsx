@@ -52,7 +52,7 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
 
   return (
     <section className={styles.section}>
-      <h3 className="t-subhead">Who has left</h3>
+      <h3 className="t-subhead">Churn</h3>
 
       {rows.length === 0 ? (
         // An explicit empty state rather than a blank region, which reads as a

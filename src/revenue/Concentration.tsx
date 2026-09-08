@@ -22,7 +22,7 @@ export function Concentration({ month }: { month: string }) {
 
   return (
     <section className={styles.section}>
-      <h3 className="t-subhead">Who we are most exposed to</h3>
+      <h3 className="t-subhead">Concentration</h3>
 
       {report.status === 'loading' && <p className="t-body">Loading…</p>}
 

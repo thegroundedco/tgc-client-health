@@ -75,6 +75,25 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
   })
 
+  it('names its three sections with the words a reader would search for', () => {
+    // Discoverability, and it earned a test the hard way. The sections used to
+    // be headed "Who we are most exposed to", "How long clients stay" and "Who
+    // has left" -- accurate descriptions, and none of them the word anybody
+    // actually holds in their head. The owner went looking for the
+    // concentration report on the live site and concluded it had not shipped;
+    // it was the first section on the page.
+    //
+    // Pinned here rather than in the three component tests because the thing
+    // being guaranteed is a property of the PAGE: these three, together,
+    // present. A per-component assertion would still pass with a section
+    // dropped from Revenue.tsx entirely.
+    given()
+
+    expect(screen.getByRole('heading', { name: 'Concentration' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Tenure' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Churn' })).toBeTruthy()
+  })
+
   it('shows both halves once the read lands', async () => {
     given()
 

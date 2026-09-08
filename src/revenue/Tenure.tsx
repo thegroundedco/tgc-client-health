@@ -14,7 +14,7 @@ export function Tenure({ rows }: { rows: readonly CurrentRow[] }) {
     // this project's signature defect wearing a new mask.
     return (
       <section className={styles.section}>
-        <h3 className="t-subhead">How long clients stay</h3>
+        <h3 className="t-subhead">Tenure</h3>
         <p className="t-body prose">
           No clients yet. Add one on the Admin screen and their tenure starts counting from the
           start date you give them.
@@ -25,7 +25,7 @@ export function Tenure({ rows }: { rows: readonly CurrentRow[] }) {
 
   return (
     <section className={styles.section}>
-      <h3 className="t-subhead">How long clients stay</h3>
+      <h3 className="t-subhead">Tenure</h3>
 
       {/* Median rather than mean: with a roster this size one long relationship
           drags a mean somewhere no client actually sits. And the unmeasured are
