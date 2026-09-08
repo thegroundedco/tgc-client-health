@@ -73,3 +73,21 @@
   margin: 0;
   color: var(--text-secondary);
 }
+
+/* Concentration's bar, appended to a .row. Decoration for the number in
+   .measure above it -- aria-hidden on the element in Concentration.tsx is
+   what makes that true, not anything here -- so the track and fill exist
+   purely so the eye can compare rows faster than reading two percentages. */
+.barTrack {
+  flex-basis: 100%;
+  block-size: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  block-size: 100%;
+  background: var(--action-face);
+}

@@ -14,10 +14,19 @@ import type { Role } from '../src/lib/capabilities.ts'
 // `npm run verify:privileges` is what checks the deployed function.
 const MIGRATIONS = 'supabase/migrations'
 
+// The NEWEST migration matching the suffix, not the only one. Migrations are
+// timestamp-prefixed, so a lexicographic sort puts the most recent last, and
+// the most recent definition of a thing is the one the database is running.
+//
+// This used to assert there was exactly one match, which was true until a
+// second migration replaced private.has_capability. That assertion would have
+// forced the choice between a filename that breaks the count and a filename
+// that leaves this test reading a superseded definition -- reporting the
+// capabilities of last week's database as though they were today's.
 function migration(suffix: string): string {
-  const names = readdirSync(MIGRATIONS).filter((name) => name.endsWith(suffix))
-  expect(names, `migrations ending in ${suffix}`).toHaveLength(1)
-  return readFileSync(`${MIGRATIONS}/${names[0]}`, 'utf8')
+  const names = readdirSync(MIGRATIONS).filter((name) => name.endsWith(suffix)).toSorted()
+  expect(names, `migrations ending in ${suffix}`).not.toHaveLength(0)
+  return readFileSync(`${MIGRATIONS}/${names.at(-1)}`, 'utf8')
 }
 
 const SQL = migration('_has_capability.sql')
@@ -38,14 +47,16 @@ function sqlRoles(): string[] {
 }
 
 describe('the role presets', () => {
-  it('offers exactly the four Phase 1 capabilities', () => {
-    // Parent spec §7.1. The count as well as the membership: a fifth capability
-    // added without thought would pass a membership-only check, and Slice 3's
-    // permission overrides are meant to change the FUNCTION BODY, not this list.
+  it('offers exactly the six capabilities the model defines', () => {
+    // The count as well as the membership. Phase 1 had four; slice 6c adds the
+    // revenue pair. A seventh added without thought would pass a
+    // membership-only check.
     expect([...CAPABILITIES].toSorted()).toEqual([
+      'edit_revenue',
       'edit_scores',
       'manage_clients',
       'manage_users',
+      'view_revenue',
       'view_scores',
     ])
   })
@@ -139,5 +150,16 @@ describe('the role presets', () => {
     expect(arm, 'the role check constraint in the profiles migration').not.toBeNull()
     const fromSql = [...arm![1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1])
     expect(fromSql.toSorted()).toEqual([...ROLES].toSorted())
+  })
+
+  it('lets an account manager read revenue and refuses them the write', () => {
+    // The asymmetry slice 6c introduces, and the one a careless test misses by
+    // checking only the admin path. If these ever agree, either the screen is
+    // showing an AM an entry control it will refuse, or admins have lost the
+    // ability to enter revenue -- and nothing else in this suite would say so.
+    expect(can('account_manager', 'view_revenue')).toBe(true)
+    expect(can('account_manager', 'edit_revenue')).toBe(false)
+    expect(can('admin', 'edit_revenue')).toBe(true)
+    expect(can('viewer', 'view_revenue')).toBe(false)
   })
 })

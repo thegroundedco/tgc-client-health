@@ -51,7 +51,7 @@ begin
     and p.pronargs = 1;
 
   if body is null then
-    raise exception E'verify:capability COULD NOT VERIFY -- private.has_capability(text) does not exist on this project.\n\nNO DISAGREEMENT WAS FOUND; nothing was checked. This is the expected result where supabase/migrations/20260824160306_has_capability.sql has not been applied yet. Apply it and re-run.';
+    raise exception E'verify:capability COULD NOT VERIFY -- private.has_capability(text) does not exist on this project.\n\nNO DISAGREEMENT WAS FOUND; nothing was checked. This is the expected result where neither supabase/migrations/20260824160306_has_capability.sql nor 20260903120000_revenue_has_capability.sql (which replaces the function) has been applied yet -- either one missing produces this state. Apply them and re-run.';
   end if;
 
   -- The deployed CASE, not a copy of it. \y is a Postgres word boundary, so the
@@ -98,22 +98,23 @@ begin
               case r.role
                 when 'admin' then true
                 when 'account_manager'
-                  then c.cap in ('view_scores', 'edit_scores', 'manage_clients')
+                  then c.cap in ('view_scores', 'edit_scores', 'manage_clients', 'view_revenue')
                 when 'viewer' then c.cap = 'view_scores'
                 else false
               end),
        E',\n      ')
      from (values ('admin'), ('account_manager'), ('viewer'), ('sales')) as r(role)
      cross join (values
-       ('view_scores'), ('edit_scores'), ('manage_clients'), ('manage_users')
+       ('view_scores'), ('edit_scores'), ('manage_clients'), ('manage_users'),
+       ('view_revenue'), ('edit_revenue')
      ) as c(cap)))
   into mismatches, combinations;
 
   -- Assert a positive expected count, so "0 mismatches" cannot read as success
   -- when the reason is that nothing was compared. A cross join that lost a leg
   -- would otherwise pass silently.
-  if combinations <> 16 then
-    raise exception 'verify:capability FAILED to build its own input: expected 16 combinations, built %. Nothing about the deployed function was checked.',
+  if combinations <> 24 then
+    raise exception 'verify:capability FAILED to build its own input: expected 24 combinations, built %. Nothing about the deployed function was checked.',
       combinations;
   end if;
 

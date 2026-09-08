@@ -265,6 +265,77 @@ describe.runIf(url && key)('RLS with no session', () => {
     expectGrantLayerDenial(error)
     expect(data).toBeNull()
   })
+
+  // --------------------------------------------------------------------------
+  // public.client_month_revenue, added by slice 6c. The outer boundary only --
+  // see this file's header for what that does and does not prove. The three
+  // POLICIES on this table (select gated on view_revenue, insert and update on
+  // edit_revenue) are asserted in scripts/verify-privileges.sql section 10f2,
+  // which becomes `authenticated` inside the database; nothing here can reach
+  // them, because anon is refused before any policy is consulted.
+  //
+  // Worth probing at all because this table was born with the standing hazard
+  // its own migration names: on this project a new table in public can be
+  // created writable by anon, and the migration revokes before it grants for
+  // exactly that reason. These four probes are what would notice if a future
+  // migration recreated the table and forgot the revoke.
+
+  it('refuses an unauthenticated select on client_month_revenue at the grant layer', async () => {
+    const { data, error, status } = await client()
+      .from('client_month_revenue')
+      .select('client_id')
+    expectGrantLayerDenial(error)
+    expect(status).toBe(401)
+    expect(data).toBeNull()
+  })
+
+  it('refuses an unauthenticated insert on client_month_revenue', async () => {
+    // Every column named here exists, deliberately: PostgREST answers PGRST204
+    // "column not found" BEFORE it reaches the grant check, which would make
+    // this pass without the boundary being consulted at all. The period is the
+    // first of a month because of the table's own check constraint -- again a
+    // failure that would arrive before the grant layer.
+    const { data, error } = await client()
+      .from('client_month_revenue')
+      .insert({
+        client_id: ABSENT_CLIENT_ID,
+        period: '1999-01-01',
+        retainer_cents: 1,
+        project_cents: 1,
+      })
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  // The verb this table's own policy set treats as the interesting one:
+  // `authenticated` legitimately holds UPDATE here, since correcting a month
+  // entered in error is the only way to change it (there is no delete policy).
+  // So this is where an over-broad grant would do real damage.
+  it('refuses an unauthenticated update on client_month_revenue', async () => {
+    const { data, error } = await client()
+      .from('client_month_revenue')
+      .update({ retainer_cents: 999999 })
+      .eq('client_id', ABSENT_CLIENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
+
+  // DELETE is granted to NOBODY on this table -- not anon, and not
+  // `authenticated` either. The migration grants select, insert and update
+  // only, and writes no delete policy, so removing a month is not an operation
+  // that exists. This probe is what would fail if a later migration added
+  // `grant delete` as a convenience.
+  it('refuses an unauthenticated delete on client_month_revenue', async () => {
+    const { data, error } = await client()
+      .from('client_month_revenue')
+      .delete()
+      .eq('client_id', ABSENT_CLIENT_ID)
+      .select()
+    expectGrantLayerDenial(error)
+    expect(data).toBeNull()
+  })
   // --------------------------------------------------------------------------
   // PostgREST's exposed-schema list. Not a grant and not a policy: it is
   // PROJECT CONFIGURATION that lives in the Supabase dashboard, not in this
