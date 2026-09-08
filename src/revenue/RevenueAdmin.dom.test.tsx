@@ -39,9 +39,9 @@ import { useRevenue } from './useRevenue'
 // passes whichever of the two the component actually renders. Three makes them
 // 1 and 2, and only the intended number matches.
 const CLIENTS = [
-  { id: 1, name: 'Acme' },
-  { id: 2, name: 'Delta' },
-  { id: 3, name: 'East Bay' },
+  { id: 1, name: 'Acme', status: 'active' },
+  { id: 2, name: 'Delta', status: 'active' },
+  { id: 3, name: 'East Bay', status: 'active' },
 ]
 const ROW = { client_id: 1, period: '2026-09-01', retainer_cents: 400000, project_cents: 0 }
 
@@ -107,6 +107,36 @@ describe('the revenue entry grid', () => {
     // eligible clients have no row. The two screens must not disagree about
     // which number "N of M" names.
     expect(document.body.textContent).toContain('2 of 3')
+  })
+
+  it('leaves a paused client out of both halves of the missing count', async () => {
+    // The board says "no check-in is expected this month" of a paused client.
+    // This screen used to count them as somebody who still owed a figure, so
+    // the caption read one high every month forever. Production has one paused
+    // client, so it was live.
+    //
+    // Acme is entered, Delta is genuinely missing, East Bay is paused with no
+    // row: "1 of 2", not "2 of 3". The denominator has to move WITH the
+    // numerator -- this file's own comment says the two screens must never
+    // disagree about which number "N of M" names, and a numerator that skips
+    // paused clients over a denominator that counts them disagrees with itself.
+    given({ clients: [CLIENTS[0], CLIENTS[1], { ...CLIENTS[2], status: 'paused' }] })
+
+    expect(document.body.textContent).toContain('1 of 2')
+    expect(document.body.textContent).not.toContain('2 of 3')
+  })
+
+  it('still offers the paused client a row, and says why it is not counted', async () => {
+    // The fix must not overshoot into "paused clients have no revenue". A
+    // paused client may still be on retainer -- that is exactly why they stay
+    // enterable -- so the row is present with working fields. And it carries a
+    // marker, because a grid showing three rows above a caption that says "of
+    // 2" is otherwise just wrong-looking arithmetic.
+    given({ clients: [CLIENTS[0], CLIENTS[1], { ...CLIENTS[2], status: 'paused' }] })
+
+    expect(screen.getByLabelText('East Bay retainer')).toBeTruthy()
+    expect(screen.getByLabelText('East Bay project work')).toBeTruthy()
+    expect(document.body.textContent).toMatch(/paused/i)
   })
 
   it('refuses to save a field it cannot parse, and says which', async () => {

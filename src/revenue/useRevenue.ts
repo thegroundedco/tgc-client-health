@@ -13,7 +13,12 @@ import type { EligibleClient, RevenueRow } from './revenueMath'
 // eligible client with no row is unentered rather than unbilled. The roster has
 // to arrive independently for the absence to be visible at all.
 
-const CLIENT_COLUMNS = 'id, name'
+// `status` is read for ONE reason: concentration excludes a paused client with
+// no row from the missing count (a paused client is owed no figure, the same way
+// the board expects no check-in from one). It is not optional on
+// EligibleClient, and the cast below means the compiler cannot enforce that it
+// is selected -- `useRevenue.dom.test.ts` pins it instead.
+const CLIENT_COLUMNS = 'id, name, status'
 const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents'
 
 export type UseRevenue = {

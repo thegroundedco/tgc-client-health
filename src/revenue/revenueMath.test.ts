@@ -11,13 +11,21 @@ import {
 } from './revenueMath'
 
 const CLIENTS: EligibleClient[] = [
-  { id: 1, name: 'Acme' },
-  { id: 2, name: 'Delta' },
-  { id: 3, name: 'East Bay' },
-  { id: 4, name: 'Northgate' },
-  { id: 5, name: 'Harbor Row' },
-  { id: 6, name: 'Ivy Lane' },
+  { id: 1, name: 'Acme', status: 'active' },
+  { id: 2, name: 'Delta', status: 'active' },
+  { id: 3, name: 'East Bay', status: 'active' },
+  { id: 4, name: 'Northgate', status: 'active' },
+  { id: 5, name: 'Harbor Row', status: 'active' },
+  { id: 6, name: 'Ivy Lane', status: 'active' },
 ]
+
+// A paused client is ELIGIBLE -- the check constraint refuses them an end date,
+// so useRevenue's `ended_on.is.null` arm returns them -- but nobody owes a
+// figure for them. See the two tests near the bottom of the concentration
+// block.
+function paused(client: EligibleClient): EligibleClient {
+  return { ...client, status: 'paused' }
+}
 
 function row(client_id: number, retainer_cents: number, project_cents = 0): RevenueRow {
   return { client_id, period: '2026-09-01', retainer_cents, project_cents }
@@ -218,6 +226,41 @@ describe('concentration', () => {
     expect(result.named[1].cents).toBe(0)
   })
 
+  it('does not count a paused client with no row as missing', () => {
+    // The board and this screen used to disagree about a paused client. The
+    // board says "no check-in is expected this month" and gives that its own
+    // sentence; this report counted them as somebody who still owed a figure,
+    // so the missing count read one high EVERY month, forever, unless a person
+    // typed a 0 for them each time. Production has one paused client, so this
+    // was live rather than hypothetical.
+    //
+    // Two active clients entered, one paused client with no row: nobody is
+    // missing. The paused client is in NEITHER count -- not entered, and not
+    // owed -- so `entered + missing` is the number of clients a figure is
+    // actually expected from, which is what both captions print.
+    const clients = [CLIENTS[0], CLIENTS[1], paused(CLIENTS[2])]
+
+    const result = concentration(clients, [row(1, 400000), row(2, 600000)])
+
+    expect(result.missing).toBe(0)
+    expect(result.entered).toBe(2)
+  })
+
+  it('still ranks a paused client that did bill', () => {
+    // The half that stops the fix overshooting into "paused clients have no
+    // revenue". A paused client may well still be on retainer, which is exactly
+    // why they stay enterable -- so a row that EXISTS counts, is ranked, and
+    // contributes to the total like any other.
+    const clients = [CLIENTS[0], paused(CLIENTS[1])]
+
+    const result = concentration(clients, [row(1, 400000), row(2, 600000)])
+
+    expect(result.entered).toBe(2)
+    expect(result.missing).toBe(0)
+    expect(result.totalCents).toBe(1000000)
+    expect(result.named.map((entry) => entry.name)).toEqual(['Delta', 'Acme'])
+  })
+
   it('gives every share as a fraction of the entered total', () => {
     const result = concentration(CLIENTS.slice(0, 2), [row(1, 750000), row(2, 250000)])
 
@@ -254,8 +297,8 @@ describe('concentration', () => {
     // see. Asserted from BOTH input orderings, because a single ordering
     // passes on a comparator that merely preserves input order.
     const tied = [
-      { id: 1, name: 'Zeta' },
-      { id: 2, name: 'Alpha' },
+      { id: 1, name: 'Zeta', status: 'active' },
+      { id: 2, name: 'Alpha', status: 'active' },
     ]
     const rows = [row(1, 300000), row(2, 300000)]
 

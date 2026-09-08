@@ -283,9 +283,17 @@ export function RevenueAdmin({ onWritingChange }: Props) {
       {/* Requirement 5, spec §3.3, said out loud on the screen where it can be
           fixed rather than only inferred from a blank field somewhere in a
           list of ten. Matches Concentration's own "N of M" wording so the two
-          screens never disagree about which number the phrase names. */}
+          screens never disagree about which number the phrase names.
+
+          The denominator is `entered + missing`, NOT the roster length, and the
+          two must move together. A paused client with no row is in neither
+          count -- nobody owes a figure for them, exactly as the board expects
+          no check-in from one -- so counting them in the denominator while
+          concentration leaves them out of the numerator would make this
+          sentence disagree with itself, which is the specific thing the note
+          above forbids. */}
       <p className="t-caption">
-        {report.missing} of {revenue.clients.length} clients have no entry for{' '}
+        {report.missing} of {report.entered + report.missing} clients have no entry for{' '}
         {formatPeriod(period)} yet.
       </p>
 
@@ -306,8 +314,20 @@ export function RevenueAdmin({ onWritingChange }: Props) {
                 const entry = entries[client.id] ?? { retainer: '', project: '' }
                 return (
                   <tr key={client.id}>
+                    {/* The marker is not decoration. This client is deliberately
+                        absent from the caption's counts, so a grid of three rows
+                        above a sentence that says "of 2" would read as broken
+                        arithmetic without it. Same class and same word Tenure
+                        uses for a paused client, so the two screens say it the
+                        same way. The fields stay live: paused means the
+                        check-ins stop, not necessarily the retainer. */}
                     <th scope="row">
-                      <span className="t-body">{client.name}</span>
+                      <span className={styles.who}>
+                        <span className="t-body">{client.name}</span>
+                        {client.status === 'paused' && (
+                          <span className={`t-caption ${styles.marker}`}>Paused</span>
+                        )}
+                      </span>
                     </th>
                     <td>
                       <input

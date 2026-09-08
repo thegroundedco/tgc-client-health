@@ -16,7 +16,13 @@ export type RevenueRow = {
 // Only what concentration needs. Its own shape rather than the admin screen's
 // client type: a report should not silently start depending on a column because
 // an editing screen added one. useTenure's comment makes the same argument.
-export type EligibleClient = { id: number; name: string }
+//
+// `status` is REQUIRED rather than optional, deliberately. It is here only to
+// answer "is this client paused", and an optional field would let a caller that
+// forgot to select the column typecheck cleanly while every client silently
+// read as not-paused -- the exact silent-default failure this project keeps
+// producing. Required means the compiler names every call site instead.
+export type EligibleClient = { id: number; name: string; status: string }
 
 export type ConcentrationEntry = {
   clientId: number
@@ -170,6 +176,21 @@ export function concentration(
   for (const client of clients) {
     const found = byClient.get(client.id)
     if (found === undefined) {
+      // A PAUSED client with no row is not owed. The board already says "no
+      // check-in is expected this month" of a paused client and gives that its
+      // own sentence; this report counted them as somebody who still owed a
+      // figure, so the missing count read one high every month forever unless a
+      // person typed a 0 for them each time. Production has one such client.
+      //
+      // They fall out of BOTH counts rather than into `entered`: they have no
+      // row, so calling them entered would be a lie, and `entered + missing` is
+      // then exactly the number of clients a figure is expected from -- which is
+      // the denominator both captions print.
+      //
+      // Only the absent case is skipped. A paused client who DID bill has a row,
+      // never reaches here, and is ranked like anyone else: paused means the
+      // check-ins stop, not that the retainer does.
+      if (client.status === 'paused') continue
       missing += 1
       continue
     }

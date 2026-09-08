@@ -9,12 +9,12 @@ import { Concentration } from './Concentration'
 import { useRevenue } from './useRevenue'
 
 const CLIENTS = [
-  { id: 1, name: 'Acme' },
-  { id: 2, name: 'Delta' },
-  { id: 3, name: 'East Bay' },
-  { id: 4, name: 'Northgate' },
-  { id: 5, name: 'Harbor Row' },
-  { id: 6, name: 'Ivy Lane' },
+  { id: 1, name: 'Acme', status: 'active' },
+  { id: 2, name: 'Delta', status: 'active' },
+  { id: 3, name: 'East Bay', status: 'active' },
+  { id: 4, name: 'Northgate', status: 'active' },
+  { id: 5, name: 'Harbor Row', status: 'active' },
+  { id: 6, name: 'Ivy Lane', status: 'active' },
 ]
 
 function row(client_id: number, retainer_cents: number) {
@@ -148,6 +148,46 @@ describe('concentration', () => {
     const text = document.body.textContent ?? ''
     expect(text).toMatch(/no clients/i)
     expect(text).not.toMatch(/has been entered/i)
+  })
+
+  it('leaves a paused client out of the missing count', () => {
+    // Two entered, one paused with no row: nobody is missing, so the missing
+    // caption should not appear at all -- it renders only when somebody
+    // actually owes a figure. The board says no check-in is expected from a
+    // paused client; nobody owes a revenue figure for one either, and
+    // production has one such client, so this count read one high every month.
+    given({
+      clients: [CLIENTS[0], CLIENTS[1], { ...CLIENTS[2], status: 'paused' }],
+      rows: [row(1, 450000), row(2, 250000)],
+    })
+
+    expect(screen.queryByTestId('concentration-missing')).toBeNull()
+  })
+
+  it('still counts that same client as missing when they are active', () => {
+    // The companion, so the test above cannot pass just because the caption
+    // went away for some unrelated reason. Identical roster and identical rows,
+    // with East Bay ACTIVE instead of paused: now somebody IS owed, and the
+    // caption says so. The ONLY difference between the two tests is the status.
+    given({
+      clients: [CLIENTS[0], CLIENTS[1], CLIENTS[2]],
+      rows: [row(1, 450000), row(2, 250000)],
+    })
+
+    expect(screen.getByTestId('concentration-missing').textContent).toContain('1 of 3')
+  })
+
+  it('does not call an all-paused roster an absence of clients', () => {
+    // Introduced BY the paused fix and worth its own test. The empty-roster
+    // sentence keys on the count of clients a figure is expected from, and
+    // excluding paused clients from that count made "no clients were on the
+    // books" reachable while clients existed -- they were merely all paused.
+    // Remote (production is 10 active to 1 paused) and wrong, which is enough.
+    given({ clients: [{ ...CLIENTS[0], status: 'paused' }], rows: [] })
+
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/no clients/i)
+    expect(text).toMatch(/has been entered/i)
   })
 
   it('shows a failed read as an error rather than an empty chart', () => {

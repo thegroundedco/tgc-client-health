@@ -218,6 +218,29 @@ describe('useRevenue', () => {
     expect(filter).toContain('ended_on.gte.2026-09-01')
   })
 
+  it('asks for the status column, which nothing but a test can enforce', async () => {
+    // THE CAST IS WHY THIS TEST EXISTS. `setClients` casts the response with
+    // `as EligibleClient[]`, so TypeScript cannot notice that the select is
+    // missing a column the type requires -- making EligibleClient.status
+    // required correctly broke four fixtures at compile time and said NOTHING
+    // about this file.
+    //
+    // Without `status` in the column list, every client arrives with
+    // `status: undefined`, `client.status === 'paused'` is false for all of
+    // them, and concentration silently goes back to counting paused clients as
+    // owing a figure. Nothing else in the suite can see that: the unit tests
+    // build their own fixtures and always supply a status.
+    const captured = given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW], error: null },
+    })
+
+    const { result } = renderHook(() => useRevenue('2026-09-01'))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    expect(captured.clients?.select[0]).toContain('status')
+  })
+
   it('asks for one month of revenue, the month it was given', async () => {
     const captured = given({
       clients: { data: [CLIENT], error: null },

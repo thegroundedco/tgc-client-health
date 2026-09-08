@@ -62,7 +62,13 @@ function ConcentrationReady({
   // eligibility filter produces (useRevenue's `ended_on.is.null` arm going
   // missing returns no clients whatsoever), so the entry sentence would send
   // somebody hunting for missing data entry instead of for the bug.
-  if (total === 0) {
+  //
+  // Keyed on the ROSTER LENGTH, not on `entered + missing`. Those were the same
+  // number until paused clients stopped counting toward `missing`; now a roster
+  // of nothing but paused clients has an expected-figure count of zero while
+  // clients plainly exist, and this sentence would deny they do. The claim it
+  // makes is about the roster, so it has to read the roster.
+  if (clients.length === 0) {
     return (
       <p className="t-body prose">
         No clients were on the books for {formatPeriod(month)}, so there is nothing to rank.
