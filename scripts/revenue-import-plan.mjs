@@ -17,7 +17,7 @@
 // IEEE 754, and truncating it bills $19.98. src/revenue/money.ts is a leaf
 // module (no relative imports), which is what lets plain Node reach it --
 // tests/leafModules.test.ts holds it that way.
-import { parseMoney } from '../src/revenue/money.ts'
+import { formatMoney, parseMoney } from '../src/revenue/money.ts'
 
 /**
  * @typedef {{ clientName: string, period: string, retainer: string, project: string }} Cell
@@ -309,4 +309,65 @@ export function emitSql(plan) {
 
   parts.push('commit;')
   return parts.join('\n')
+}
+
+/**
+ * The reconciliation report: everything the owner needs to decide whether to
+ * run the import, before a row exists. It is written to be DISAGREED with -- a
+ * monthly total that does not match what they already believe the year looked
+ * like is the cheapest way to catch a misread column.
+ *
+ * @param {ReturnType<typeof planImport>} plan
+ */
+export function reportOf(plan) {
+  const lines = []
+
+  // Problems first and unmissable. Burying a refusal under a table of totals
+  // that will never be inserted is how somebody comes away believing the
+  // opposite of what the report says.
+  if (plan.problems.length > 0) {
+    lines.push(`${plan.problems.length} problem(s) — NOTHING WILL BE WRITTEN until these are fixed:`)
+    for (const problem of plan.problems) lines.push(`  - ${problem}`)
+    lines.push('')
+  }
+
+  lines.push(`Rows to write: ${plan.writes.length}`)
+
+  if (plan.newClients.length > 0) {
+    // Named, not counted. Creating a client is a side effect worth reviewing
+    // one by one, and a number cannot be reviewed.
+    lines.push('', `Clients to create (${plan.newClients.length}) — no start date will be set:`)
+    for (const name of plan.newClients) lines.push(`  - ${name}`)
+  }
+
+  if (plan.overwrites.length > 0) {
+    lines.push('', `Existing rows that would be OVERWRITTEN (${plan.overwrites.length}):`)
+    for (const row of plan.overwrites) lines.push(`  - ${row.clientName} ${row.period}`)
+  }
+
+  if (plan.outsideLifecycle.length > 0) {
+    lines.push(
+      '',
+      `Held back — outside the client relationship (${plan.outsideLifecycle.length}):`,
+    )
+    for (const row of plan.outsideLifecycle) {
+      lines.push(`  - ${row.clientName} ${row.period} (${row.reason})`)
+    }
+  }
+
+  // Counted rather than listed: on a 13-month sheet these run to hundreds, and
+  // the number is the point -- silence about them would let "nothing was
+  // entered here" pass as "everything was covered".
+  lines.push('', `Blank cells skipped (not entered, no row): ${plan.skippedBlank.length}`)
+
+  if (plan.totalsByPeriod.length > 0) {
+    // In dollars. Cents are what the column stores and not what anybody can
+    // compare against a bank statement at a glance.
+    lines.push('', 'Monthly totals — check these against the sheet:')
+    for (const total of plan.totalsByPeriod) {
+      lines.push(`  ${total.period}  ${formatMoney(total.cents)}`)
+    }
+  }
+
+  return lines.join('\n')
 }

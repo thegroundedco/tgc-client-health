@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- a plain .mjs script with JSDoc types, not part of the app's
 // TypeScript program. Same arrangement as db-which-decide.mjs: the decisions live
 // in a module that can be tested, and the script around it only does I/O.
-import { emitSql, planImport } from '../scripts/revenue-import-plan.mjs'
+import { emitSql, planImport, reportOf } from '../scripts/revenue-import-plan.mjs'
 
 // The 13-month backfill of past revenue. Every rule below was agreed with the
 // owner before a row was written, and the reason this is a tested module rather
@@ -393,5 +393,72 @@ describe('emitSql', () => {
     // is a silent no-op -- the failure mode where somebody believes the year
     // loaded.
     expect(() => emitSql(planOf([cell('Acme', '2026-07-01', '', '')]))).toThrow(/nothing/i)
+  })
+})
+
+
+describe('reportOf — what the owner reads before approving', () => {
+  it('leads with the problems and says nothing will be written', () => {
+    // The report is read to be disagreed with. When the plan refuses, that has
+    // to be the first thing on the page, not a footnote under a table of
+    // totals that will never be inserted.
+    const report = reportOf(
+      planImport({ cells: [cell('Acme', '2026-07-15', '4000', '0')], roster: ROSTER }),
+    )
+
+    expect(report.split('\n')[0]).toMatch(/problem/i)
+    expect(report).toMatch(/nothing will be written/i)
+  })
+
+  it('shows monthly totals in readable money, not cents', () => {
+    // Checked against what the owner already believes the year looked like, so
+    // it has to be in the units they think in. 450000 cents is not a number
+    // anybody can compare to a bank statement at a glance.
+    const report = reportOf(
+      planImport({ cells: [cell('Acme', '2026-06-01', '4000', '500')], roster: ROSTER }),
+    )
+
+    expect(report).toContain('$4,500')
+    expect(report).not.toContain('450000')
+  })
+
+  it('names the clients it would create rather than only counting them', () => {
+    // Creating a client is the one irreversible-ish side effect besides the
+    // rows. A count is not reviewable; a list is.
+    const report = reportOf(
+      planImport({ cells: [cell('Northgate', '2026-06-01', '5000', '0')], roster: ROSTER }),
+    )
+
+    expect(report).toMatch(/Northgate/)
+  })
+
+  it('calls out rows that would be overwritten', () => {
+    const report = reportOf(
+      planImport({
+        cells: [cell('Acme', '2026-06-01', '4000', '0')],
+        roster: ROSTER,
+        existing: [{ client_id: 1, period: '2026-06-01' }],
+      }),
+    )
+
+    expect(report).toMatch(/overwrit/i)
+    expect(report).toMatch(/Acme/)
+  })
+
+  it('reports months held back outside a client relationship, with the reason', () => {
+    const report = reportOf(
+      planImport({ cells: [cell('Delta', '2026-05-01', '0', '0')], roster: ROSTER }),
+    )
+
+    expect(report).toMatch(/2026-05-01/)
+    expect(report).toMatch(/before 2026-06-15/)
+  })
+
+  it('says how many blank cells it skipped, so silence is not mistaken for coverage', () => {
+    const report = reportOf(
+      planImport({ cells: [cell('Acme', '2026-06-01', '', '')], roster: ROSTER }),
+    )
+
+    expect(report).toMatch(/1 .*blank|blank.*: 1/i)
   })
 })
