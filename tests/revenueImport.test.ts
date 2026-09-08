@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- a plain .mjs script with JSDoc types, not part of the app's
 // TypeScript program. Same arrangement as db-which-decide.mjs: the decisions live
 // in a module that can be tested, and the script around it only does I/O.
-import { planImport } from '../scripts/revenue-import-plan.mjs'
+import { emitSql, planImport } from '../scripts/revenue-import-plan.mjs'
 
 // The 13-month backfill of past revenue. Every rule below was agreed with the
 // owner before a row was written, and the reason this is a tested module rather
@@ -296,5 +296,102 @@ describe('planImport — the reconciliation numbers', () => {
 
     expect(plan.problems).toHaveLength(1)
     expect(plan.writes).toEqual([])
+  })
+})
+
+
+describe('planImport — what it would overwrite', () => {
+  it('counts client-months that already have a row', () => {
+    // A backfill can silently clobber a month somebody typed into the entry
+    // screen. The import overwrites on purpose -- it has to be re-runnable
+    // after the sheet is corrected -- so the protection is that the owner is
+    // told the number BEFORE it runs, not that it refuses.
+    const plan = planImport({
+      cells: [
+        cell('Acme', '2026-06-01', '4000', '0'),
+        cell('Acme', '2026-07-01', '4000', '0'),
+      ],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-06-01' }],
+    })
+
+    expect(plan.overwrites).toEqual([{ clientName: 'Acme', period: '2026-06-01' }])
+  })
+
+  it('reports nothing to overwrite when the table is empty', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-06-01', '4000', '0')],
+      roster: ROSTER,
+    })
+
+    expect(plan.overwrites).toEqual([])
+  })
+})
+
+describe('emitSql', () => {
+  function planOf(cells: ReturnType<typeof cell>[], roster = ROSTER) {
+    return planImport({ cells, roster })
+  }
+
+  it('wraps everything in one transaction', () => {
+    // All or nothing at the database too, not just in the plan. A backfill that
+    // half-applies into a table with no delete policy is the outcome this whole
+    // module exists to avoid.
+    const sql = emitSql(planOf([cell('Acme', '2026-07-01', '4000', '0')]))
+
+    expect(sql.trimStart().startsWith('begin;')).toBe(true)
+    expect(sql.trimEnd().endsWith('commit;')).toBe(true)
+  })
+
+  it('upserts, so a corrected sheet can be re-run', () => {
+    const sql = emitSql(planOf([cell('Acme', '2026-07-01', '4000', '0')]))
+
+    expect(sql).toMatch(/on conflict \(client_id, period\) do update/)
+    expect(sql).toContain('400000')
+  })
+
+  it('ESCAPES a quote in a client name', () => {
+    // "O'Brien Media" is an ordinary agency client name and an unescaped
+    // apostrophe ends the string literal early. At best the statement fails; at
+    // worst it means something else entirely.
+    const sql = emitSql(
+      planImport({
+        cells: [cell("O'Brien Media", '2026-07-01', '4000', '0')],
+        roster: ROSTER,
+      }),
+    )
+
+    expect(sql).toContain("'O''Brien Media'")
+    expect(sql).not.toContain("'O'Brien Media'")
+  })
+
+  it('creates an unknown client and attaches its revenue by name', () => {
+    // The new client has no id yet, so its rows join on the name inside the
+    // same transaction rather than needing a second pass.
+    const sql = emitSql(planOf([cell('Northgate', '2026-07-01', '5000', '0')]))
+
+    expect(sql).toMatch(/insert into public\.clients/)
+    expect(sql).toContain('Northgate')
+    expect(sql).toMatch(/join public\.clients/)
+  })
+
+  it('writes no client insert when every name is already on file', () => {
+    const sql = emitSql(planOf([cell('Acme', '2026-07-01', '4000', '0')]))
+
+    expect(sql).not.toMatch(/insert into public\.clients/)
+  })
+
+  it('REFUSES to emit anything for a plan with problems', () => {
+    const plan = planOf([cell('Acme', '2026-07-15', '4000', '0')])
+
+    expect(plan.problems).toHaveLength(1)
+    expect(() => emitSql(plan)).toThrow(/problem/i)
+  })
+
+  it('refuses an empty plan rather than emitting an empty transaction', () => {
+    // A begin/commit with nothing between them reads as a successful import and
+    // is a silent no-op -- the failure mode where somebody believes the year
+    // loaded.
+    expect(() => emitSql(planOf([cell('Acme', '2026-07-01', '', '')]))).toThrow(/nothing/i)
   })
 })

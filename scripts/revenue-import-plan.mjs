@@ -43,9 +43,10 @@ function monthOf(day) {
 }
 
 /**
- * @param {{ cells: Cell[], roster: Client[] }} input
+ * @param {{ cells: Cell[], roster: Client[],
+ *            existing?: { client_id: number, period: string }[] }} input
  */
-export function planImport({ cells, roster }) {
+export function planImport({ cells, roster, existing = [] }) {
   /** @type {string[]} */
   const problems = []
   /** @type {Write[]} */
@@ -188,7 +189,18 @@ export function planImport({ cells, roster }) {
     .map(([period, cents]) => ({ period, cents }))
     .sort((left, right) => left.period.localeCompare(right.period))
 
+  // Client-months that ALREADY have a row and would be rewritten. The import
+  // upserts on purpose -- it has to survive being re-run after the sheet is
+  // corrected -- so the protection is not refusal, it is that the owner sees
+  // this count before running it. Silently overwriting a month somebody typed
+  // into the entry screen is the failure this exists to make visible.
+  const already = new Set(existing.map((row) => `${row.client_id}|${row.period}`))
+  const overwrites = planned
+    .filter((write) => write.clientId !== null && already.has(`${write.clientId}|${write.period}`))
+    .map((write) => ({ clientName: write.clientName, period: write.period }))
+
   return {
+    overwrites,
     writes: problems.length > 0 ? [] : planned,
     newClients: [...newClients.values()].sort((left, right) => left.localeCompare(right)),
     skippedBlank,
@@ -196,4 +208,105 @@ export function planImport({ cells, roster }) {
     problems,
     totalsByPeriod,
   }
+}
+
+// A single quoted SQL literal. Doubling the quote is not a nicety: "O'Brien
+// Media" is an ordinary client name, and unescaped it ends the literal early --
+// at best the statement fails, at worst it means something else entirely.
+function q(text) {
+  return `'${String(text).replace(/'/g, "''")}'`
+}
+
+/**
+ * Turns a clean plan into one transaction. Throws rather than emitting anything
+ * questionable: this is the last thing that runs before rows land in a table
+ * with no delete policy.
+ *
+ * @param {ReturnType<typeof planImport>} plan
+ */
+export function emitSql(plan) {
+  if (plan.problems.length > 0) {
+    throw new Error(
+      `refusing to emit SQL: the plan has ${plan.problems.length} problem(s). ` +
+        `Fix the sheet and re-plan; a half-right import cannot be undone.`,
+    )
+  }
+  if (plan.writes.length === 0) {
+    throw new Error(
+      'refusing to emit SQL: the plan writes nothing. An empty begin/commit ' +
+        'reads as a successful import and is a silent no-op -- the failure mode ' +
+        'where somebody believes the year loaded.',
+    )
+  }
+
+  const parts = ['begin;', '']
+
+  if (plan.newClients.length > 0) {
+    // `where not exists` rather than `on conflict`: clients.name carries no
+    // unique constraint, so there is no conflict target to name. This makes a
+    // re-run idempotent all the same.
+    parts.push(
+      '-- Clients in the sheet that were not on file. Name only: status defaults',
+      "-- to 'active', and started_on is deliberately NOT guessed from the first",
+      '-- month with revenue -- they may predate the sheet, and a wrong tenure',
+      '-- reads exactly like a right one.',
+      'insert into public.clients (name)',
+      `select v.name from (values ${plan.newClients.map((name) => `(${q(name)})`).join(', ')}) as v(name)`,
+      'where not exists (',
+      '  select 1 from public.clients c where lower(btrim(c.name)) = lower(btrim(v.name))',
+      ');',
+      '',
+    )
+  }
+
+  // entered_by stays null throughout, and that is honest: nobody entered these
+  // through the app. The column is nullable for exactly this case.
+  const upsert = [
+    'on conflict (client_id, period) do update',
+    '  set retainer_cents = excluded.retainer_cents,',
+    '      project_cents  = excluded.project_cents,',
+    '      updated_at     = now();',
+  ]
+
+  const known = plan.writes.filter((write) => write.clientId !== null)
+  if (known.length > 0) {
+    parts.push(
+      `-- ${known.length} client-month row(s) for clients already on file.`,
+      'insert into public.client_month_revenue (client_id, period, retainer_cents, project_cents)',
+      'values',
+      known
+        .map(
+          (write) =>
+            `  (${write.clientId}, ${q(write.period)}::date, ${write.retainerCents}, ${write.projectCents})`,
+        )
+        .join(',\n'),
+      ...upsert,
+      '',
+    )
+  }
+
+  const fresh = plan.writes.filter((write) => write.clientId === null)
+  if (fresh.length > 0) {
+    // Joined on the name inside the same transaction, because these clients do
+    // not have ids until the insert above runs. One pass, not two.
+    parts.push(
+      `-- ${fresh.length} row(s) for clients created above, matched back by name.`,
+      'insert into public.client_month_revenue (client_id, period, retainer_cents, project_cents)',
+      'select c.id, v.period::date, v.retainer_cents, v.project_cents',
+      'from (values',
+      fresh
+        .map(
+          (write) =>
+            `  (${q(write.clientName)}, ${q(write.period)}, ${write.retainerCents}, ${write.projectCents})`,
+        )
+        .join(',\n'),
+      ') as v(name, period, retainer_cents, project_cents)',
+      'join public.clients c on lower(btrim(c.name)) = lower(btrim(v.name))',
+      ...upsert,
+      '',
+    )
+  }
+
+  parts.push('commit;')
+  return parts.join('\n')
 }
