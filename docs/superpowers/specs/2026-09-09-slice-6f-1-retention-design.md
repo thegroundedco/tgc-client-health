@@ -204,7 +204,16 @@ it; the disclosure in point 3 is computed, never written, for exactly that reaso
 | File | Why |
 |---|---|
 | `src/revenue/retentionMath.ts` | New. `revenueMath.ts` is already 231 lines and four unrelated exports; this is a distinct question with its own vocabulary. Matches `matrixMath` / `tenureMath` / `revenueMath`. |
-| `src/revenue/useRetention.ts` | Fetches exactly two months plus the roster — mirrors `useRevenue`'s seam. Two indexed reads, not thirteen months pulled to use two. |
+| `src/revenue/useRetention.ts` | Fetches the roster and the revenue rows — mirrors `useRevenue`'s seam. Two reads, run together. |
+
+**Note on the read, corrected 2026-09-09 while writing the plan.** An earlier draft of this section
+said "two indexed reads, not thirteen months pulled to use two". That contradicts §3.3: the current
+month is *the latest month holding entries*, which cannot be known without first looking at what
+months exist. So the hook reads the whole of `client_month_revenue` (client_id, period,
+retainer_cents) alongside the roster and picks the two months client-side. At thirteen months and
+eleven clients that is ~143 rows, and it stays small for years; it also gives slice 6f-3 its series
+for free. If the table ever outgrows a single read, the fix is a `max(period)` query first, not a
+fixed two-month filter.
 | `src/revenue/Retention.tsx` | Renders it. |
 | `src/shell/Revenue.tsx` | Mounts it; deletes the April 2027 paragraph. |
 
