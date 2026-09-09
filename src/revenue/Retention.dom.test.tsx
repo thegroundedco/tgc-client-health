@@ -65,12 +65,31 @@ describe('Retention', () => {
   it('discloses how many clients the figure is based on', () => {
     // The disclosure travels WITH the number, not as a footnote. An unentered
     // client silently shrinking the denominator is the failure this prevents.
+    // East Bay has no rows AT ALL, so the month missing is the base one.
     given({
       clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null }],
     })
 
-    expect(screen.getByTestId('retention-basis').textContent).toMatch(/2 of 3/)
-    expect(screen.getByTestId('retention-basis').textContent).toMatch(/no entry/i)
+    const basis = screen.getByTestId('retention-basis').textContent ?? ''
+    expect(basis).toMatch(/2 of 3/)
+    expect(basis).toMatch(/1 had no entry for September 2025/)
+    expect(basis).not.toContain('no entry for September 2026')
+  })
+
+  it('names the CURRENT month when the current month is the one missing', () => {
+    // The disclosure named the base month for both kinds of absence. East Bay
+    // here has September 2025 in full and is missing September 2026 -- the very
+    // month the owner has yet to type -- and the old sentence told him his 2025
+    // was the gap. The month named must be the month actually absent.
+    given({
+      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null }],
+      rows: [...ROWS, { client_id: 3, period: '2025-09-01', retainer_cents: 300000 }],
+    })
+
+    const basis = screen.getByTestId('retention-basis').textContent ?? ''
+    expect(basis).toMatch(/2 of 3/)
+    expect(basis).toMatch(/1 had no entry for September 2026/)
+    expect(basis).not.toContain('no entry for September 2025')
   })
 
   it('lists the biggest mover first', () => {

@@ -68,7 +68,8 @@ function RetentionReady({
     )
   }
 
-  const considered = report.included + report.unentered + report.newBusiness
+  const considered =
+    report.included + report.unenteredBase + report.unenteredCurrent + report.newBusiness
 
   return (
     <>
@@ -94,11 +95,19 @@ function RetentionReady({
 
       {/* The disclosure travels WITH the number, not as a footnote. An
           unentered client silently shrinking the denominator is exactly the
-          kind of quiet wrongness this page exists to avoid. */}
+          kind of quiet wrongness this page exists to avoid.
+
+          Two clauses, because spec section 3 produces two kinds of unentered
+          and they are absences in DIFFERENT MONTHS. Naming the base month for
+          both -- which this did -- tells the owner his October 2025 is missing
+          when October 2025 is entered in full and it is October 2026 he has yet
+          to type. Whichever month is actually absent is the month named. */}
       <p className={`t-caption ${styles.summary}`} data-testid="retention-basis">
         Based on {report.included} of {considered} clients
-        {report.unentered > 0 &&
-          ` · ${report.unentered} had no entry for ${formatPeriod(report.basePeriod)}`}
+        {report.unenteredBase > 0 &&
+          ` · ${report.unenteredBase} had no entry for ${formatPeriod(report.basePeriod)}`}
+        {report.unenteredCurrent > 0 &&
+          ` · ${report.unenteredCurrent} had no entry for ${formatPeriod(report.currentPeriod)}`}
         {report.newBusiness > 0 && ` · ${report.newBusiness} started since`}
       </p>
 

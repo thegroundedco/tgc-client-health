@@ -80,7 +80,8 @@ describe('retention — the classification rule, spec section 3', () => {
     )
 
     expect(report.included).toBe(2)
-    expect(report.unentered).toBe(0)
+    expect(report.unenteredBase).toBe(0)
+    expect(report.unenteredCurrent).toBe(0)
     const delta = report.contributions.find((entry) => entry.clientId === 2)
     expect(delta?.kind).toBe('churned')
     expect(delta?.currentCents).toBe(0)
@@ -98,7 +99,11 @@ describe('retention — the classification rule, spec section 3', () => {
     )
 
     expect(report.included).toBe(1)
-    expect(report.unentered).toBe(1)
+    // The CURRENT month is the one missing: Delta's base row is right there in
+    // the fixture. Counting this as unenteredBase would make the screen name
+    // the wrong month.
+    expect(report.unenteredCurrent).toBe(1)
+    expect(report.unenteredBase).toBe(0)
     expect(report.nrr).toBe(1)
     expect(report.contributions.some((entry) => entry.clientId === 2)).toBe(false)
   })
@@ -129,7 +134,8 @@ describe('retention — the classification rule, spec section 3', () => {
       CURRENT,
     )
 
-    expect(report.unentered).toBe(1)
+    expect(report.unenteredBase).toBe(1)
+    expect(report.unenteredCurrent).toBe(0)
     expect(report.newBusiness).toBe(0)
     expect(report.included).toBe(1)
   })
@@ -144,7 +150,37 @@ describe('retention — the classification rule, spec section 3', () => {
       CURRENT,
     )
 
-    expect(report.unentered).toBe(1)
+    expect(report.unenteredBase).toBe(1)
+    expect(report.newBusiness).toBe(0)
+  })
+
+  it('counts a missing BASE row and a missing CURRENT row separately', () => {
+    // The two absences are in different months, and the screen names the month.
+    // Collapsed into one counter -- as they were -- the disclosure said "had no
+    // entry for <base month>" about a client whose base month is entered in
+    // full and whose CURRENT month is the gap. Both are present here, with
+    // different totals, so summing them back into one cannot pass.
+    const clients = [
+      client(1, 'Acme'),
+      client(2, 'NoBase'),
+      client(3, 'NoCurrentA'),
+      client(4, 'NoCurrentB'),
+    ]
+    const rows = [
+      row(1, BASE, 400000),
+      row(1, CURRENT, 400000),
+      // NoBase: current only, started long ago, so not new business.
+      row(2, CURRENT, 900000),
+      // Both of these have a base figure and nobody has typed the current month.
+      row(3, BASE, 100000),
+      row(4, BASE, 200000),
+    ]
+
+    const report = retention(clients, rows, CURRENT)
+
+    expect(report.unenteredBase).toBe(1)
+    expect(report.unenteredCurrent).toBe(2)
+    expect(report.included).toBe(1)
     expect(report.newBusiness).toBe(0)
   })
 })

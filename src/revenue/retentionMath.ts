@@ -38,11 +38,20 @@ export type Contribution = {
 export type RetentionReport = {
   basePeriod: string
   currentPeriod: string
-  // Clients the rates are computed FROM, and the two exclusions, kept apart
-  // because they mean different things to a reader: one is a gap in the data
-  // and the other is business won since.
+  // Clients the rates are computed FROM, and the exclusions, kept apart
+  // because they mean different things to a reader: a gap in the data, and
+  // business won since.
+  //
+  // The gap is TWO counters, not one, because the two absences are in
+  // DIFFERENT MONTHS and the screen names the month. A single `unentered`
+  // total was rendered as "had no entry for <base month>" for both, which is
+  // a false sentence for the second: those clients have a base row and are
+  // missing the CURRENT one. The concrete case is the owner entering this
+  // month for eight of ten clients -- the two he skipped have last year's
+  // figures in full, and the page told him last year was what was missing.
   included: number
-  unentered: number
+  unenteredBase: number
+  unenteredCurrent: number
   newBusiness: number
   baseCents: number
   currentCents: number
@@ -97,7 +106,8 @@ export function retention(
   }
 
   const contributions: Contribution[] = []
-  let unentered = 0
+  let unenteredBase = 0
+  let unenteredCurrent = 0
   let newBusiness = 0
 
   for (const client of clients) {
@@ -110,7 +120,8 @@ export function retention(
       if (client.started_on !== null && monthOf(client.started_on) > basePeriod) {
         newBusiness += 1
       } else {
-        unentered += 1
+        // The absence is in the BASE month: no row to be retained against.
+        unenteredBase += 1
       }
       continue
     }
@@ -131,7 +142,10 @@ export function retention(
       // ordinary rule. Excluded from both sides so the rate stays a true
       // statement about the clients it does cover, and counted so the reader
       // knows how many it does not.
-      unentered += 1
+      // The absence is in the CURRENT month, not the base one -- this client
+      // has a base row. Counted apart from unenteredBase so the screen can
+      // name the month that is actually missing.
+      unenteredCurrent += 1
       continue
     }
 
@@ -192,7 +206,8 @@ export function retention(
     basePeriod,
     currentPeriod,
     included: contributions.length,
-    unentered,
+    unenteredBase,
+    unenteredCurrent,
     newBusiness,
     baseCents,
     currentCents,
