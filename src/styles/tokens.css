@@ -92,6 +92,27 @@
   --brand-ink-fixed: #1F1F1F;
   --brand-stone: #CFC8B6;
 
+  /* CHART SERIES — a THIRD pair pinned out of the dark flip, for the same
+     class of reason as the two above and with the measurements to say so.
+
+     Chosen by running the dataviz validator, not by eye, and the brand's own
+     teal and blush FAILED it: --brand-teal against --brand-blush measures
+     ΔE 3.4 under protanopia, so a red-green colourblind reader sees two
+     IDENTICAL bars and the retainer-versus-project split -- the entire point
+     of stacking -- does not exist for them. Both also sit under 3:1 on paper
+     (1.98 and 1.66). They are the obvious choice and they are wrong.
+
+     These two pass all five checks against BOTH grounds: lightness band,
+     chroma floor, CVD separation ΔE 13.7 (deutan) / 32.5 (tritan),
+     normal-vision ΔE 27.1, and >= 3:1 contrast on paper AND on the dark
+     ground. They do NOT flip, and that is a selection rather than an
+     oversight -- lighter dark-mode candidates were tried first (#2DD4BF,
+     #26C6B4, #14B8A6 against warm partners) and every one FAILS dark's
+     lightness band, while these two pass both. tests/themeParity.test.ts
+     asserts they stay put. */
+  --brand-chart-retainer: #0D9488;
+  --brand-chart-project: #C2410C;
+
   /* ==========================================================================
      DARK — the same roles at night. Paper is the ground and ink is the mark;
      neither is a lightness, which is why the SEMANTIC layer below needs no
@@ -134,6 +155,12 @@
   --surface-raised: var(--brand-paper-raised);
   --surface-sunken: var(--brand-paper-sunken);
   --rule-hairline: var(--brand-rule);
+
+  /* chart series. Retainer is the money that recurs and sits on the baseline;
+     project work stacks above it. Pinned -- see the brand layer's own comment
+     for the validator output and why the brand pair could not be used. */
+  --chart-retainer: var(--brand-chart-retainer);
+  --chart-project: var(--brand-chart-project);
 
   /* text. 15.39:1 and 5.46:1 on the page. */
   --text-primary: var(--brand-ink);

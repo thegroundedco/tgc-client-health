@@ -99,11 +99,32 @@ describe('the two dark blocks', () => {
     const both = [...declarations(MEDIA), ...declarations(OVERRIDE)].join(';')
     expect(both).not.toContain('--brand-ink-fixed')
     expect(both).not.toContain('--brand-stone')
+    // The chart series joined this list in slice 6d. Both were validated
+    // against the light ground AND the dark one and pass on both; flipping
+    // either would repoint it at a step nobody measured. The lighter dark-mode
+    // candidates tried first all FAIL dark's lightness band, so there is no
+    // better step waiting to be swapped in.
+    expect(both).not.toContain('--brand-chart-retainer')
+    expect(both).not.toContain('--brand-chart-project')
   })
 
   it('points the band label and the not-scored fill at the pinned tokens', () => {
     expect(CODE).toContain('--text-on-band: var(--brand-ink-fixed)')
     expect(CODE).toContain('--band-none: var(--brand-stone)')
+    expect(CODE).toContain('--chart-retainer: var(--brand-chart-retainer)')
+    expect(CODE).toContain('--chart-project: var(--brand-chart-project)')
+  })
+
+  // The pair the validator REJECTED. --brand-teal against --brand-blush is
+  // ΔE 3.4 under protanopia -- two identical bars for a red-green colourblind
+  // reader, which is the retainer/project distinction not existing at all. It
+  // is the obvious choice from the brand palette, which is exactly why it needs
+  // a test saying no rather than a comment.
+  it('never points a chart series at the brand teal or blush', () => {
+    expect(CODE).not.toContain('--chart-retainer: var(--brand-teal)')
+    expect(CODE).not.toContain('--chart-project: var(--brand-blush)')
+    expect(CODE).not.toContain('--chart-retainer: var(--brand-blush)')
+    expect(CODE).not.toContain('--chart-project: var(--brand-teal)')
   })
 })
 
