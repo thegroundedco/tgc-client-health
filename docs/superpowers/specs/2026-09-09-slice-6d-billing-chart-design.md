@@ -123,6 +123,53 @@ contrast-validated method. Picking two chart colours by eye is how this project 
 `.status-pill--ended` at 9.64:1 in light and **1.45:1 in dark**, where a churned client's status
 word vanished entirely.
 
+### 5.1 AMENDED 2026-09-09 — the palette was validated, and the brand pair failed
+
+Loaded the skill and ran its validator rather than reasoning about it. **The obvious choice —
+brand teal `#83C1C0` with brand blush `#FFB3AB` — FAILS**, and not marginally:
+
+| Check | Brand pair, light |
+|---|---|
+| Lightness band | FAIL — blush at 0.837, outside the band |
+| Chroma floor | FAIL — both read as gray |
+| **CVD separation** | **FAIL — ΔE 3.4 (protan)** |
+| Contrast vs surface | WARN — 1.98 and 1.66, both under 3:1 |
+
+ΔE 3.4 means a red-green colourblind reader sees **two identical bars**. The retainer/project
+distinction — the entire point of stacking — would not exist for them.
+
+**The validated pair is `--chart-retainer: #0D9488` and `--chart-project: #C2410C`.** All five
+checks pass in BOTH modes:
+
+| | Light (`#FBF7EB`) | Dark (`#201D18`) |
+|---|---|---|
+| Lightness band | PASS (0.43–0.77) | PASS (0.48–0.67) |
+| Chroma floor | PASS ≥ 0.1 | PASS ≥ 0.1 |
+| CVD separation | **PASS ΔE 13.7** (deutan), 32.5 tritan | same |
+| Normal-vision floor | PASS ΔE 27.1 | same |
+| Contrast vs surface | PASS ≥ 3:1 | PASS ≥ 3:1 |
+
+**These two tokens DO NOT FLIP between themes, and that is a selection rather than laziness.**
+Dark steps were chosen and validated independently as the skill requires; the lighter candidates
+tried first (`#2DD4BF`/`#FB923C`, `#26C6B4`/`#F0803C`, `#14B8A6`/`#F97316`) all FAIL dark's
+lightness band. The same two values pass both. They therefore join `--text-on-band`,
+`--band-none` and `--brand-red-legible` as **pinned out of the dark flip**, and
+`tests/themeParity.test.ts` must assert they do not move.
+
+### 5.2 AMENDED — what else the skill mandates, beyond colour
+
+Non-negotiables from the skill that §6 as originally written did not cover:
+
+- **A legend is always present for two or more series.** Identity may never be colour alone.
+- **A table view of the same numbers must exist.** Stronger than the "reachable as text" §6 asked
+  for, and it is also what discharges the contrast obligation on any mark.
+- **A per-mark hover tooltip**, on focus as well as hover so it is reachable by keyboard. The
+  skill exempts only a bare stat tile.
+- **A 2px surface-coloured gap between stacked segments**, so retainer and project read as two
+  marks rather than one bar with a colour change.
+- **Text wears text tokens, never the series colour.** Values and labels stay in ink; a coloured
+  swatch beside them carries identity.
+
 ---
 
 ## 6. Reading it without seeing it
