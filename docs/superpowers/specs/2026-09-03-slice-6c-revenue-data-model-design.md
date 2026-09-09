@@ -29,6 +29,15 @@ table is right; if one does, this spec was wrong.
 
 ### 1.1 Why the sequencing is what it is
 
+> **SUPERSEDED 2026-09-09 — read this before acting on the paragraph below.** The six-month limit
+> stated here was true when written and is not true now: the owner confirmed **thirteen months of
+> real revenue taken from invoices in QuickBooks Online**. Only the premise changed; the reasoning
+> was sound. This matters because **the April 2027 date for GRR/NRR is derived from this paragraph**
+> — anyone re-deriving it from the six-month figure will wrongly conclude retention cannot ship.
+> It can, and it is specified in
+> `docs/superpowers/specs/2026-09-09-slice-6f-1-retention-design.md`. Questions 1 and 3 (slices 6d
+> and 6e) are likewise unblocked earlier than this table says.
+
 The owner can enter six months of real history — April 2026 through September 2026 — and no more,
 because six months is what the records support. **[owner]** That is a data fact, not an appetite:
 entering a seventh month would mean entering a remembered number as though it were a record.
