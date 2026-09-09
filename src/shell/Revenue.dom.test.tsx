@@ -11,14 +11,27 @@ vi.mock('../revenue/useTenure', () => ({ useTenure: vi.fn() }))
 // to a ready, empty read that renders nothing this file's assertions collide
 // with.
 vi.mock('../revenue/useRevenue', () => ({ useRevenue: vi.fn() }))
+// Retention mounts on this page too, from this slice, and owns its own
+// useRetention read exactly the way Concentration owns useRevenue -- same
+// reason, same seam: left unmocked it would hit the real Supabase client on
+// every test in this file.
+vi.mock('../revenue/useRetention', () => ({ useRetention: vi.fn() }))
 
 import { Revenue } from './Revenue'
 import { formatTenure, tenureDays, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 import { useRevenue } from '../revenue/useRevenue'
+import { useRetention } from '../revenue/useRetention'
 
 beforeEach(() => {
   vi.mocked(useRevenue).mockReturnValue({
+    status: 'ready',
+    loadError: null,
+    clients: [],
+    rows: [],
+    reload: vi.fn(),
+  })
+  vi.mocked(useRetention).mockReturnValue({
     status: 'ready',
     loadError: null,
     clients: [],
@@ -31,6 +44,7 @@ afterEach(() => {
   document.body.innerHTML = ''
   vi.mocked(useTenure).mockReset()
   vi.mocked(useRevenue).mockReset()
+  vi.mocked(useRetention).mockReset()
 })
 
 // Started in 2020, deliberately, and far enough back that the tenure it
@@ -75,7 +89,7 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
   })
 
-  it('names its three sections with the words a reader would search for', () => {
+  it('names its four sections with the words a reader would search for', () => {
     // Discoverability, and it earned a test the hard way. The sections used to
     // be headed "Who we are most exposed to", "How long clients stay" and "Who
     // has left" -- accurate descriptions, and none of them the word anybody
@@ -83,8 +97,8 @@ describe('the Revenue destination', () => {
     // concentration report on the live site and concluded it had not shipped;
     // it was the first section on the page.
     //
-    // Pinned here rather than in the three component tests because the thing
-    // being guaranteed is a property of the PAGE: these three, together,
+    // Pinned here rather than in the four component tests because the thing
+    // being guaranteed is a property of the PAGE: these four, together,
     // present. A per-component assertion would still pass with a section
     // dropped from Revenue.tsx entirely.
     given()
@@ -92,6 +106,7 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Concentration' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Tenure' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Churn' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Retention' })).toBeTruthy()
   })
 
   it('shows both halves once the read lands', async () => {
@@ -134,16 +149,16 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('list', { name: 'Tenure' }).textContent).toContain(expected)
   })
 
-  // The paragraph that was on this page before the report existed said the
-  // history of monthly amounts retention needs did not exist. As of slice 6c
-  // it does, so the sentence changed on 2026-09-03 to name what is actually
-  // still missing: enough calendar time for revenueMath.rate() to run, which
-  // it refuses to do below MIN_RATE_PERIODS. Spec §7.
-  it('keeps saying what is still missing and why', () => {
+  it('no longer says retention is waiting for a data model', () => {
+    // The page apologised for retention from slice 6b until this slice shipped
+    // it. That paragraph named a date derived from the entry screen's six-month
+    // reach, and it has been wrong since the backfill landed -- the third time
+    // a sentence on this page went stale because the data moved underneath it.
     given()
 
-    expect(document.body.textContent).toContain('thirteen months')
-    expect(document.body.textContent).toContain('April 2027')
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/not here yet/i)
+    expect(text).not.toMatch(/April 2027/i)
   })
 
   it('says it is loading rather than showing an empty report', () => {

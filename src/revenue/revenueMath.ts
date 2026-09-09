@@ -143,6 +143,17 @@ export function allocatePercentages(
 // produce the second one can. Nothing calls this yet -- no rate ships in slice
 // 6c -- and it exists anyway, because removing the old guard without putting
 // this one in place in the same change would leave a window with neither.
+//
+// GROWTH, not retention -- last period over first, across whatever window is
+// passed in. That is slice 6d's question ("is revenue larger than it was"),
+// and a different one from retention's ("did we keep the money we already
+// had"): a roster that churned its smallest clients and backfilled with
+// larger new ones can show growth here while NRR and GRR, in
+// retentionMath.ts, report the churn plainly. Nothing calls `rate()` as of
+// slice 6f-1 either, and it stays -- deliberately unused rather than dead --
+// for the same reason it was written unused in 6c: 6d's growth question is
+// real and this is its arithmetic, waiting on its own slice rather than on
+// retention borrowing it for a question it does not answer.
 export function rate(periods: readonly number[]): number | null {
   if (periods.length < MIN_RATE_PERIODS) return null
   const first = periods[0]

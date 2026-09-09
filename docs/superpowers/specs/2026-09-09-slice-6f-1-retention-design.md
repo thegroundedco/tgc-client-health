@@ -188,8 +188,20 @@ On the Revenue destination, as a fourth section beside Concentration, Tenure and
 
 1. **NRR**, large. **GRR** beside it, smaller but not hidden.
 2. The split: expansion, contraction, churn — the three movements that produce those two numbers.
-3. **Every figure carries its client count**: *"Based on 9 of 11 clients — 1 had no entry for
-   September 2025, 1 started since."* Not a footnote; the disclosure travels with the number.
+3. **Every figure carries its client count**: *"Based on 8 of 11 clients — 1 had no entry for
+   September 2025, 1 had no entry for September 2026, 1 started since."* Not a footnote; the
+   disclosure travels with the number.
+
+   **Two unentered clauses, not one, and each names its own month.** §3 creates two kinds of
+   unentered, and they are absences in *different months*: a client with no **base** row (§3's
+   table rows 5 and 6) is missing the base month, while a client who has a base row, has no
+   **current** row and is still active (row 3) is missing the **current** month. An earlier
+   draft of this point showed only the base-month clause, and the screen built from it kept one
+   counter and named the base month for both — so the owner who had entered eight of ten clients
+   for this month was told the two he skipped "had no entry for September 2025", a month they had
+   entered in full, when what was missing was the month he was on his way to fill in. Count the
+   two kinds separately, render a clause only for a kind whose count is non-zero, and name in each
+   clause whichever month is actually absent.
 4. The per-client contributions, largest effect first: name, base → current, and the delta.
 
 The existing paragraph — *"Revenue retention is not here yet: it needs thirteen months of entered
