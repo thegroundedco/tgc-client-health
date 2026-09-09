@@ -102,6 +102,42 @@ describe('Retention', () => {
     expect(names).toEqual(['Acme', 'Delta'])
   })
 
+  it('splits the movement into expansion, contraction and churn, each labelled', () => {
+    // Spec section 5 point 2, and it was rendered with nothing pinning it: no
+    // test in the suite named retention-movement, expansion, contraction or
+    // churnedCents, so transposing two of the words -- or deleting the
+    // paragraph outright -- left all 1141 tests green while the screen lied or
+    // lost an element. The three amounts here are deliberately different from
+    // one another ($2,000 / $3,000 / $4,000) so that a swapped pair cannot
+    // still match.
+    given({
+      clients: [
+        { id: 1, name: 'Up', started_on: '2020-01-01', ended_on: null },
+        { id: 2, name: 'Down', started_on: '2020-01-01', ended_on: null },
+        { id: 3, name: 'Gone', started_on: '2020-01-01', ended_on: '2026-01-31' },
+      ],
+      rows: [
+        { client_id: 1, period: '2025-09-01', retainer_cents: 100000 },
+        { client_id: 1, period: '2026-09-01', retainer_cents: 300000 },
+        { client_id: 2, period: '2025-09-01', retainer_cents: 500000 },
+        { client_id: 2, period: '2026-09-01', retainer_cents: 200000 },
+        { client_id: 3, period: '2025-09-01', retainer_cents: 400000 },
+      ],
+    })
+
+    const movement = screen.getByTestId('retention-movement').textContent ?? ''
+
+    expect(movement).toContain('$2,000 expansion')
+    expect(movement).toContain('$3,000 contraction')
+    expect(movement).toContain('$4,000 churn')
+    // In that order, which is the order spec section 5 point 2 states.
+    expect(movement).toMatch(/expansion.*contraction.*churn/)
+    // Contraction and churn are held signed in the arithmetic (spec section 4)
+    // and shown as magnitudes beside their own word. A minus reaching the
+    // screen would read as a double negative.
+    expect(movement).not.toContain('-$')
+  })
+
   it('shows the delta on each row, signed so a rise and a fall differ at a glance', () => {
     // Spec section 5 point 4. Without it the row is a bare before/after pair and
     // the ordering -- by ABSOLUTE delta, which spec section 4 calls "the answer
