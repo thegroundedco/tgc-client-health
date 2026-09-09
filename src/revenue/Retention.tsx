@@ -65,6 +65,32 @@ function RetentionReady({
     )
   }
 
+  // NO CLIENTS AT ALL, which is not the same fact as a base month nobody
+  // entered and must not borrow the sentence below. Both leave baseCents at 0
+  // and both rates null, so this branch has to come first -- Concentration.tsx
+  // hit the identical trap and its comment says the sentence "must not be
+  // borrowed".
+  //
+  // The distinction is an instruction, not a nicety: "September 2025 has no
+  // entered revenue" tells a reader to go and enter September 2025, which is
+  // right when clients are waiting and wrong when the roster is empty -- there
+  // is nobody to enter it for, and the entry grid would be blank too. And an
+  // empty roster is exactly what a broken eligibility filter produces
+  // (useRetention losing its roster arm returns no clients whatsoever), so the
+  // entry sentence would send somebody hunting for missing data entry instead
+  // of for the bug.
+  //
+  // Keyed on the ROSTER, not on the arithmetic, for the same reason
+  // Concentration keys its version on roster length: the claim the sentence
+  // makes is about the roster, so it has to read the roster.
+  if (clients.length === 0) {
+    return (
+      <p className="t-body prose">
+        No clients were on the books, so there is nothing to measure retention across.
+      </p>
+    )
+  }
+
   const report = retention(clients, rows, period)
 
   // Both rates are null together -- they share a denominator. Rendering a

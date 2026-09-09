@@ -168,6 +168,20 @@ describe('Retention', () => {
     expect(document.body.textContent).toMatch(/not enough history|no retention/i)
   })
 
+  it('says the roster is empty rather than blaming the base month', () => {
+    // Concentration.tsx solved this identical trap first and its comment says
+    // the sentence "must not be borrowed". An empty roster with revenue on file
+    // leaves baseCents at 0, so without its own branch the page reads
+    // "September 2025 has no entered revenue" -- which sends the reader off to
+    // enter a month for clients who do not exist, when what they are actually
+    // looking at is an empty roster (a broken eligibility filter, most likely).
+    given({ clients: [], rows: ROWS })
+
+    expect(screen.queryByTestId('retention-nrr')).toBeNull()
+    expect(document.body.textContent).toContain('No clients were on the books')
+    expect(document.body.textContent).not.toContain('has no entered revenue')
+  })
+
   it('says it is loading rather than showing an empty report', () => {
     given({ status: 'loading' })
 
