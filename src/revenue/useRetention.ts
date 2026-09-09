@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
-import type { RetentionClient, RetentionRow } from './retentionMath'
+import type { RetentionClient } from './retentionMath'
+import type { RevenueRow } from './chartMath'
 
 // The roster and the revenue history, read together. A seam in the same shape
 // as useTenure and useRevenue: the screen's fetch has to be mockable.
@@ -18,16 +19,27 @@ import type { RetentionClient, RetentionRow } from './retentionMath'
 // The same argument useTenure makes for itself.
 const ROSTER_COLUMNS = 'id, name, started_on, ended_on'
 
-// retainer_cents ONLY. Spec section 2: project work is real revenue nobody
-// expects to repeat, so it is excluded from retention at the query, where it
-// cannot later be picked up by accident.
-const REVENUE_COLUMNS = 'client_id, period, retainer_cents'
+// BOTH money columns, changed in slice 6d, and the guarantee moved rather than
+// weakened.
+//
+// 6f-1 excluded project_cents HERE, at the query, so retention could not pick it
+// up by accident. But the billing chart needs it and reads the same whole table,
+// and two hooks would fetch it twice AND could anchor to different latest months
+// while both looked authoritative -- the failure Revenue.tsx now avoids by
+// owning one read.
+//
+// So retention's "retainer only" rule moved to the TYPE: `RetentionRow` has no
+// project_cents field at all, so `retention()` cannot read one however the rows
+// arrive. retentionMath.test.ts proves it behaviourally -- feeding it rows WITH
+// project work leaves every rate unchanged -- which is a stronger statement than
+// a column missing from a string.
+const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents'
 
 export type UseRetention = {
   status: 'loading' | 'ready' | 'error'
   loadError: string | null
   clients: RetentionClient[]
-  rows: RetentionRow[]
+  rows: RevenueRow[]
   reload: () => void
 }
 
@@ -35,7 +47,7 @@ export function useRetention(): UseRetention {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [clients, setClients] = useState<RetentionClient[]>([])
-  const [rows, setRows] = useState<RetentionRow[]>([])
+  const [rows, setRows] = useState<RevenueRow[]>([])
 
   const load = useCallback(async (isCancelled: () => boolean) => {
     setStatus('loading')
@@ -63,7 +75,7 @@ export function useRetention(): UseRetention {
       }
 
       setClients((roster.data ?? []) as RetentionClient[])
-      setRows((revenue.data ?? []) as RetentionRow[])
+      setRows((revenue.data ?? []) as RevenueRow[])
       setLoadError(null)
       setStatus('ready')
     } catch (thrown: unknown) {

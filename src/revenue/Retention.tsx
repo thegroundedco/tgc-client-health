@@ -2,7 +2,7 @@ import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
 import { latestPeriod, retention } from './retentionMath'
 import type { RetentionClient, RetentionRow } from './retentionMath'
-import { useRetention } from './useRetention'
+import type { UseRetention } from './useRetention'
 import styles from './Revenue.module.css'
 
 // Whole percentages. The underlying ratio is exact; the display is rounded
@@ -26,8 +26,13 @@ function formatDelta(cents: number): string {
 // What happened to the money we already had. NRR leads and GRR sits beside it,
 // which is the owner's ruling verbatim: "Net is most important, but we still
 // want visibility into gross."
-export function Retention() {
-  const read = useRetention()
+// Takes the read rather than making it, as of slice 6d. Billing needs the same
+// whole-table rows, and two components each calling useRetention would issue two
+// identical reads -- and, worse, could resolve either side of a save and anchor
+// to DIFFERENT latest months while both looked authoritative. Revenue.tsx owns
+// the call and hands it down. Concentration keeps its own useRevenue read: that
+// one reads a single month through a different filter and shares nothing here.
+export function Retention({ read }: { read: UseRetention }) {
 
   return (
     <section className={styles.section}>

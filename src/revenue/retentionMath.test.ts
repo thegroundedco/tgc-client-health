@@ -318,6 +318,30 @@ describe('retention — the arithmetic, spec section 4', () => {
     expect(report.grr).toBe(null)
   })
 
+  it('IGNORES project work even when the rows carry it', () => {
+    // Where the retainer-only guarantee lives as of slice 6d. It used to be
+    // enforced by omitting the column from useRetention's select; the billing
+    // chart needs that column, so the rule moved to this function, which reads
+    // retainer_cents and nothing else however wide the rows are.
+    //
+    // Behavioural, not structural: identical retainers with wildly different
+    // project work must produce identical rates. If project work ever leaked
+    // into the sum, these two would diverge.
+    const withProject = [
+      { client_id: 1, period: BASE, retainer_cents: 400000, project_cents: 999999 },
+      { client_id: 1, period: CURRENT, retainer_cents: 500000, project_cents: 111111 },
+    ]
+    const without = [row(1, BASE, 400000), row(1, CURRENT, 500000)]
+
+    const a = retention([client(1, 'Acme')], withProject, CURRENT)
+    const b = retention([client(1, 'Acme')], without, CURRENT)
+
+    expect(a.nrr).toBe(b.nrr)
+    expect(a.grr).toBe(b.grr)
+    expect(a.currentCents).toBe(b.currentCents)
+    expect(a.baseCents).toBe(b.baseCents)
+  })
+
   it('never reads project work', () => {
     // Spec section 2. RetentionRow has no project_cents field at all, so this
     // is a type-level guarantee -- asserted here so that widening the type

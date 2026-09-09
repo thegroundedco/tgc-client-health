@@ -14,10 +14,10 @@ const CLIENTS = [
 ]
 
 const ROWS = [
-  { client_id: 1, period: '2025-09-01', retainer_cents: 400000 },
-  { client_id: 1, period: '2026-09-01', retainer_cents: 500000 },
-  { client_id: 2, period: '2025-09-01', retainer_cents: 200000 },
-  { client_id: 2, period: '2026-09-01', retainer_cents: 100000 },
+  { client_id: 1, period: '2025-09-01', retainer_cents: 400000, project_cents: 0 },
+  { client_id: 1, period: '2026-09-01', retainer_cents: 500000, project_cents: 0 },
+  { client_id: 2, period: '2025-09-01', retainer_cents: 200000, project_cents: 0 },
+  { client_id: 2, period: '2026-09-01', retainer_cents: 100000, project_cents: 0 },
 ]
 
 function given(over: Partial<ReturnType<typeof useRetention>> = {}) {
@@ -29,7 +29,7 @@ function given(over: Partial<ReturnType<typeof useRetention>> = {}) {
     reload: vi.fn(),
     ...over,
   })
-  return render(<Retention />)
+  return render(<Retention read={vi.mocked(useRetention)()} />)
 }
 
 beforeEach(() => vi.mocked(useRetention).mockReset())
@@ -83,7 +83,7 @@ describe('Retention', () => {
     // was the gap. The month named must be the month actually absent.
     given({
       clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null }],
-      rows: [...ROWS, { client_id: 3, period: '2025-09-01', retainer_cents: 300000 }],
+      rows: [...ROWS, { client_id: 3, period: '2025-09-01', retainer_cents: 300000, project_cents: 0 }],
     })
 
     const basis = screen.getByTestId('retention-basis').textContent ?? ''
@@ -117,11 +117,11 @@ describe('Retention', () => {
         { id: 3, name: 'Gone', started_on: '2020-01-01', ended_on: '2026-01-31' },
       ],
       rows: [
-        { client_id: 1, period: '2025-09-01', retainer_cents: 100000 },
-        { client_id: 1, period: '2026-09-01', retainer_cents: 300000 },
-        { client_id: 2, period: '2025-09-01', retainer_cents: 500000 },
-        { client_id: 2, period: '2026-09-01', retainer_cents: 200000 },
-        { client_id: 3, period: '2025-09-01', retainer_cents: 400000 },
+        { client_id: 1, period: '2025-09-01', retainer_cents: 100000, project_cents: 0 },
+        { client_id: 1, period: '2026-09-01', retainer_cents: 300000, project_cents: 0 },
+        { client_id: 2, period: '2025-09-01', retainer_cents: 500000, project_cents: 0 },
+        { client_id: 2, period: '2026-09-01', retainer_cents: 200000, project_cents: 0 },
+        { client_id: 3, period: '2025-09-01', retainer_cents: 400000, project_cents: 0 },
       ],
     })
 
@@ -162,7 +162,7 @@ describe('Retention', () => {
 
   it('renders no rate at all when the base month is empty', () => {
     // Spec 4.1. No NaN%, no 0% -- a number nobody can stand behind is not shown.
-    given({ rows: [{ client_id: 1, period: '2026-09-01', retainer_cents: 400000 }] })
+    given({ rows: [{ client_id: 1, period: '2026-09-01', retainer_cents: 400000, project_cents: 0 }] })
 
     expect(screen.queryByTestId('retention-nrr')).toBeNull()
     expect(document.body.textContent).toMatch(/not enough history|no retention/i)

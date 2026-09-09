@@ -91,3 +91,60 @@
   block-size: 100%;
   background: var(--action-face);
 }
+
+/* The billing chart. A viewBox-scaled SVG, so the height here is what decides
+   how tall it draws -- the coordinate space inside is fixed. */
+.chart {
+  inline-size: 100%;
+  block-size: 200px;
+  margin-block: var(--space-3);
+  /* Bars are focusable for the keyboard tooltip, and a focus ring on an SVG
+     child needs somewhere to draw: without this the ring is clipped by the
+     viewport edge on the first and last month. */
+  overflow: visible;
+}
+
+.chart g:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+/* The legend's colour chips. Small, and they carry the ONLY colour in the
+   legend -- the words beside them stay in ink, because text wearing the series
+   colour is how a legend stops being readable at low contrast. */
+.swatchRetainer,
+.swatchProject {
+  display: inline-block;
+  inline-size: 0.75em;
+  block-size: 0.75em;
+  border-radius: 2px;
+  vertical-align: baseline;
+  margin-inline-end: 0.25em;
+}
+
+.swatchRetainer {
+  background: var(--chart-retainer);
+}
+
+.swatchProject {
+  background: var(--chart-project);
+}
+
+/* The chart's numbers as text. Not a fallback -- the path by which the chart is
+   readable at all without sight of it. */
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  margin-block-start: var(--space-3);
+}
+
+.table th,
+.table td {
+  padding-block: var(--space-1);
+  text-align: start;
+  border-block-end: 1px solid var(--rule-hairline);
+}
+
+.table td {
+  font-variant-numeric: tabular-nums;
+}

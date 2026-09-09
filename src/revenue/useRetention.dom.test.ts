@@ -106,9 +106,18 @@ describe('useRetention', () => {
     expect(revenue).toContain('retainer_cents')
   })
 
-  it('does not read project work', async () => {
-    // Spec section 2, enforced at the query. Retention reads the retainer only,
-    // and a column that is never fetched cannot accidentally reach the maths.
+  it('reads project work too, because the billing chart needs it', async () => {
+    // CHANGED IN SLICE 6D, and the guarantee moved rather than went away. This
+    // used to assert project_cents was ABSENT, so retention could not pick it up
+    // by accident. The billing chart needs it and reads the same whole table;
+    // two hooks would fetch it twice and could anchor to different latest
+    // months while both looked authoritative.
+    //
+    // Retention's "retainer only" rule now lives in the TYPE -- RetentionRow has
+    // no project_cents field, so retention() cannot read one however the rows
+    // arrive -- and retentionMath.test.ts proves it behaviourally by feeding it
+    // rows WITH project work and asserting the rates do not move. That is a
+    // stronger statement than a column missing from a string.
     const captured = given({
       clients: { data: [CLIENT], error: null },
       client_month_revenue: { data: [ROW], error: null },
@@ -117,6 +126,6 @@ describe('useRetention', () => {
     const { result } = renderHook(() => useRetention())
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
-    expect(captured.client_month_revenue?.select[0] ?? '').not.toContain('project_cents')
+    expect(captured.client_month_revenue?.select[0] ?? '').toContain('project_cents')
   })
 })

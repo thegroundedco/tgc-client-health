@@ -89,6 +89,24 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
   })
 
+  it('puts its five sections in the order the spec argues for', () => {
+    // Slice 6d. The order is an argument, not an accident: what we are billing
+    // and whether it is moving, then how much of last year we kept, then who we
+    // are most exposed to, then how long clients stay and who left. Aggregate to
+    // individual.
+    //
+    // Asserted as a SEQUENCE rather than as five presence checks, because the
+    // reorder IS the deliverable -- Retention used to sit at the bottom, below
+    // Churn, and it is the figure the owner reports upward. Five presence
+    // assertions would pass with the old order intact.
+    given()
+
+    const headings = screen
+      .getAllByRole('heading', { level: 3 })
+      .map((node) => node.textContent)
+    expect(headings).toEqual(['Billing', 'Retention', 'Concentration', 'Tenure', 'Churn'])
+  })
+
   it('names its four sections with the words a reader would search for', () => {
     // Discoverability, and it earned a test the hard way. The sections used to
     // be headed "Who we are most exposed to", "How long clients stay" and "Who
