@@ -102,4 +102,16 @@ describe('Retention', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('permission denied')
   })
+
+  it('guards against calling retention() with a null period from an empty table', () => {
+    // This is day one: no revenue has been entered yet. latestPeriod() returns
+    // null on an empty table, and retention() cannot be called with it. The
+    // early return prevents a type error at best and a crash at worst.
+    given({ rows: [] })
+
+    expect(screen.queryByTestId('retention-nrr')).toBeNull()
+    expect(screen.queryByTestId('retention-grr')).toBeNull()
+    expect(document.body.textContent).toContain('No retention yet')
+    expect(document.body.textContent).toContain('no revenue has been entered')
+  })
 })
