@@ -137,7 +137,14 @@ describe('the shell', () => {
   it('moves between destinations', async () => {
     renderShell()
     await userEvent.click(screen.getByRole('button', { name: 'Revenue' }))
-    expect(document.body.textContent).toContain('April 2027')
+    // 'April 2027' was this assertion's marker for having actually reached the
+    // Revenue destination, and it went stale in the same slice that retired
+    // the paragraph it was quoted from (slice 6f-1, src/shell/Revenue.tsx).
+    // Concentration's own heading is unconditional -- it renders before its
+    // read resolves either way -- so it survives a real Supabase client
+    // throwing here (this file stubs '../lib/supabase' to {}) the same way the
+    // literal text used to.
+    expect(screen.getByRole('heading', { name: 'Concentration' })).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
     expect(document.body.textContent).toContain('snapshot')
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))

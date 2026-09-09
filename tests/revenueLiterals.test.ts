@@ -15,17 +15,22 @@ import { describe, expect, it } from 'vitest'
 
 const ROOT = join(import.meta.dirname, '..')
 
-// Both files that render on the Revenue page, not just the shell that hosts
+// Every file that renders on the Revenue page, not just the shell that hosts
 // them. Tenure.tsx was missing here entirely until a reviewer proved the gap
 // by inserting a literal "Retention is running at 91.2% this year." into it
 // and watching the whole suite pass -- this file only ever read Revenue.tsx,
 // and Churn.tsx's guard (see its own module comment) covers itself and
-// nothing else. Two files, not a directory scan: a directory scan would catch
-// a stray literal in a file that never reaches this page and give a false
-// sense that the rule is broader than it is.
+// nothing else. Retention.tsx joined this list the same way, from slice 6f-1:
+// it renders real NRR/GRR percentages computed by retentionMath, which is
+// exactly what this guard is meant to allow -- a fabricated one, typed into
+// its markup instead of computed, is what it forbids. Three files, not a
+// directory scan: a directory scan would catch a stray literal in a file that
+// never reaches this page and give a false sense that the rule is broader
+// than it is.
 const GUARDED_FILES = [
   join(ROOT, 'src', 'shell', 'Revenue.tsx'),
   join(ROOT, 'src', 'revenue', 'Tenure.tsx'),
+  join(ROOT, 'src', 'revenue', 'Retention.tsx'),
 ]
 
 describe('the Revenue page', () => {

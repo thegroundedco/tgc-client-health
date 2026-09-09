@@ -1,14 +1,17 @@
 import { Churn } from '../revenue/Churn'
 import { Concentration } from '../revenue/Concentration'
+import { Retention } from '../revenue/Retention'
 import { Tenure } from '../revenue/Tenure'
 import { defaultPeriod } from '../lib/month'
 import { currentRows, departedRows, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 import styles from './Page.module.css'
 
-// Spec §7. The report sits above the note about what is still missing, so the
-// page reads: what we can tell you, then what we cannot and why. It stopped
-// being a page that only apologises on 2026-09-03.
+// Spec §7. As of slice 6f-1 every section here reports something rather than
+// apologising for its absence: the paragraph that used to close this page,
+// naming a date by which retention would become possible, is retired -- it
+// went stale once already (the backfill landed before the date it named), and
+// Retention below now renders the real thing instead of a promise about it.
 export function Revenue() {
   const report = useTenure()
 
@@ -22,6 +25,8 @@ export function Revenue() {
       <h2 className="t-header">Revenue</h2>
 
       <Concentration month={defaultPeriod()} />
+
+      <Retention />
 
       {report.status === 'loading' && <p className="t-body">Loading…</p>}
 
@@ -37,17 +42,6 @@ export function Revenue() {
           <Churn rows={departedRows(report.clients)} />
         </>
       )}
-
-      {/* Revenue.tsx no longer has an excuse: the monthly history slice 6c
-          built is what retention needs, and it is here. What is left is
-          arithmetic waiting on a calendar, not a missing data model --
-          revenueMath.rate() refuses to run until it has thirteen months to
-          measure across, one period and the twelve behind it, and the
-          earliest month that can supply them is April 2027. */}
-      <p className="t-body prose">
-        Revenue retention is not here yet: it needs thirteen months of entered revenue to measure
-        a rate across, and the earliest month that will have them is April 2027.
-      </p>
     </section>
   )
 }
