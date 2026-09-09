@@ -102,6 +102,28 @@ describe('Retention', () => {
     expect(names).toEqual(['Acme', 'Delta'])
   })
 
+  it('shows the delta on each row, signed so a rise and a fall differ at a glance', () => {
+    // Spec section 5 point 4. Without it the row is a bare before/after pair and
+    // the ordering -- by ABSOLUTE delta, which spec section 4 calls "the answer
+    // to why did it move" -- has no visible basis, so eleven rows read as an
+    // arbitrary sequence. Acme rose $1,000 and Delta fell $1,000: the same size
+    // in opposite directions, so an unsigned delta would print identically on
+    // both and tell the reader nothing.
+    given()
+
+    const rows = screen
+      .getAllByTestId('retention-contribution-name')
+      .map((node) => node.closest('li')?.textContent ?? '')
+
+    expect(rows[0]).toContain('Acme')
+    expect(rows[0]).toContain('+$1,000')
+    expect(rows[0]).not.toContain('-$1,000')
+
+    expect(rows[1]).toContain('Delta')
+    expect(rows[1]).toContain('-$1,000')
+    expect(rows[1]).not.toContain('+$1,000')
+  })
+
   it('renders no rate at all when the base month is empty', () => {
     // Spec 4.1. No NaN%, no 0% -- a number nobody can stand behind is not shown.
     given({ rows: [{ client_id: 1, period: '2026-09-01', retainer_cents: 400000 }] })

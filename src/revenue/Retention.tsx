@@ -12,6 +12,17 @@ function formatRate(rate: number): string {
   return `${Math.round(rate * 100)}%`
 }
 
+// The per-client movement, signed. formatMoney already carries a minus on a
+// negative, so only a rise needs a mark -- and it needs one: without a sign a
+// rise and a fall look alike until the reader compares the two figures beside
+// it and subtracts. Spec section 5 point 4 puts the delta on the row, and the
+// list's ordering depends on it being there: the rows are sorted by ABSOLUTE
+// delta, which spec section 4 calls "the answer to why did it move", and eleven
+// before/after pairs in an order with no visible basis read as arbitrary.
+function formatDelta(cents: number): string {
+  return cents > 0 ? `+${formatMoney(cents)}` : formatMoney(cents)
+}
+
 // What happened to the money we already had. NRR leads and GRR sits beside it,
 // which is the owner's ruling verbatim: "Net is most important, but we still
 // want visibility into gross."
@@ -127,7 +138,8 @@ function RetentionReady({
               )}
             </span>
             <span className={`t-body ${styles.measure}`}>
-              {formatMoney(entry.baseCents)} → {formatMoney(entry.currentCents)}
+              {formatMoney(entry.baseCents)} → {formatMoney(entry.currentCents)} ·{' '}
+              {formatDelta(entry.deltaCents)}
             </span>
           </li>
         ))}
