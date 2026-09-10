@@ -8,7 +8,13 @@ vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 import { supabase } from '../lib/supabase'
 import { useRetention } from './useRetention'
 
-const CLIENT = { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null }
+const CLIENT = {
+  id: 1,
+  name: 'Acme',
+  started_on: '2020-01-01',
+  ended_on: null,
+  end_reason_code: null,
+}
 const ROW = { client_id: 1, period: '2026-09-01', retainer_cents: 400000 }
 
 // Records what each table's chain was asked for. The chain used to discard its
@@ -99,6 +105,11 @@ describe('useRetention', () => {
     expect(roster).toContain('name')
     expect(roster).toContain('started_on')
     expect(roster).toContain('ended_on')
+    // Slice 6f-2's exclusions control reads why a client left. The hook casts
+    // its response, so a column dropped from the string arrives as undefined
+    // and every departure silently looks unexplained -- which the control
+    // treats as "keep", so the toggle would quietly stop excluding anything.
+    expect(roster).toContain('end_reason_code')
 
     const revenue = captured.client_month_revenue?.select[0] ?? ''
     expect(revenue).toContain('client_id')

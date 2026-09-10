@@ -106,6 +106,10 @@ describe('the two dark blocks', () => {
     // better step waiting to be swapped in.
     expect(both).not.toContain('--brand-chart-retainer')
     expect(both).not.toContain('--brand-chart-project')
+    // The movement bar's two joined them in slice 6f-2, validated in both
+    // modes for the same reason and by the same script.
+    expect(both).not.toContain('--brand-chart-gain')
+    expect(both).not.toContain('--brand-chart-loss')
   })
 
   it('points the band label and the not-scored fill at the pinned tokens', () => {
@@ -113,6 +117,8 @@ describe('the two dark blocks', () => {
     expect(CODE).toContain('--band-none: var(--brand-stone)')
     expect(CODE).toContain('--chart-retainer: var(--brand-chart-retainer)')
     expect(CODE).toContain('--chart-project: var(--brand-chart-project)')
+    expect(CODE).toContain('--chart-gain: var(--brand-chart-gain)')
+    expect(CODE).toContain('--chart-loss: var(--brand-chart-loss)')
   })
 
   // The pair the validator REJECTED. --brand-teal against --brand-blush is

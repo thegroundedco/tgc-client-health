@@ -113,6 +113,28 @@
   --brand-chart-retainer: #0D9488;
   --brand-chart-project: #C2410C;
 
+  /* The retention movement bar, slice 6f-2. Validated the same way and with
+     the same script, and the run produced a FINDING rather than a palette:
+     three quantities wanted three hues and no third hue exists on this page.
+     Against the two above, with --pairs all:
+
+       red     #B91C1C  FAIL  ΔE 6.1 vs the project orange to NORMAL vision
+       purple  #9333EA  FAIL  ΔE 5.3 deutan against its own partner blue
+       violet  #7C3AED  FAIL  ΔE 0.4 deutan, 12.4 normal
+       a third magenta step   FAIL  outside the lightness band, both modes
+
+     Four hues is this page's ceiling. So the bar carries TWO and splits the
+     loss side by texture -- contraction solid, churn hatched, both in
+     --chart-loss -- which is the sanctioned secondary encoding and is also
+     the honest reading: the two losses are the same kind of thing.
+
+     Both pass all five checks in light AND dark, so both are pinned out of
+     the flip alongside the two above. Dark raises one WARN, #A21CAF at 2.75:1
+     against the dark surface, discharged by the bar's direct labels and by
+     the figures being in text beside it. */
+  --brand-chart-gain: #2563EB;
+  --brand-chart-loss: #A21CAF;
+
   /* ==========================================================================
      DARK — the same roles at night. Paper is the ground and ink is the mark;
      neither is a lightness, which is why the SEMANTIC layer below needs no
@@ -161,6 +183,8 @@
      for the validator output and why the brand pair could not be used. */
   --chart-retainer: var(--brand-chart-retainer);
   --chart-project: var(--brand-chart-project);
+  --chart-gain: var(--brand-chart-gain);
+  --chart-loss: var(--brand-chart-loss);
 
   /* text. 15.39:1 and 5.46:1 on the page. */
   --text-primary: var(--brand-ink);

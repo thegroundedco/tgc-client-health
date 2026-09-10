@@ -18,7 +18,7 @@ const ROWS: RevenueRow[] = [
 ]
 
 const CLIENTS: RetentionClient[] = [
-  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null },
+  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
 ]
 
 afterEach(() => {

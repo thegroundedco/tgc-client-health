@@ -11,7 +11,7 @@ const PERIOD = '2026-08-01'
 const BEFORE = '2026-07-01'
 
 function client(id: number, name: string, over: Partial<RetentionClient> = {}): RetentionClient {
-  return { id, name, started_on: '2020-01-01', ended_on: null, ...over }
+  return { id, name, started_on: '2020-01-01', ended_on: null, end_reason_code: null, ...over }
 }
 
 function row(client_id: number, period: string, retainer: number, project = 0): RevenueRow {

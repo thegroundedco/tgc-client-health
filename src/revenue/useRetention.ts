@@ -17,7 +17,11 @@ import type { RevenueRow } from './chartMath'
 // Its own column lists rather than another module's constants: a report should
 // not silently start fetching a column because an editing screen added one.
 // The same argument useTenure makes for itself.
-const ROSTER_COLUMNS = 'id, name, started_on, ended_on'
+// end_reason_code joined in slice 6f-2 for the exclusions control. The cast
+// below means the compiler cannot enforce that a column named in the TYPE is
+// actually selected -- a missing one arrives as undefined at runtime -- so
+// useRetention.dom.test.ts pins this string, the useRevenue pattern.
+const ROSTER_COLUMNS = 'id, name, started_on, ended_on, end_reason_code'
 
 // BOTH money columns, changed in slice 6d, and the guarantee moved rather than
 // weakened.

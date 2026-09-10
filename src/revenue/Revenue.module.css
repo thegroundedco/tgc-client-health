@@ -276,3 +276,89 @@
      even -- the one place preserveAspectRatio="none" has a visible cost. */
   vector-effect: non-scaling-stroke;
 }
+
+/* Slice 6f-2's controls, above the figures they change. Wrapping rather than
+   scrolling: the section lives in a half-width column and three groups do not
+   fit on one line there. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.buttonRow {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* The pressed state of a toggle. aria-pressed is the source of truth and this
+   follows it, rather than a second class that could disagree with it -- a
+   button that LOOKS selected and does not announce as selected is worse than
+   one that does neither. */
+.controls button[aria-pressed='true'] {
+  background: var(--surface-sunken);
+  border-color: var(--text-primary);
+}
+
+/* The short-window caution and the exclusion notice. Deliberately not an
+   .alert: nothing is wrong, the reader has chosen a view that means something
+   narrower than it appears to, and dressing that as an error would teach them
+   to dismiss it. */
+.caution {
+  color: var(--text-secondary);
+  border-inline-start: 2px solid var(--chart-loss);
+  padding-inline-start: var(--space-3);
+}
+
+/* The movement bar. Two halves either side of an invisible centre: gains in
+   the first, losses in the second, so the SIGN is carried by position and the
+   colour only reinforces it. */
+.movement {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  block-size: 10px;
+}
+
+.movementSide {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  align-items: stretch;
+  min-inline-size: 0;
+}
+
+.movementGain,
+.movementContraction,
+.movementChurn {
+  display: block;
+  border-radius: 2px;
+}
+
+.movementGain {
+  background: var(--chart-gain);
+  /* Gains grow leftward from the centre, losses rightward, so the two meet in
+     the middle and the bar reads as one movement rather than two charts. */
+  margin-inline-start: auto;
+}
+
+.movementContraction {
+  background: var(--chart-loss);
+}
+
+/* Churn: the same colour as contraction, hatched. NOT a third colour, and the
+   reason is measured rather than aesthetic -- see tokens.css, where every
+   candidate third hue failed CVD separation against this page's existing two.
+   Texture is the sanctioned secondary encoding, and it is the honest reading:
+   contraction and churn are the same kind of thing. */
+.movementChurn {
+  background: var(--chart-loss);
+  /* A hard-stop gradient is a pattern, not a colour function on a literal --
+     both stops name the same token. */
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--surface-page) 3px 5px
+  );
+}

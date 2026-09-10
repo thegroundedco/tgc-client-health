@@ -16,6 +16,10 @@ export type RetentionClient = {
   name: string
   started_on: string | null
   ended_on: string | null
+  // Read only by retentionControls.excludeUncontested, never by retention()
+  // itself -- the rate must not silently depend on why somebody left. Slice
+  // 6f-2 §5.
+  end_reason_code: string | null
 }
 
 export type RetentionRow = {

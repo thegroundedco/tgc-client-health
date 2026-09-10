@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./useRetention', () => ({ useRetention: vi.fn() }))
@@ -9,8 +10,8 @@ import { Retention } from './Retention'
 import { useRetention } from './useRetention'
 
 const CLIENTS = [
-  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null },
-  { id: 2, name: 'Delta', started_on: '2020-01-01', ended_on: null },
+  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+  { id: 2, name: 'Delta', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
 ]
 
 const ROWS = [
@@ -67,7 +68,7 @@ describe('Retention', () => {
     // client silently shrinking the denominator is the failure this prevents.
     // East Bay has no rows AT ALL, so the month missing is the base one.
     given({
-      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null }],
+      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
     })
 
     const basis = screen.getByTestId('retention-basis').textContent ?? ''
@@ -82,7 +83,7 @@ describe('Retention', () => {
     // month the owner has yet to type -- and the old sentence told him his 2025
     // was the gap. The month named must be the month actually absent.
     given({
-      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null }],
+      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
       rows: [...ROWS, { client_id: 3, period: '2025-09-01', retainer_cents: 300000, project_cents: 0 }],
     })
 
@@ -92,8 +93,13 @@ describe('Retention', () => {
     expect(basis).not.toContain('no entry for September 2025')
   })
 
+  // The contributions fold as of slice 6f-2, so these two open the disclosure
+  // before asserting. The assertions themselves are unchanged -- the list's
+  // ordering and its signed deltas are still pinned exactly as before.
   it('lists the biggest mover first', () => {
     given()
+
+    fireEvent.click(screen.getByRole('button', { name: /show what moved/i }))
 
     const names = screen
       .getAllByTestId('retention-contribution-name')
@@ -112,9 +118,9 @@ describe('Retention', () => {
     // still match.
     given({
       clients: [
-        { id: 1, name: 'Up', started_on: '2020-01-01', ended_on: null },
-        { id: 2, name: 'Down', started_on: '2020-01-01', ended_on: null },
-        { id: 3, name: 'Gone', started_on: '2020-01-01', ended_on: '2026-01-31' },
+        { id: 1, name: 'Up', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+        { id: 2, name: 'Down', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+        { id: 3, name: 'Gone', started_on: '2020-01-01', ended_on: '2026-01-31', end_reason_code: null },
       ],
       rows: [
         { client_id: 1, period: '2025-09-01', retainer_cents: 100000, project_cents: 0 },
@@ -146,6 +152,8 @@ describe('Retention', () => {
     // in opposite directions, so an unsigned delta would print identically on
     // both and tell the reader nothing.
     given()
+
+    fireEvent.click(screen.getByRole('button', { name: /show what moved/i }))
 
     const rows = screen
       .getAllByTestId('retention-contribution-name')
@@ -204,5 +212,167 @@ describe('Retention', () => {
     expect(screen.queryByTestId('retention-grr')).toBeNull()
     expect(document.body.textContent).toContain('No retention yet')
     expect(document.body.textContent).toContain('no revenue has been entered')
+  })
+})
+
+// A full thirteen months for both clients, so every window has a base month
+// to measure against. The file's other fixture holds only the two anchor
+// months, which is right for testing the classification rule and useless for
+// testing a window control.
+const MONTHLY = (() => {
+  const rows = []
+  for (let i = 0; i < 13; i++) {
+    const total = 2025 * 12 + 8 + i
+    const period = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-01`
+    rows.push({ client_id: 1, period, retainer_cents: 400000 + i * 10000, project_cents: 0 })
+    rows.push({ client_id: 2, period, retainer_cents: 200000, project_cents: 0 })
+  }
+  return rows
+})()
+
+function givenMonthly() {
+  vi.mocked(useRetention).mockReturnValue({
+    status: 'ready',
+    loadError: null,
+    clients: CLIENTS,
+    rows: MONTHLY,
+    reload: vi.fn(),
+  })
+  return render(<Retention read={vi.mocked(useRetention)()} />)
+}
+
+describe('Retention — the controls, slice 6f-2', () => {
+  it('offers the four windows the owner chose, with twelve months selected', () => {
+    givenMonthly()
+
+    const group = screen.getByRole('group', { name: /window/i })
+    expect(
+      [...group.querySelectorAll('button')].map((node) => node.textContent),
+    ).toEqual(['1 mo', '3 mo', '6 mo', '12 mo'])
+    expect(screen.getByRole('button', { name: '12 mo' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    )
+  })
+
+  it('measures against the chosen window rather than always a year', async () => {
+    const user = userEvent.setup()
+    givenMonthly()
+
+    expect(screen.getByTestId('retention-window').textContent).toContain('September 2025')
+
+    await user.click(screen.getByRole('button', { name: '1 mo' }))
+
+    expect(screen.getByTestId('retention-window').textContent).toContain('August 2026')
+  })
+
+  // 6f-1 trap 1. Cautioned, never refused -- the month panel already prints a
+  // one-month rate, so refusing it here would be two rules for one number.
+  it('cautions a short window instead of refusing it', async () => {
+    const user = userEvent.setup()
+    givenMonthly()
+
+    expect(screen.queryByTestId('retention-caution')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '3 mo' }))
+
+    expect(screen.getByTestId('retention-caution')).toBeTruthy()
+    // And it still shows a figure. Cautioned is not refused.
+    expect(screen.getByTestId('retention-nrr')).toBeTruthy()
+  })
+
+  it('does not caution six months or twelve', async () => {
+    const user = userEvent.setup()
+    givenMonthly()
+
+    await user.click(screen.getByRole('button', { name: '6 mo' }))
+
+    expect(screen.queryByTestId('retention-caution')).toBeNull()
+  })
+
+  it('swaps which rate is the headline, and hides NEITHER', async () => {
+    // The owner's boss: "Net is most important, but we still want visibility
+    // into gross." A control that lets the section be screenshotted with no
+    // net figure anywhere defeats that.
+    const user = userEvent.setup()
+    givenMonthly()
+
+    expect(screen.getByTestId('retention-nrr').textContent).toContain('net')
+
+    await user.click(screen.getByRole('button', { name: /^gross$/i }))
+
+    expect(screen.getByTestId('retention-headline').textContent).toContain('gross')
+    expect(screen.getByTestId('retention-secondary').textContent).toContain('net')
+  })
+
+  it('shows the movement as a bar as well as in words', () => {
+    givenMonthly()
+
+    expect(screen.getByTestId('retention-movement-bar')).toBeTruthy()
+    expect(screen.getByTestId('retention-movement').textContent).toContain('expansion')
+  })
+
+  it('keeps the basis sentence visible rather than folding it away', () => {
+    // Spec 6f-2 §6.1. Slice 6e §3.1 established the sentence must travel WITH
+    // the rate; folding it one slice later would contradict that.
+    givenMonthly()
+
+    expect(screen.getByTestId('retention-basis')).toBeTruthy()
+  })
+
+  // 6f-1 trap 2. Excluding every departure parks NRR above 100% forever.
+  it('excludes only departures that were not losses, and says it did', async () => {
+    const user = userEvent.setup()
+    vi.mocked(useRetention).mockReturnValue({
+      status: 'ready',
+      loadError: null,
+      clients: [
+        ...CLIENTS,
+        {
+          id: 3,
+          name: 'We Ended It',
+          started_on: '2020-01-01',
+          ended_on: '2026-05-01',
+          end_reason_code: 'agency_initiated',
+        },
+      ],
+      rows: [...MONTHLY, { client_id: 3, period: '2025-09-01', retainer_cents: 300000, project_cents: 0 }],
+      reload: vi.fn(),
+    })
+    render(<Retention read={vi.mocked(useRetention)()} />)
+    await user.click(screen.getByRole('button', { name: /show what moved/i }))
+
+    expect(screen.getByText('We Ended It')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: /ignore ended by us/i }))
+
+    expect(screen.queryByText('We Ended It')).toBeNull()
+    // And it must not present itself as plain retention afterwards.
+    expect(screen.getByTestId('retention-excluding').textContent).toMatch(/1 departure/i)
+  })
+
+  it('keeps a departure that WAS a loss when the toggle is on', async () => {
+    const user = userEvent.setup()
+    vi.mocked(useRetention).mockReturnValue({
+      status: 'ready',
+      loadError: null,
+      clients: [
+        ...CLIENTS,
+        {
+          id: 3,
+          name: 'Left On Price',
+          started_on: '2020-01-01',
+          ended_on: '2026-05-01',
+          end_reason_code: 'price',
+        },
+      ],
+      rows: [...MONTHLY, { client_id: 3, period: '2025-09-01', retainer_cents: 300000, project_cents: 0 }],
+      reload: vi.fn(),
+    })
+    render(<Retention read={vi.mocked(useRetention)()} />)
+
+    await user.click(screen.getByRole('button', { name: /ignore ended by us/i }))
+    await user.click(screen.getByRole('button', { name: /show what moved/i }))
+
+    expect(screen.getByText('Left On Price')).toBeTruthy()
   })
 })
