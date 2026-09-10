@@ -445,3 +445,71 @@ describe('retention — a client who had already left, slice 6e section 5.1', ()
     expect(report.churnedCents).toBe(-100000)
   })
 })
+
+describe('retention — the departure month is still billable, 6e amendment', () => {
+  // The contradiction slice 6e's month panel made visible. `useRevenue` holds
+  // a client eligible for the month they left -- ended_on >= period, because
+  // "a client who left on the 25th billed most of that month", which is
+  // monthOf's own stated principle in retentionMath itself. Retention used to
+  // call that same client CHURNED in that same month and force them to zero.
+  //
+  // Harmless while retention ran once a year against a month nobody had left
+  // in. The month panel runs the rule thirteen times, once per bar, so every
+  // month a client departed showed churn a month early.
+
+  it('does NOT churn a client in the month they left, when nobody entered it', () => {
+    // We do not know what they billed for their final three weeks. Zero is a
+    // claim; "no entry" is the truth.
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Leaving', { ended_on: '2026-09-20' })],
+      [row(1, BASE, 400000), row(1, CURRENT, 400000), row(2, BASE, 100000)],
+      CURRENT,
+    )
+
+    expect(report.unenteredCurrent).toBe(1)
+    expect(report.contributions.some((entry) => entry.kind === 'churned')).toBe(false)
+    expect(report.included).toBe(1)
+  })
+
+  it('uses their ENTERED final month when there is one, rather than zeroing it', () => {
+    // The case that always worked, pinned so the fix cannot regress it: an
+    // entered row wins over any lifecycle reasoning.
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Leaving', { ended_on: '2026-09-20' })],
+      [row(1, BASE, 400000), row(1, CURRENT, 400000), row(2, BASE, 100000), row(2, CURRENT, 60000)],
+      CURRENT,
+    )
+
+    const leaving = report.contributions.find((entry) => entry.clientId === 2)
+    expect(leaving?.currentCents).toBe(60000)
+    expect(leaving?.kind).toBe('contracted')
+  })
+
+  it('churns them the month AFTER, which is the first month they billed nothing', () => {
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Left', { ended_on: '2026-08-20' })],
+      [row(1, BASE, 400000), row(1, CURRENT, 400000), row(2, BASE, 100000)],
+      CURRENT,
+    )
+
+    const left = report.contributions.find((entry) => entry.clientId === 2)
+    expect(left?.kind).toBe('churned')
+    expect(left?.currentCents).toBe(0)
+  })
+
+  it('agrees with useRevenue about who was billable in a month', () => {
+    // The two screens must not disagree about the same client in the same
+    // month. useRevenue's filter is `ended_on is null OR ended_on >= period`;
+    // this is the same boundary read from the other side.
+    const leftThisMonth = client(2, 'Leaving', { ended_on: '2026-09-20' })
+    const report = retention(
+      [client(1, 'Acme'), leftThisMonth],
+      [row(1, BASE, 400000), row(1, CURRENT, 400000), row(2, BASE, 100000)],
+      CURRENT,
+    )
+
+    // Eligible for September by useRevenue's rule, so not churned by this one.
+    expect(leftThisMonth.ended_on! >= CURRENT).toBe(true)
+    expect(report.contributions.some((entry) => entry.kind === 'churned')).toBe(false)
+  })
+})

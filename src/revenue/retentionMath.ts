@@ -145,11 +145,31 @@ export function retention(
 
     if (currentRow !== undefined) {
       currentCents = currentRow
-    } else if (client.ended_on !== null && monthOf(client.ended_on) <= currentPeriod) {
+    } else if (client.ended_on !== null && monthOf(client.ended_on) < currentPeriod) {
       // CHURNED. The one place in this codebase where a missing row IS a zero,
       // and the exception is the whole point: a client who left bills nothing,
       // and losing them is what retention measures. Drop them instead and NRR
       // reports on the survivors alone.
+      //
+      // STRICTLY BEFORE, amended 2026-09-10. This read `<=`, which churned a
+      // client in the month they LEFT -- forcing a zero onto a month they were
+      // billable for most of, whenever nobody had entered that final month.
+      //
+      // Two things were wrong with that. It contradicted monthOf's own stated
+      // principle six lines up in this file -- "a client who left on the 25th
+      // billed most of that month" -- and it contradicted useRevenue, whose
+      // eligibility filter is `ended_on is null OR ended_on >= period`, so
+      // Concentration and Retention disagreed about the same client in the
+      // same month. Retention recognised the loss a month early and overstated
+      // churn by that final month's billing.
+      //
+      // Harmless in practice while retention ran once a year against a month
+      // nobody had left in. Slice 6e's month panel runs this rule once per
+      // bar, which is what made it visible and worth the owner's ruling.
+      //
+      // An entered final row still wins -- it is read above, before any of
+      // this -- so the change only affects a departure month nobody typed,
+      // which now reads as "no entry" rather than as "billed nothing".
       currentCents = 0
     } else {
       // Still active, nobody has typed this month. Unknown, not zero -- the

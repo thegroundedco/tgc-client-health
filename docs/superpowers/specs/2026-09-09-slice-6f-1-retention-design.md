@@ -87,11 +87,37 @@ either hold a retainer or do not, and **"do not" means three different things**:
 | Base month | Current month | Meaning | Treatment |
 |---|---|---|---|
 | has a row | has a row | Retained, expanded or contracted | Compare the two |
-| has a row | no row, `ended_on` ≤ current month | **Churned** | Current counts as **0** |
+| has a row | no row, `ended_on` **before** the current month | **Churned** | Current counts as **0** |
+| has a row | no row, `ended_on` **in** the current month | **Unentered** — see §3.1a | Excluded from both sides, disclosed |
 | has a row | no row, still active | **Unentered** | Excluded from both sides, disclosed |
 | no row, `started_on` after the base month | anything | **New business** | Excluded — not retention |
 | no row, existed in the base month | anything | **Unentered** | Excluded from both sides, disclosed |
 | no row, `started_on` is **null** | anything | **Unknown** — cannot be told from new business | Excluded, counted as unentered |
+
+### 3.1a AMENDED 2026-09-10 — the departure month is still billable
+
+**[owner]** ruling. This table originally read `ended_on ≤ current month`, churning a client in
+the month they left. That was wrong twice over.
+
+It contradicted **this document's own boundary rule**, which every other lifecycle comparison in
+the codebase follows: a departure date is reduced to its month because *a client who left on the
+25th billed most of that month*. And it contradicted **`useRevenue`**, whose eligibility filter
+is `ended_on is null OR ended_on >= period` — so Concentration held a client billable for the
+month they left while Retention called the same client churned in the same month. Two screens,
+one client, one month, opposite answers.
+
+The consequence: whenever a departing client's **final month went unentered**, retention forced
+it to `$0`, recognised the loss a month early, and overstated churn by whatever that final month
+would have billed.
+
+Harmless in practice while retention ran once a year against a month in which nobody had left.
+**Slice 6e's month panel runs this rule once per bar**, thirteen times, so every month containing
+a departure showed it. That is what made it worth fixing rather than deferring again.
+
+An **entered** final row still wins — it is read before any lifecycle reasoning — so this changes
+only a departure month nobody typed, which now reads as *"no entry"* rather than *"billed
+nothing"*. The client churns the following month, which is the first month they genuinely billed
+nothing.
 
 ### 3.1 Why rows two and three cannot be collapsed
 
