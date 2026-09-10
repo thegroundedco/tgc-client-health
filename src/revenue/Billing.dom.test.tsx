@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Billing } from './Billing'
 import type { RevenueRow } from './chartMath'
+import type { RetentionClient } from './retentionMath'
 
 function row(client_id: number, period: string, retainer: number, project = 0): RevenueRow {
   return { client_id, period, retainer_cents: retainer, project_cents: project }
@@ -16,19 +17,23 @@ const ROWS: RevenueRow[] = [
   row(1, '2026-09-01', 500000, 50000),
 ]
 
+const CLIENTS: RetentionClient[] = [
+  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null },
+]
+
 afterEach(() => {
   document.body.innerHTML = ''
 })
 
 describe('Billing', () => {
   it('names itself', () => {
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getByRole('heading', { name: 'Billing' })).toBeTruthy()
   })
 
   it('draws one bar group per month', () => {
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getAllByTestId('billing-bar')).toHaveLength(3)
   })
@@ -37,7 +42,7 @@ describe('Billing', () => {
     // The dataviz skill's non-negotiable for two or more series. Without it the
     // only thing distinguishing retainer from project work is a fill, which is
     // exactly what a colourblind reader cannot use.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const legend = screen.getByTestId('billing-legend')
     expect(legend.textContent).toContain('Retainer')
@@ -48,7 +53,7 @@ describe('Billing', () => {
     // Also the skill's requirement, and this project's: a chart that exists
     // only as a picture is unreadable to a screen reader and unassertable in a
     // test. The table is the text path.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const table = screen.getByRole('table', { name: /billing/i })
     expect(table.textContent).toContain('September 2026')
@@ -57,7 +62,7 @@ describe('Billing', () => {
   })
 
   it('describes the chart to a screen reader rather than leaving it silent', () => {
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const figure = screen.getByRole('img', { name: /billing/i })
     expect(figure.getAttribute('aria-label')).toMatch(/July 2026/)
@@ -68,7 +73,7 @@ describe('Billing', () => {
     // fireEvent, not userEvent.hover: jsdom has no layout, so pointer
     // simulation over an SVG rect resolves to nothing and the assertion below
     // would pass for the wrong reason.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bars = screen.getAllByTestId('billing-bar')
     expect(screen.queryByTestId('billing-tooltip')).toBeNull()
@@ -86,6 +91,7 @@ describe('Billing', () => {
     // "not entered" is the truth about it.
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
       />,
@@ -101,7 +107,7 @@ describe('Billing', () => {
     // A tooltip reachable only by pointer is a tooltip a keyboard user does not
     // have. Each bar is focusable and reveals the same panel.
     const user = userEvent.setup()
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.tab()
     const tooltip = screen.getByTestId('billing-tooltip')
@@ -110,7 +116,7 @@ describe('Billing', () => {
   })
 
   it('says so when there is nothing to chart, rather than drawing an empty box', () => {
-    render(<Billing rows={[]} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={[]} currentPeriod="2026-09-01" />)
 
     expect(screen.queryByTestId('billing-bar')).toBeNull()
     expect(document.body.textContent).toMatch(/no revenue|nothing to chart/i)
@@ -122,6 +128,7 @@ describe('Billing', () => {
     // shape is honest about the hole.
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
       />,
@@ -136,6 +143,7 @@ describe('Billing', () => {
   it('marks an ENTERED zero month as entered, so it is not read as a gap', () => {
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
       />,
@@ -152,7 +160,7 @@ describe('Billing', () => {
     // empty space either side, and looking for all the world like a chart that
     // simply did not widen. `none` is what lets the horizontal axis follow the
     // container. The 2px inter-segment gap is vertical and is unaffected.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const figure = screen.getByRole('img', { name: /billing/i })
     expect(figure.getAttribute('preserveAspectRatio')).toBe('none')
@@ -162,7 +170,7 @@ describe('Billing', () => {
     // The owner's ask on 2026-09-10: a chart of thirteen unlabelled bars makes
     // the reader count backwards from the right to work out which month they
     // are looking at.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const labels = screen.getAllByTestId('billing-axis-label')
     expect(labels).toHaveLength(screen.getAllByTestId('billing-bar').length)
@@ -176,6 +184,7 @@ describe('Billing', () => {
   it('dates the axis once per year rather than thirteen times', () => {
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2025-12-01', 100000), row(1, '2026-01-01', 100000)]}
         currentPeriod="2026-01-01"
       />,
@@ -189,7 +198,7 @@ describe('Billing', () => {
   it('hides the axis row from a screen reader, which has the table', () => {
     // "Jul Aug Sep" read aloud with no values attached is noise between the
     // chart's description and the table that actually carries the numbers.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getByTestId('billing-axis').getAttribute('aria-hidden')).toBe('true')
   })
@@ -201,6 +210,7 @@ describe('Billing', () => {
     // number of equal cells, which is worth asserting rather than assuming.
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
       />,
@@ -210,7 +220,7 @@ describe('Billing', () => {
   })
 
   it('totals each month and says how it moved against the one before', () => {
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const table = screen.getByRole('table', { name: /billing/i })
     expect(table.textContent).toContain('Total')
@@ -224,7 +234,7 @@ describe('Billing', () => {
   it('leaves the first month\'s change blank rather than calling it zero', () => {
     // Nothing precedes it. "$0" would claim it matched a month that is not
     // there.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const first = screen.getByRole('row', { name: /July 2026/ })
     expect(first.textContent).toContain('—')
@@ -234,6 +244,7 @@ describe('Billing', () => {
   it('refuses a total or a change for an unentered month', () => {
     render(
       <Billing
+        clients={CLIENTS}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
       />,
@@ -249,12 +260,115 @@ describe('Billing', () => {
     expect(after.textContent).toContain('—')
   })
 
+  it('carries the total and the change in the hover, not only the two halves', () => {
+    // The owner's ask, 2026-09-10. Spec 6e §3.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    fireEvent.mouseEnter(screen.getAllByTestId('billing-bar')[2])
+    const tooltip = screen.getByTestId('billing-tooltip').textContent ?? ''
+    expect(tooltip).toContain('$5,500')
+    expect(tooltip).toContain('+$1,000')
+  })
+
+  it('leaves the change out of the hover where there is no pair to compare', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    fireEvent.mouseEnter(screen.getAllByTestId('billing-bar')[0])
+    expect(screen.getByTestId('billing-tooltip').textContent).not.toContain('vs')
+  })
+
+  // Spec 6e §4.3. They were focusable <g> elements with no role: announced as
+  // nothing and not activatable by keyboard. A click turns that from an
+  // untidiness into a defect.
+  it('makes each bar a button that names its own month', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bars = screen.getAllByTestId('billing-bar')
+    expect(bars[2].getAttribute('role')).toBe('button')
+    expect(bars[2].getAttribute('aria-label')).toContain('September 2026')
+    expect(bars[2].getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('opens that month on click', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.click(screen.getAllByTestId('billing-bar')[2])
+
+    expect(screen.getByRole('region', { name: /September 2026 breakdown/ })).toBeTruthy()
+    expect(screen.getAllByTestId('billing-bar')[2].getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('opens it from the KEYBOARD too, on Enter and on Space', () => {
+    // A drill-down reachable only by pointer is a drill-down a keyboard user
+    // does not have.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    fireEvent.keyDown(screen.getAllByTestId('billing-bar')[2], { key: 'Enter' })
+    expect(screen.getByRole('region', { name: /September 2026/ })).toBeTruthy()
+
+    fireEvent.keyDown(screen.getAllByTestId('billing-bar')[2], { key: 'Escape' })
+    fireEvent.keyDown(screen.getAllByTestId('billing-bar')[1], { key: ' ' })
+    expect(screen.getByRole('region', { name: /August 2026/ })).toBeTruthy()
+  })
+
+  it('marks the open bar as selected, and not with colour alone', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    fireEvent.click(screen.getAllByTestId('billing-bar')[2])
+
+    expect(screen.getAllByTestId('billing-bar')[2].getAttribute('data-selected')).toBe('true')
+    expect(screen.getAllByTestId('billing-bar')[1].getAttribute('data-selected')).toBe('false')
+  })
+
+  it('closes when the same bar is clicked again', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bar = () => screen.getAllByTestId('billing-bar')[2]
+    await user.click(bar())
+    await user.click(bar())
+
+    expect(screen.queryByRole('region', { name: /breakdown/ })).toBeNull()
+  })
+
+  it('switches straight from one month to another without closing first', async () => {
+    // Comparing two months is the point. Making the reader close one before
+    // opening the next would double every click.
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.click(screen.getAllByTestId('billing-bar')[2])
+    await user.click(screen.getAllByTestId('billing-bar')[1])
+
+    expect(screen.getByRole('region', { name: /August 2026 breakdown/ })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: /September 2026 breakdown/ })).toBeNull()
+  })
+
+  it('opens an UNENTERED month too, and says so rather than refusing', () => {
+    // Refusing the click would leave the reader tapping a bar that does
+    // nothing. The panel is where "nobody entered this" gets explained.
+    render(
+      <Billing
+        clients={CLIENTS}
+        rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    fireEvent.click(screen.getAllByTestId('billing-bar')[1])
+
+    expect(screen.getByRole('region', { name: /August 2026/ }).textContent).toMatch(
+      /no entries/i,
+    )
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in
     // particular reaches for the validated series tokens rather than inventing
     // a fill inline.
-    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const markup = document.body.innerHTML
     expect(markup).toContain('var(--chart-retainer)')

@@ -60,7 +60,11 @@ export function Revenue() {
           no layout props and stays mountable somewhere that is not this grid. */}
       {revenue.status === 'ready' && (
         <div className={styles.wide}>
-          <Billing currentPeriod={anchor ?? defaultPeriod()} rows={revenue.rows} />
+          <Billing
+            clients={revenue.clients}
+            currentPeriod={anchor ?? defaultPeriod()}
+            rows={revenue.rows}
+          />
         </div>
       )}
 

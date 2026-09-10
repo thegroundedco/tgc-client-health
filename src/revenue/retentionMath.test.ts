@@ -356,3 +356,92 @@ describe('retention — the arithmetic, spec section 4', () => {
     expect(Object.keys(row(1, BASE, 1))).toEqual(['client_id', 'period', 'retainer_cents'])
   })
 })
+
+describe('retention — an arbitrary base period, slice 6e section 5', () => {
+  it('still defaults to twelve months back when no base is given', () => {
+    // Every caller that predates slice 6e passes three arguments. The default
+    // is what keeps their figure identical.
+    const report = retention(
+      [client(1, 'Acme')],
+      [row(1, BASE, 400000), row(1, CURRENT, 500000)],
+      CURRENT,
+    )
+
+    expect(report.basePeriod).toBe(BASE)
+    expect(report.nrr).toBeCloseTo(1.25)
+  })
+
+  it('measures against the month given instead, when one is', () => {
+    const report = retention(
+      [client(1, 'Acme')],
+      [row(1, '2026-08-01', 400000), row(1, CURRENT, 500000)],
+      CURRENT,
+      '2026-08-01',
+    )
+
+    expect(report.basePeriod).toBe('2026-08-01')
+    expect(report.nrr).toBeCloseTo(1.25)
+    expect(report.included).toBe(1)
+  })
+
+  it('reports the previous month\'s figures, not the previous year\'s', () => {
+    // Both months hold data. Passing the wrong base would silently produce a
+    // plausible number from the wrong pair -- the failure mode with no symptom.
+    const report = retention(
+      [client(1, 'Acme')],
+      [row(1, BASE, 100000), row(1, '2026-08-01', 400000), row(1, CURRENT, 200000)],
+      CURRENT,
+      '2026-08-01',
+    )
+
+    expect(report.contributions[0].baseCents).toBe(400000)
+    expect(report.nrr).toBeCloseTo(0.5)
+  })
+})
+
+describe('retention — a client who had already left, slice 6e section 5.1', () => {
+  // Deferred finding 2 from slice 6f-1, which a monthly base makes non-latent:
+  // on an annual base no client in the data left before it, but on a monthly
+  // base EVERY departure is before last month.
+  it('does not count a client who left before the base month as a gap', () => {
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Gone', { ended_on: '2024-03-15' })],
+      [row(1, '2026-08-01', 400000), row(1, CURRENT, 400000)],
+      CURRENT,
+      '2026-08-01',
+    )
+
+    expect(report.unenteredBase).toBe(0)
+    expect(report.included).toBe(1)
+  })
+
+  it('still counts a client who left DURING the window as churn', () => {
+    // The exclusion is only for clients who were already gone before the base.
+    // A client billed in the base month and gone by the current one is the
+    // whole point of the measure.
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Leaver', { ended_on: '2026-08-20' })],
+      [row(1, '2026-08-01', 400000), row(1, CURRENT, 400000), row(2, '2026-08-01', 100000)],
+      CURRENT,
+      '2026-08-01',
+    )
+
+    // Negative: churn is a loss, and the report signs it. The page reads
+    // "-$8,400 churn".
+    expect(report.churnedCents).toBe(-100000)
+    expect(report.contributions.some((entry) => entry.kind === 'churned')).toBe(true)
+  })
+
+  it('leaves the ANNUAL figure untouched, because nobody left before it', () => {
+    // The reason this fix is safe to make now rather than deferring again.
+    // Both of the roster's departures are after the annual base month.
+    const report = retention(
+      [client(1, 'Acme'), client(2, 'Left in July', { ended_on: '2026-07-01' })],
+      [row(1, BASE, 400000), row(1, CURRENT, 400000), row(2, BASE, 100000)],
+      CURRENT,
+    )
+
+    expect(report.included).toBe(2)
+    expect(report.churnedCents).toBe(-100000)
+  })
+})

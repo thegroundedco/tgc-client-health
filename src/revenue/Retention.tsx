@@ -1,6 +1,6 @@
 import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
-import { latestPeriod, retention } from './retentionMath'
+import { latestPeriod, retention, retentionBasis } from './retentionMath'
 import type { RetentionClient, RetentionRow } from './retentionMath'
 import type { UseRetention } from './useRetention'
 import styles from './Revenue.module.css'
@@ -110,9 +110,6 @@ function RetentionReady({
     )
   }
 
-  const considered =
-    report.included + report.unenteredBase + report.unenteredCurrent + report.newBusiness
-
   return (
     <>
       <p className="t-caption" data-testid="retention-window">
@@ -145,12 +142,7 @@ function RetentionReady({
           when October 2025 is entered in full and it is October 2026 he has yet
           to type. Whichever month is actually absent is the month named. */}
       <p className={`t-caption ${styles.summary}`} data-testid="retention-basis">
-        Based on {report.included} of {considered} clients
-        {report.unenteredBase > 0 &&
-          ` · ${report.unenteredBase} had no entry for ${formatPeriod(report.basePeriod)}`}
-        {report.unenteredCurrent > 0 &&
-          ` · ${report.unenteredCurrent} had no entry for ${formatPeriod(report.currentPeriod)}`}
-        {report.newBusiness > 0 && ` · ${report.newBusiness} started since`}
+        {retentionBasis(report, formatPeriod)}
       </p>
 
       {/* role="list" because base.css removes markers globally, and WebKit drops

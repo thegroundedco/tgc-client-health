@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { formatPeriod } from '../lib/month'
 import { axisLabels, barGeometry, monthRows, monthlyTotals } from './chartMath'
-import type { MonthTotal, RevenueRow } from './chartMath'
+import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
+import { MonthPanel } from './MonthPanel'
 import { formatMoney } from './money'
+import type { RetentionClient } from './retentionMath'
 import styles from './Revenue.module.css'
 
 // What we are billing, and whether it is moving. Slice 6d, and the answer to
@@ -33,10 +35,37 @@ function formatChange(cents: number): string {
   return cents > 0 ? `+${formatMoney(cents)}` : formatMoney(cents)
 }
 
+// What the hover says. Retainer, project work, total and the change against
+// the month before -- spec 6e §3. The retention RATE is deliberately not here:
+// it is retainer-only, it is noise over one month on this roster, and it
+// cannot carry the sentence that makes it defensible. §3.1 has the argument;
+// the panel has the rate.
+function describeMonth(month: MonthRow, totals: readonly MonthTotal[]): string {
+  if (!month.entered) return ' · not entered'
+
+  const parts = [
+    `${formatMoney(month.retainerCents)} retainer`,
+    `${formatMoney(month.projectCents)} project work`,
+    `${formatMoney(month.totalCents ?? 0)} total`,
+  ]
+
+  // Only when there IS a pair to compare. monthRows returns null where there
+  // is not, and a "vs" clause naming a month nobody entered would be the
+  // fabrication the whole module refuses.
+  if (month.changeCents !== null) {
+    const index = totals.findIndex((entry) => entry.period === month.period)
+    parts.push(`${formatChange(month.changeCents)} vs ${formatPeriod(totals[index - 1].period)}`)
+  }
+
+  return ` · ${parts.join(' · ')}`
+}
+
 export function Billing({
+  clients,
   rows,
   currentPeriod,
 }: {
+  clients: readonly RetentionClient[]
   rows: readonly RevenueRow[]
   currentPeriod: string
 }) {
@@ -44,6 +73,12 @@ export function Billing({
   // it is reachable without a pointer -- a tooltip only a mouse can open is one
   // a keyboard user does not have.
   const [active, setActive] = useState<string | null>(null)
+
+  // Which month's panel is open. Separate from `active` deliberately: hovering
+  // must not close an open panel, and an open panel must not follow the
+  // pointer -- the reader opens August and then runs the pointer along the
+  // chart reading tooltips while August stays put.
+  const [opened, setOpened] = useState<string | null>(null)
 
   const totals = monthlyTotals(rows, currentPeriod)
 
@@ -73,7 +108,15 @@ export function Billing({
       : `Billing by month, ${formatPeriod(first.period)} to ${formatPeriod(last.period)}: ` +
         `${formatMoney(totalOf(first))} to ${formatMoney(totalOf(last))}.`
 
-  const activeMonth = totals.find((month) => month.period === active) ?? null
+  const rowsByMonth = monthRows(totals)
+  const activeMonth = rowsByMonth.find((month) => month.period === active) ?? null
+
+  // Clicking the open month closes it; clicking another switches straight to
+  // it. Making the reader close one before opening the next would double every
+  // click, and comparing two months is the point of the panel.
+  function toggle(period: string) {
+    setOpened((current) => (current === period ? null : period))
+  }
 
   return (
     <section className={styles.section}>
@@ -104,14 +147,33 @@ export function Billing({
         viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
       >
         {bars.map((bar) => (
+          /* A button, not a focusable <g>. Before slice 6e these were
+             tabIndex={0} with no role: reachable by keyboard, announced as
+             nothing, and activatable by neither Enter nor Space. Hanging a
+             click on that would have made an interaction that exists only for
+             a mouse. */
           <g
+            aria-expanded={opened === bar.period}
+            aria-label={`${formatPeriod(bar.period)}, open breakdown`}
             data-entered={bar.entered ? 'true' : 'false'}
+            data-selected={opened === bar.period ? 'true' : 'false'}
             data-testid="billing-bar"
             key={bar.period}
             onBlur={() => setActive(null)}
+            onClick={() => toggle(bar.period)}
             onFocus={() => setActive(bar.period)}
+            onKeyDown={(event) => {
+              // A native <button> does this for free; an SVG group with a
+              // button role has to do it by hand, and Space must not also
+              // scroll the page.
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                toggle(bar.period)
+              }
+            }}
             onMouseEnter={() => setActive(bar.period)}
             onMouseLeave={() => setActive(null)}
+            role="button"
             tabIndex={0}
           >
             {/* An unentered month renders NO rect at all -- the gap, drawn. An
@@ -164,10 +226,20 @@ export function Billing({
       {activeMonth !== null && (
         <p className={`t-caption ${styles.summary}`} data-testid="billing-tooltip">
           {formatPeriod(activeMonth.period)}
-          {activeMonth.entered
-            ? ` · ${formatMoney(activeMonth.retainerCents)} retainer · ${formatMoney(activeMonth.projectCents)} project work`
-            : ' · not entered'}
+          {describeMonth(activeMonth, totals)}
         </p>
+      )}
+
+      {/* The panel sits between the chart and the thirteen-month table, so the
+          month it describes stays on screen above it. No fetch: every figure
+          it shows is already in the props. */}
+      {opened !== null && (
+        <MonthPanel
+          clients={clients}
+          onClose={() => setOpened(null)}
+          period={opened}
+          rows={rows}
+        />
       )}
 
       {/* The same numbers as text. Required rather than a courtesy: it is what
@@ -192,7 +264,7 @@ export function Billing({
           </tr>
         </thead>
         <tbody>
-          {monthRows(totals).map((month) => (
+          {rowsByMonth.map((month) => (
             <tr key={month.period}>
               <th scope="row">{formatPeriod(month.period)}</th>
               <td className={styles.figure}>

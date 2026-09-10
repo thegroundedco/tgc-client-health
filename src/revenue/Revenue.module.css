@@ -228,3 +228,51 @@
   inline-size: 100%;
   font-weight: inherit;
 }
+
+/* The month drill-down. Slice 6e: opens between the chart and the
+   thirteen-month table, so the bar it describes stays on screen above it.
+
+   Sunken rather than raised, and that is the point of it: every other card on
+   this page sits ABOVE the surface, so a panel that also rose would read as
+   one more section rather than as something opened out of the chart. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  margin-block-start: var(--space-3);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.panelHead h4 {
+  margin: 0;
+}
+
+/* The bars answer to a pointer now, so they have to look like they do. */
+.chart g[role='button'] {
+  cursor: pointer;
+}
+
+/* The open month, marked on the bar itself. An outline rather than a change of
+   fill: the two fills are the validated series colours and repainting one to
+   mean "selected" would collide with the meaning it already carries. It is
+   also not colour alone -- the panel below names the month in words, and the
+   bar carries aria-expanded. */
+.chart g[data-selected='true'] rect {
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  /* The stroke is drawn in the stretched coordinate space, so a plain width
+     would be thicker horizontally than vertically. non-scaling-stroke keeps it
+     even -- the one place preserveAspectRatio="none" has a visible cost. */
+  vector-effect: non-scaling-stroke;
+}

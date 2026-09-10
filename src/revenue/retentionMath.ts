@@ -95,8 +95,12 @@ export function retention(
   clients: readonly RetentionClient[],
   rows: readonly RetentionRow[],
   currentPeriod: string,
+  // Slice 6e §5. Optional, and defaulting to the twelve-month base every
+  // caller before that slice relied on -- the month drill-down needs a rate
+  // against the PREVIOUS MONTH, and the only thing that differs is which two
+  // months are compared.
+  basePeriod: string = basePeriodFor(currentPeriod),
 ): RetentionReport {
-  const basePeriod = basePeriodFor(currentPeriod)
 
   const baseByClient = new Map<number, number>()
   const currentByClient = new Map<number, number>()
@@ -111,6 +115,16 @@ export function retention(
   let newBusiness = 0
 
   for (const client of clients) {
+    // Already gone before the base month, so not part of the book being
+    // retained. Slice 6e §5.1, and slice 6f-1's deferred finding 2.
+    //
+    // Without this they have no base figure, no start date after the base
+    // either, and land in unenteredBase -- reported to the reader as "had no
+    // entry", which says the data is incomplete when in truth the client was
+    // not a client. Latent on an ANNUAL base, where no departure in the data
+    // precedes it; unavoidable on a monthly one, where every departure does.
+    if (client.ended_on !== null && monthOf(client.ended_on) < basePeriod) continue
+
     const baseCents = baseByClient.get(client.id)
 
     if (baseCents === undefined) {
@@ -218,4 +232,40 @@ export function retention(
     churnedCents,
     contributions,
   }
+}
+
+/**
+ * The sentence that travels WITH a rate: what it was computed from, and who was
+ * left out.
+ *
+ * Extracted from Retention.tsx in slice 6e so the month panel says it the same
+ * way. Two components each assembling this from the report's counters is two
+ * sentences that agree today and drift the first time a counter is added --
+ * and the whole purpose of the sentence is that a reader can trust the number
+ * above it, which a sentence that quietly stopped mentioning one exclusion
+ * would destroy silently.
+ *
+ * Two unentered clauses, not one, because they are absences in DIFFERENT
+ * MONTHS. Naming the base month for both tells the owner his October 2025 is
+ * missing when October 2025 is entered in full and it is October 2026 he has
+ * yet to type.
+ */
+export function retentionBasis(
+  report: RetentionReport,
+  formatMonth: (period: string) => string,
+): string {
+  const considered =
+    report.included + report.unenteredBase + report.unenteredCurrent + report.newBusiness
+
+  let sentence = `Based on ${report.included} of ${considered} clients`
+  if (report.unenteredBase > 0) {
+    sentence += ` · ${report.unenteredBase} had no entry for ${formatMonth(report.basePeriod)}`
+  }
+  if (report.unenteredCurrent > 0) {
+    sentence += ` · ${report.unenteredCurrent} had no entry for ${formatMonth(report.currentPeriod)}`
+  }
+  if (report.newBusiness > 0) {
+    sentence += ` · ${report.newBusiness} started since`
+  }
+  return sentence
 }
