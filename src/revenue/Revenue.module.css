@@ -8,10 +8,22 @@
    surface. Three screens now read as one place. Every colour comes from the
    semantic layer; this file is not allowed to name one. */
 
+/* A hairline above every section, and room around it. Added 2026-09-10: the
+   owner said the sections and their headings ran together, and they did -- the
+   only thing marking a boundary was a slightly larger gap, which on a page
+   whose contents are themselves stacks of bordered cards reads as no boundary
+   at all.
+
+   A rule rather than another card: these sections CONTAIN cards, and wrapping
+   a stack of bordered rows in a further border makes two nested frames the eye
+   has to separate before it can read either. The page grid tops-aligns each
+   pair, so the rules on two side-by-side sections land on the same line. */
 .section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--rule-hairline);
 }
 
 .summary {
@@ -114,6 +126,42 @@
   }
 }
 
+/* The month axis. A grid of equal cells, one per bar, which is what aligns it
+   with the chart: barGeometry slots the bars evenly across the same width, so
+   the centre of cell n and the centre of bar n are the same place. A flex row
+   would size each cell to its text and drift immediately. */
+.axis {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.axisLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The month sits on one line and its year, where there is one, on the next.
+     Side by side, "Jan 2026" is nearly twice the width of its neighbours and
+     the axis stops looking evenly spaced even though it is. */
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.axisMonth {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quieter than the month. The year is a boundary marker, not a reading, and it
+   appears on only two of the thirteen cells -- at the month's weight it would
+   read as those two months being important rather than as the year turning. */
+.axisYear {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .chart g:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
@@ -143,24 +191,40 @@
 /* The chart's numbers as text. Not a fallback -- the path by which the chart is
    readable at all without sight of it.
 
-   Capped at the reading measure even though the chart above it is not. The
-   chart earns the full width of the page; a three-column table does not --
-   stretched across it, a month and its two figures end up far enough apart to
-   have to be tracked across the row. */
+   Full width, and it earns it: five columns rather than three since
+   2026-09-10, when capping it at the reading measure left a screen-sized empty
+   block beside it. Total and Change were added in the same change -- the
+   section asks whether billing is MOVING, and a month-over-month delta answers
+   that in the text path rather than only in the picture. */
 .table {
   inline-size: 100%;
-  max-inline-size: var(--measure-prose);
   border-collapse: collapse;
   margin-block-start: var(--space-3);
 }
 
 .table th,
 .table td {
-  padding-block: var(--space-1);
+  padding-block: var(--space-2);
+  padding-inline-end: var(--space-4);
   text-align: start;
   border-block-end: 1px solid var(--rule-hairline);
 }
 
-.table td {
+/* Every figure column, header included, at the inline end. A column of money
+   read downward has to line up on its last digit or the eye cannot compare two
+   rows without reading both in full -- the same reason .measure uses tabular
+   figures. */
+/* Written as a descendant selector, not a bare .figure: the .table th/.table
+   td rule above sets text-align: start at two classes of specificity and a
+   single class would lose to it. */
+.table .figure {
+  text-align: end;
   font-variant-numeric: tabular-nums;
+}
+
+/* The month column takes what is left, so the four figure columns sit together
+   at the inline end rather than spreading across the whole page. */
+.table th[scope='row'] {
+  inline-size: 100%;
+  font-weight: inherit;
 }

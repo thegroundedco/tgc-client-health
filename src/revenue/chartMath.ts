@@ -151,3 +151,95 @@ export function barGeometry(
 
   return { bars, maxCents }
 }
+
+// A month as the TABLE shows it: the two entered halves plus the two figures
+// derived from them. Separate from MonthTotal rather than folded into it,
+// because barGeometry needs none of this and a geometry type that carries a
+// month-over-month delta invites somebody to draw one.
+export type MonthRow = MonthTotal & {
+  /** null for an unentered month -- there is no total of nothing. */
+  totalCents: number | null
+  /** null where a change cannot be measured. See monthRows. */
+  changeCents: number | null
+}
+
+export type AxisLabel = {
+  period: string
+  /** Abbreviated, so thirteen of them fit under thirteen bars. */
+  month: string
+  /** The year, only where it changes. null everywhere else. */
+  year: string | null
+}
+
+/**
+ * The months again, with a total and a month-over-month change.
+ *
+ * `changeCents` is null in three cases, and they are the same case: there is no
+ * pair of months to compare. The first month has nothing before it; an
+ * unentered month is not one end of a comparison; and neither is the month
+ * AFTER an unentered one, because the month immediately before it is the one a
+ * change is measured against and nobody entered it. Reaching further back to
+ * find a month that was entered would compare two months two apart and label
+ * the answer "change".
+ *
+ * Zero is not null. "We billed the same as last month" is a finding; "we cannot
+ * say" is not, and a column that prints $0 for both is lying about one of them.
+ */
+export function monthRows(totals: readonly MonthTotal[]): MonthRow[] {
+  return totals.map((total, index) => {
+    const totalCents = total.entered ? total.retainerCents + total.projectCents : null
+    const before = index === 0 ? undefined : totals[index - 1]
+    const beforeCents =
+      before !== undefined && before.entered
+        ? before.retainerCents + before.projectCents
+        : null
+
+    return {
+      ...total,
+      totalCents,
+      changeCents: totalCents === null || beforeCents === null ? null : totalCents - beforeCents,
+    }
+  })
+}
+
+// Built from the period string rather than a Date. A bare YYYY-MM-DD parses as
+// UTC midnight, whose local calendar day -- and in January its local MONTH --
+// is the one before in any western zone. monthsBefore above documents the same
+// trap; this is the second place in the file that would fall into it.
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+/**
+ * One label per bar, in the same order, so the axis can be laid out as a row of
+ * equal cells beneath the chart.
+ *
+ * The year appears on the first label and then only where it CHANGES. Thirteen
+ * repetitions of "2026" is noise, and the one place the reader needs the year
+ * is the place it stops being the same one.
+ *
+ * An unentered month is labelled like any other: its slot is on the axis, and
+ * an unlabelled gap in a row of labels reads as a layout fault rather than as
+ * the missing month it is.
+ */
+export function axisLabels(totals: readonly MonthTotal[]): AxisLabel[] {
+  let previousYear: string | null = null
+  return totals.map((total) => {
+    const year = total.period.slice(0, 4)
+    const month = MONTH_NAMES[Number(total.period.slice(5, 7)) - 1]
+    const label = { period: total.period, month, year: year === previousYear ? null : year }
+    previousYear = year
+    return label
+  })
+}

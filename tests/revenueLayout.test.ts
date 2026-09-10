@@ -21,12 +21,28 @@ const SOURCE = readFileSync(
 // tokenRules.ts warns about and matrixGrid.test.ts hit for real.
 const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '')
 
-function ruleBody(selector: string): string {
-  const start = CODE.indexOf(`${selector} {`)
-  if (start === -1) throw new Error(`no rule for "${selector}" in Revenue.module.css`)
-  const end = CODE.indexOf('}', start)
+// The sections' own stylesheet, which is a different file from the page's:
+// src/shell/Revenue.module.css lays the grid out, src/revenue/Revenue.module.css
+// draws what sits in the cells.
+const SECTIONS = readFileSync(
+  join(import.meta.dirname, '..', 'src', 'revenue', 'Revenue.module.css'),
+  'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '')
+
+function bodyIn(code: string, selector: string, file: string): string {
+  const start = code.indexOf(`${selector} {`)
+  if (start === -1) throw new Error(`no rule for "${selector}" in ${file}`)
+  const end = code.indexOf('}', start)
   if (end === -1) throw new Error(`rule "${selector}" is never closed`)
-  return CODE.slice(start, end)
+  return code.slice(start, end)
+}
+
+function ruleBody(selector: string): string {
+  return bodyIn(CODE, selector, 'shell/Revenue.module.css')
+}
+
+function sectionRule(selector: string): string {
+  return bodyIn(SECTIONS, selector, 'revenue/Revenue.module.css')
 }
 
 describe('the Revenue stylesheet', () => {
@@ -81,5 +97,46 @@ describe('the Revenue stylesheet', () => {
   // to.
   it('tops-aligns the pairs rather than stretching them', () => {
     expect(ruleBody('.page')).toContain('align-items: start')
+  })
+})
+
+describe('the revenue sections', () => {
+  it('is read, not silently skipped', () => {
+    expect(SECTIONS.length).toBeGreaterThan(1000)
+    expect(SECTIONS).toContain('.section {')
+  })
+
+  // The owner's second report, 2026-09-10: "No clear separation between
+  // sections or headers." Before this the only thing marking a boundary was a
+  // slightly larger gap, on a page whose contents are themselves stacks of
+  // bordered cards -- which reads as no boundary at all.
+  it('marks each section with a rule above it and room to breathe', () => {
+    const section = sectionRule('.section')
+    expect(section).toContain('border-block-start: 1px solid var(--rule-hairline)')
+    expect(section).toContain('padding-block-start:')
+  })
+
+  // A grid of equal cells is the ENTIRE alignment mechanism between the axis
+  // and the bars: barGeometry slots bars evenly across the same width, so cell
+  // n and bar n share a centre. A flex row would size each cell to its text --
+  // "Sep" and "Dec" differ -- and the labels would drift off their bars with
+  // nothing failing.
+  it('lays the month axis out as equal cells, never as a flex row', () => {
+    const axis = sectionRule('.axis')
+    expect(axis).toContain('display: grid')
+    expect(axis).toContain('grid-auto-columns: minmax(0, 1fr)')
+    expect(axis).not.toContain('display: flex')
+  })
+
+  // The void the owner reported beside the monthly breakdown. The table now
+  // carries five columns and fills the width it is given.
+  it('no longer caps the billing table at the reading measure', () => {
+    expect(sectionRule('.table')).not.toContain('--measure-prose')
+  })
+
+  it('lines the figure columns up on their last digit', () => {
+    const figure = sectionRule('.table .figure')
+    expect(figure).toContain('text-align: end')
+    expect(figure).toContain('font-variant-numeric: tabular-nums')
   })
 })

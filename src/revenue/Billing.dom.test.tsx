@@ -158,6 +158,97 @@ describe('Billing', () => {
     expect(figure.getAttribute('preserveAspectRatio')).toBe('none')
   })
 
+  it('labels the axis with one month under each bar, in order', () => {
+    // The owner's ask on 2026-09-10: a chart of thirteen unlabelled bars makes
+    // the reader count backwards from the right to work out which month they
+    // are looking at.
+    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const labels = screen.getAllByTestId('billing-axis-label')
+    expect(labels).toHaveLength(screen.getAllByTestId('billing-bar').length)
+    expect(labels.map((node) => node.textContent)).toEqual([
+      'Jul2026',
+      'Aug',
+      'Sep',
+    ])
+  })
+
+  it('dates the axis once per year rather than thirteen times', () => {
+    render(
+      <Billing
+        rows={[row(1, '2025-12-01', 100000), row(1, '2026-01-01', 100000)]}
+        currentPeriod="2026-01-01"
+      />,
+    )
+
+    expect(
+      screen.getAllByTestId('billing-axis-label').map((node) => node.textContent),
+    ).toEqual(['Dec2025', 'Jan2026'])
+  })
+
+  it('hides the axis row from a screen reader, which has the table', () => {
+    // "Jul Aug Sep" read aloud with no values attached is noise between the
+    // chart's description and the table that actually carries the numbers.
+    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.getByTestId('billing-axis').getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('gives the axis exactly one cell per bar, so the two cannot drift', () => {
+    // The labels are HTML beneath the svg rather than <text> inside it -- the
+    // svg is stretched with preserveAspectRatio="none" and would stretch the
+    // glyphs with it. Alignment therefore rests on the two having the same
+    // number of equal cells, which is worth asserting rather than assuming.
+    render(
+      <Billing
+        rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.getAllByTestId('billing-axis-label')).toHaveLength(3)
+  })
+
+  it('totals each month and says how it moved against the one before', () => {
+    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const table = screen.getByRole('table', { name: /billing/i })
+    expect(table.textContent).toContain('Total')
+    expect(table.textContent).toContain('Change')
+    // July 4,000 + 1,000 = 5,000; August 4,500; September 5,000 + 500 = 5,500.
+    expect(table.textContent).toContain('$5,500')
+    expect(table.textContent).toContain('-$500')
+    expect(table.textContent).toContain('+$1,000')
+  })
+
+  it('leaves the first month\'s change blank rather than calling it zero', () => {
+    // Nothing precedes it. "$0" would claim it matched a month that is not
+    // there.
+    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const first = screen.getByRole('row', { name: /July 2026/ })
+    expect(first.textContent).toContain('—')
+    expect(first.textContent).not.toContain('$0')
+  })
+
+  it('refuses a total or a change for an unentered month', () => {
+    render(
+      <Billing
+        rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    const gap = screen.getByRole('row', { name: /August 2026/ })
+    expect(gap.textContent).toContain('not entered')
+    expect(gap.textContent).not.toContain('$0')
+
+    // And September, whose predecessor is that gap, cannot report a change
+    // either -- reaching back to July would compare two months two apart.
+    const after = screen.getByRole('row', { name: /September 2026/ })
+    expect(after.textContent).toContain('—')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

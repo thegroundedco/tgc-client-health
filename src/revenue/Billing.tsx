@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatPeriod } from '../lib/month'
-import { barGeometry, monthlyTotals } from './chartMath'
+import { axisLabels, barGeometry, monthRows, monthlyTotals } from './chartMath'
 import type { MonthTotal, RevenueRow } from './chartMath'
 import { formatMoney } from './money'
 import styles from './Revenue.module.css'
@@ -24,6 +24,13 @@ const VIEW = { width: 600, height: 200, gap: 2 }
 
 function totalOf(month: MonthTotal): number {
   return month.retainerCents + month.projectCents
+}
+
+// A rise carries its plus sign. formatMoney already signs a fall, and a column
+// where only the negatives are marked reads as though the unmarked ones are
+// neutral rather than positive.
+function formatChange(cents: number): string {
+  return cents > 0 ? `+${formatMoney(cents)}` : formatMoney(cents)
 }
 
 export function Billing({
@@ -136,6 +143,24 @@ export function Billing({
         ))}
       </svg>
 
+      {/* The months, as HTML beneath the svg rather than <text> inside it.
+          The chart is stretched with preserveAspectRatio="none", which would
+          stretch glyphs with it. Equal cells, one per bar, is what keeps the
+          two aligned -- barGeometry slots the bars evenly across the same
+          width, so cell centres and bar centres coincide.
+
+          aria-hidden because "Jul Aug Sep" read aloud with no values attached
+          is noise sitting between the chart's own description and the table
+          that carries the numbers. */}
+      <p aria-hidden="true" className={`t-caption ${styles.axis}`} data-testid="billing-axis">
+        {axisLabels(totals).map((label) => (
+          <span className={styles.axisLabel} data-testid="billing-axis-label" key={label.period}>
+            <span className={styles.axisMonth}>{label.month}</span>
+            {label.year !== null && <span className={styles.axisYear}>{label.year}</span>}
+          </span>
+        ))}
+      </p>
+
       {activeMonth !== null && (
         <p className={`t-caption ${styles.summary}`} data-testid="billing-tooltip">
           {formatPeriod(activeMonth.period)}
@@ -152,16 +177,40 @@ export function Billing({
         <thead>
           <tr>
             <th scope="col">Month</th>
-            <th scope="col">Retainer</th>
-            <th scope="col">Project work</th>
+            <th className={styles.figure} scope="col">
+              Retainer
+            </th>
+            <th className={styles.figure} scope="col">
+              Project work
+            </th>
+            <th className={styles.figure} scope="col">
+              Total
+            </th>
+            <th className={styles.figure} scope="col">
+              Change
+            </th>
           </tr>
         </thead>
         <tbody>
-          {totals.map((month) => (
+          {monthRows(totals).map((month) => (
             <tr key={month.period}>
               <th scope="row">{formatPeriod(month.period)}</th>
-              <td>{month.entered ? formatMoney(month.retainerCents) : 'not entered'}</td>
-              <td>{month.entered ? formatMoney(month.projectCents) : '—'}</td>
+              <td className={styles.figure}>
+                {month.entered ? formatMoney(month.retainerCents) : 'not entered'}
+              </td>
+              <td className={styles.figure}>
+                {month.entered ? formatMoney(month.projectCents) : '—'}
+              </td>
+              <td className={styles.figure}>
+                {month.totalCents === null ? '—' : formatMoney(month.totalCents)}
+              </td>
+              {/* An em dash, never $0. null here means the comparison could not
+                  be made -- no month before this one, or the one before it was
+                  never entered -- and $0 would report that absence as a finding
+                  of no change. chartMath.monthRows sets the rule. */}
+              <td className={styles.figure}>
+                {month.changeCents === null ? '—' : formatChange(month.changeCents)}
+              </td>
             </tr>
           ))}
         </tbody>
