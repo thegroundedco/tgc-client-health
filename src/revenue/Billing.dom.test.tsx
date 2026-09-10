@@ -145,6 +145,19 @@ describe('Billing', () => {
     expect(bars[0].getAttribute('data-entered')).toBe('true')
   })
 
+  it('STRETCHES to fill a wide container rather than centring at 600px', () => {
+    // The defect that arrives with a wide page. The viewBox is 600x200 and the
+    // default preserveAspectRatio scales uniformly, so in a 1150px-wide grid
+    // cell the chart would render at 600x200 CENTRED in it -- unchanged, with
+    // empty space either side, and looking for all the world like a chart that
+    // simply did not widen. `none` is what lets the horizontal axis follow the
+    // container. The 2px inter-segment gap is vertical and is unaffected.
+    render(<Billing rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const figure = screen.getByRole('img', { name: /billing/i })
+    expect(figure.getAttribute('preserveAspectRatio')).toBe('none')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

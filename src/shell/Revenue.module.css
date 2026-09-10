@@ -1,0 +1,64 @@
+/* The Revenue page's own layout, split out of Page.module.css on 2026-09-10.
+   That file's comment said its shared rule stood "only while they are the same
+   shape -- the moment either grows real contents it takes a stylesheet of its
+   own." Revenue grew real contents; this is that stylesheet. Overview, which
+   still has none, keeps Page.module.css.
+
+   THE DEFECT THIS FIXES. .page capped every screen at --measure-prose, 62ch.
+   That is a reading measure -- the width at which a line of running text stays
+   scannable -- and it is the wrong cap for a page of charts, tables and paired
+   lists. On a desktop it left Revenue as a narrow strip hugging the inline
+   start while the header spanned the whole window, which is what the owner
+   reported on 2026-09-10.
+
+   TWO COLUMNS RATHER THAN ONE WIDE ONE, and that is the substance of this
+   file rather than a preference. Simply widening the single column would
+   stretch every Concentration, Tenure and Churn row -- a name at the inline
+   start, a measurement at the inline end -- until the two halves of one row
+   sit a screen apart and stop reading as a pair. The rows are the reason the
+   page cannot just be made wide. Pairing the SECTIONS instead spends the width
+   without asking any single row to span it.
+
+   Billing is the exception and spans both columns: a thirteen-month chart is
+   the one thing here that gets better the wider it is. */
+
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* Two sections side by side rarely have the same height. Stretching the
+     shorter one would hang its last row's border in empty space below the list it
+     belongs to, which reads as a rendering fault rather than as a short list. */
+  align-items: start;
+  align-content: start;
+  /* Wider between the rows than between the columns: the vertical gap
+     separates one section from the next, the horizontal one only separates two
+     sections that are already distinguished by having their own headings. */
+  gap: var(--space-6) var(--space-5);
+  max-inline-size: var(--measure-dashboard);
+  margin-inline: auto;
+}
+
+/* The page heading, the load and error states, and the billing chart: each
+   spans the full width.
+
+   An explicit class rather than :nth-child. The sections below are rendered
+   conditionally -- a load state or an error present or absent shifts every
+   later position by one -- so a rule keyed to position would silently span
+   whichever section happened to land there. */
+.wide {
+  grid-column: 1 / -1;
+}
+
+/* 60rem, not a device name. Below it the columns would be narrower than the
+   prose measure and the pairing would cost readability rather than buy it, so
+   the page falls back to the single column it has always been on a phone.
+   src/revenue/Revenue.module.css bumps the chart's height at the same width,
+   and the two numbers are meant to stay equal. */
+@media (min-width: 60rem) {
+  .page {
+    /* minmax(0, 1fr), never a bare 1fr: a grid track's default minimum is its
+       CONTENT, so the billing table would push its own column past half the
+       page rather than staying inside it. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,6 +1,14 @@
-/* Shared by the two pages that have no contents yet. One rule rather than two
-   identical ones, and it stays shared only while they are the same shape -- the
-   moment either grows real contents it takes a stylesheet of its own. */
+/* Overview's layout: a page with no contents yet, so a column at the reading
+   measure is the whole of it.
+
+   It used to be shared with Revenue on the grounds that the rule stayed shared
+   "only while they are the same shape -- the moment either grows real contents
+   it takes a stylesheet of its own." Revenue grew real contents in slices 6c
+   to 6f and the split happened on 2026-09-10, when --measure-prose turned out
+   to be the reason that page rendered as a narrow strip on a desktop. See
+   src/shell/Revenue.module.css. Overview keeps this because a reading measure
+   is genuinely right for it, and it should be revisited the same way when it
+   is given contents of its own. */
 .page {
   display: flex;
   flex-direction: column;

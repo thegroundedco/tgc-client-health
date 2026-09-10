@@ -81,9 +81,18 @@ export function Billing({
         <span className={styles.swatchProject} aria-hidden="true" /> Project work
       </p>
 
+      {/* preserveAspectRatio="none" is load-bearing, not tidying. The default
+          scales the viewBox UNIFORMLY, so in a container wider than 600px the
+          chart renders at 600x200 centred inside it with empty space either
+          side -- a chart that silently refuses to widen, which is precisely
+          what it looks like. `none` lets the horizontal axis follow the
+          container. Nothing distorts that matters: the 2px inter-segment gap
+          is vertical, and the rects' 2px corner radius is the only thing that
+          stretches. */}
       <svg
         aria-label={summary}
         className={styles.chart}
+        preserveAspectRatio="none"
         role="img"
         viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
       >

@@ -328,6 +328,19 @@
      column is sized by the controls standing in it, which are themselves sized
      in rem, not by a count of characters. */
   --measure-column: 30rem;
+
+  /* The width a whole SCREEN of charts, tables and paired lists is allowed to
+     reach. Not a reading measure and deliberately not derived from one: the
+     two above cap a column of running text and a column of form controls
+     respectively, and Revenue is neither -- it wore --measure-prose until
+     2026-09-10 and rendered as a narrow strip hugging the inline start of a
+     desktop window while the header spanned all of it.
+
+     In rem rather than ch for the same reason --measure-column is: nothing
+     here is sized by a count of characters. 72rem is two --measure-prose
+     columns plus the gap between them at the root font size, which is exactly
+     what the page puts in it. */
+  --measure-dashboard: 72rem;
 }
 
 /* ============================================================================

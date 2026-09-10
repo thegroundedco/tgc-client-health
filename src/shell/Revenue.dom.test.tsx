@@ -18,6 +18,7 @@ vi.mock('../revenue/useRevenue', () => ({ useRevenue: vi.fn() }))
 vi.mock('../revenue/useRetention', () => ({ useRetention: vi.fn() }))
 
 import { Revenue } from './Revenue'
+import styles from './Revenue.module.css'
 import { formatTenure, tenureDays, todayISO } from '../revenue/tenureMath'
 import { useTenure } from '../revenue/useTenure'
 import { useRevenue } from '../revenue/useRevenue'
@@ -200,5 +201,49 @@ describe('the Revenue destination', () => {
 
     expect(screen.getByRole('alert').textContent).toContain('permission denied')
     expect(screen.queryByRole('list', { name: 'Tenure' })).toBe(null)
+  })
+
+  // The page is a two-column grid on a wide viewport (tests/revenueLayout.
+  // test.ts asserts the stylesheet); these assert the wiring, which is the
+  // half a stylesheet cannot check. Everything that is NOT one of the four
+  // paired sections has to opt into spanning both columns, and the failure
+  // mode of forgetting is silent: the element takes a single grid cell and
+  // shunts a section into the other one, leaving the page looking shuffled
+  // with nothing broken.
+  it('spans the heading and the chart across both columns', () => {
+    given()
+
+    expect(screen.getByRole('heading', { name: 'Revenue' }).className).toContain(
+      styles.wide,
+    )
+    // Billing's own <section> is not the grid item -- its wrapper is. Anchored
+    // on the heading rather than the <svg>, because with no rows Billing
+    // renders its "nothing to chart" branch and draws no svg at all; the
+    // wrapper has to span either way.
+    const billing = screen.getByRole('heading', { name: 'Billing' }).closest('section')
+    expect(billing?.parentElement?.className ?? '').toContain(styles.wide)
+  })
+
+  it('spans a load state and an error across both columns too', () => {
+    given({ status: 'loading', clients: [] })
+    expect(screen.getByText(/loading/i).className).toContain(styles.wide)
+
+    document.body.innerHTML = ''
+    given({ status: 'error', loadError: 'permission denied', clients: [] })
+    expect(screen.getByRole('alert').className).toContain(styles.wide)
+  })
+
+  // The other half of the same rule. A paired section carrying the span class
+  // would take the full width and push its partner onto its own row -- the
+  // pairing quietly not happening, which is the defect this whole slice fixes.
+  it('leaves the four paired sections in single columns', () => {
+    given()
+
+    for (const name of ['Retention', 'Concentration', 'Tenure', 'Churn']) {
+      const heading = screen.getByRole('heading', { name })
+      const section = heading.closest('section')
+      expect(section).not.toBeNull()
+      expect(section?.className ?? '').not.toContain(styles.wide)
+    }
   })
 })

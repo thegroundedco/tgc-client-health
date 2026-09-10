@@ -104,6 +104,16 @@
   overflow: visible;
 }
 
+/* Taller once the page pairs its sections and the chart gets the full width of
+   both -- thirteen bars across 1150px at 200px tall read as a squat strip.
+   60rem is src/shell/Revenue.module.css's breakpoint and the two are meant to
+   stay equal: the chart grows at the moment its container does. */
+@media (min-width: 60rem) {
+  .chart {
+    block-size: 260px;
+  }
+}
+
 .chart g:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
@@ -131,9 +141,15 @@
 }
 
 /* The chart's numbers as text. Not a fallback -- the path by which the chart is
-   readable at all without sight of it. */
+   readable at all without sight of it.
+
+   Capped at the reading measure even though the chart above it is not. The
+   chart earns the full width of the page; a three-column table does not --
+   stretched across it, a month and its two figures end up far enough apart to
+   have to be tracked across the row. */
 .table {
   inline-size: 100%;
+  max-inline-size: var(--measure-prose);
   border-collapse: collapse;
   margin-block-start: var(--space-3);
 }
