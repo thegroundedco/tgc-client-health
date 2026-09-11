@@ -90,7 +90,7 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
   })
 
-  it('puts its five sections in the order the spec argues for', () => {
+  it('puts its six sections in the order the spec argues for', () => {
     // Slice 6d. The order is an argument, not an accident: what we are billing
     // and whether it is moving, then how much of last year we kept, then who we
     // are most exposed to, then how long clients stay and who left. Aggregate to
@@ -105,7 +105,17 @@ describe('the Revenue destination', () => {
     const headings = screen
       .getAllByRole('heading', { level: 3 })
       .map((node) => node.textContent)
-    expect(headings).toEqual(['Billing', 'Retention', 'Concentration', 'Tenure', 'Churn'])
+    // Six as of 2026-09-11. "Retainer vs project" is LAST and outside the
+    // range control's reach: it answers a question about relationships rather
+    // than about the months in view.
+    expect(headings).toEqual([
+      'Billing',
+      'Retention',
+      'Concentration',
+      'Tenure',
+      'Churn',
+      'Retainer vs project',
+    ])
   })
 
   it('names its four sections with the words a reader would search for', () => {
