@@ -103,6 +103,12 @@ export function planCells({
   year,
   entity = 'TGC',
   alsoInclude = [],
+  // Ledger name -> the name the client should be filed under. Applied BEFORE
+  // the months are summed, which is the whole point: the ledger recorded one
+  // relationship under a different name per entity, and renaming afterwards
+  // would leave two cells for the same client-month for planImport to refuse
+  // as a duplicate.
+  rename = {},
   overrides = {},
   defaultKind = 'retainer',
 }) {
@@ -144,7 +150,8 @@ export function planCells({
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]
     const monthName = row[at['Month']] ?? ''
-    const client = row[at['Client']] ?? ''
+    const ledgerName = row[at['Client']] ?? ''
+    const client = rename[ledgerName] ?? ledgerName
     const asEntered = row[at['Client (as entered)']] ?? ''
     const amount = row[at['Invoice Amount']] ?? ''
 
@@ -152,7 +159,7 @@ export function planCells({
     // refused -- an exported pivot carries them and they are not errors.
     if (client === '' || monthName === '') continue
 
-    if ((row[at['Entity']] ?? '') !== entity && !kept.has(client)) {
+    if ((row[at['Entity']] ?? '') !== entity && !kept.has(ledgerName) && !kept.has(client)) {
       const cents = parseMoney(amount)
       if (cents !== null) excludedEntity += cents
       continue

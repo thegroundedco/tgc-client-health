@@ -315,3 +315,55 @@ describe('planCells — what it refuses', () => {
     expect(out.problems.length).toBeGreaterThan(0)
   })
 })
+
+describe('planCells — renaming a client', () => {
+  // Two names for one client, on purpose: the ledger recorded the same
+  // relationship under a different name per entity. Renaming must happen
+  // BEFORE the months are summed, or the two names produce two cells for the
+  // same client-month and planImport refuses the lot as a duplicate.
+  it('sums two ledger names into one client', () => {
+    const out = planCells({
+      csv: csv(
+        'Jun,6,TGC,Alpha,Alpha,QP-1,"$5,000",$0,$0',
+        'Jun,6,Other,Beta,Beta,QP-2,"$7,000",$0,$0',
+      ),
+      year: YEAR,
+      alsoInclude: ['Beta'],
+      rename: { Beta: 'Alpha' },
+    })
+
+    expect(out.cells).toEqual([
+      { clientName: 'Alpha', period: '2026-06-01', retainer: '12000', project: '0' },
+    ])
+  })
+
+  it('carries the renamed client’s own months through', () => {
+    const out = planCells({
+      csv: csv(
+        'Jan,1,TGC,Alpha,Alpha,QP-1,"$5,000",$0,$0',
+        'Jun,6,TGC,Beta,Beta,QP-2,"$7,000",$0,$0',
+      ),
+      year: YEAR,
+      rename: { Beta: 'Alpha' },
+    })
+
+    expect(out.cells.map((cell: Cell) => cell.period)).toEqual([
+      '2026-01-01',
+      '2026-02-01',
+      '2026-03-01',
+      '2026-04-01',
+      '2026-05-01',
+      '2026-06-01',
+    ])
+  })
+
+  it('leaves a client nobody renamed alone', () => {
+    const out = planCells({
+      csv: csv('Jun,6,TGC,Alpha,Alpha,QP-1,"$5,000",$0,$0'),
+      year: YEAR,
+      rename: { Beta: 'Alpha' },
+    })
+
+    expect(out.cells[0].clientName).toBe('Alpha')
+  })
+})
