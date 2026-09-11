@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { formatPeriod } from '../lib/month'
 import { axisLabels, axisTicks, barGeometry, monthRows, monthlyTotals } from './chartMath'
 import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
@@ -27,6 +28,21 @@ const VIEW = { width: 600, height: 200, gap: 2 }
 // How far the card sits from the cursor, and how much room it needs before it
 // has to flip to the other side. A card drawn off the right edge is invisible
 // for the most recent months, which are the ones most often read.
+// Which mark the pointer is over, or null for the gap between them, the bar
+// group's own area, and every keyboard focus -- none of which point at one
+// half rather than the other.
+type Segment = 'retainer' | 'project' | null
+
+// Read off the element under the pointer rather than held as its own state.
+// Two handlers racing -- one on each rect, one on the group -- would leave a
+// stale segment whenever the pointer crossed the gap, and label it as
+// whichever mark it touched last.
+function segmentAt(target: EventTarget | null): Segment {
+  if (!(target instanceof Element)) return null
+  const value = target.getAttribute('data-segment')
+  return value === 'retainer' || value === 'project' ? value : null
+}
+
 const CARD_OFFSET = 16
 const CARD_ROOM = 240
 
@@ -52,29 +68,57 @@ function formatChange(cents: number): string {
   return cents > 0 ? `+${formatMoney(cents)}` : formatMoney(cents)
 }
 
-// What the hover says. Retainer, project work, total and the change against
-// the month before -- spec 6e §3. The retention RATE is deliberately not here:
-// it is retainer-only, it is noise over one month on this roster, and it
-// cannot carry the sentence that makes it defensible. §3.1 has the argument;
-// the panel has the rate.
-function describeMonth(month: MonthRow, totals: readonly MonthTotal[]): string {
-  if (!month.entered) return ' · not entered'
-
-  const parts = [
-    `${formatMoney(month.retainerCents)} retainer`,
-    `${formatMoney(month.projectCents)} project work`,
-    `${formatMoney(month.totalCents ?? 0)} total`,
-  ]
+// What the hover card says.
+//
+// Pointing at ONE mark is a question about that mark, so the other half is
+// dropped and the one being pointed at is given the room -- but the month's
+// total and its movement always stay, because a segment figure alone says
+// nothing about whether the month was good. The owner's shape, 2026-09-11.
+//
+// The retention RATE is still deliberately absent: it is retainer-only, it is
+// noise over one month on this roster, and it cannot carry the sentence that
+// makes it defensible. Spec 6e §3.1 has the argument; the panel has the rate.
+function describeMonth(
+  month: MonthRow,
+  totals: readonly MonthTotal[],
+  segment: Segment,
+): ReactNode {
+  if (!month.entered) return <span> · not entered</span>
 
   // Only when there IS a pair to compare. monthRows returns null where there
   // is not, and a "vs" clause naming a month nobody entered would be the
   // fabrication the whole module refuses.
+  let movement = ''
   if (month.changeCents !== null) {
     const index = totals.findIndex((entry) => entry.period === month.period)
-    parts.push(`${formatChange(month.changeCents)} vs ${formatPeriod(totals[index - 1].period)}`)
+    movement = ` · ${formatChange(month.changeCents)} vs ${formatPeriod(totals[index - 1].period)}`
+  }
+  const context = `${formatMoney(month.totalCents ?? 0)} total${movement}`
+
+  if (segment === null) {
+    return (
+      <>
+        <span>
+          {formatMoney(month.retainerCents)} retainer ·{' '}
+          {formatMoney(month.projectCents)} project work
+        </span>
+        <span>{context}</span>
+      </>
+    )
   }
 
-  return ` · ${parts.join(' · ')}`
+  const cents = segment === 'retainer' ? month.retainerCents : month.projectCents
+  return (
+    <>
+      <span className={styles.hoverFigure} data-testid="billing-hover-figure">
+        {formatMoney(cents)}{' '}
+        <span className={styles.hoverWhich}>
+          {segment === 'retainer' ? 'retainer' : 'project work'}
+        </span>
+      </span>
+      <span>{context}</span>
+    </>
+  )
 }
 
 export function Billing({
@@ -105,9 +149,12 @@ export function Billing({
   // not. Opened by keyboard the card takes its place from the BAR, or it would
   // appear at wherever the mouse happened to be left, which is nowhere related
   // to what the keyboard is on.
-  const [point, setPoint] = useState<{ x: number; y: number; source: 'pointer' | 'focus' } | null>(
-    null,
-  )
+  const [point, setPoint] = useState<{
+    x: number
+    y: number
+    source: 'pointer' | 'focus'
+    segment: Segment
+  } | null>(null)
 
   const totals = monthlyTotals(rows, currentPeriod)
 
@@ -246,7 +293,7 @@ export function Billing({
             onFocus={(event) => {
               setActive(bar.period)
               const box = event.currentTarget.getBoundingClientRect()
-              setPoint({ x: box.left + box.width / 2, y: box.top, source: 'focus' })
+              setPoint({ x: box.left + box.width / 2, y: box.top, source: 'focus', segment: null })
             }}
             onKeyDown={(event) => {
               // A native <button> does this for free; an SVG group with a
@@ -262,14 +309,24 @@ export function Billing({
               // Placed on ENTER as well as on move. A pointer that comes to
               // rest on a bar without moving again emits no mousemove, and the
               // card would never appear.
-              setPoint({ x: event.clientX, y: event.clientY, source: 'pointer' })
+              setPoint({
+                x: event.clientX,
+                y: event.clientY,
+                source: 'pointer',
+                segment: segmentAt(event.target),
+              })
             }}
             onMouseLeave={() => {
               setActive(null)
               setPoint(null)
             }}
             onMouseMove={(event) =>
-              setPoint({ x: event.clientX, y: event.clientY, source: 'pointer' })
+              setPoint({
+                x: event.clientX,
+                y: event.clientY,
+                source: 'pointer',
+                segment: segmentAt(event.target),
+              })
             }
             role="button"
             tabIndex={0}
@@ -280,6 +337,7 @@ export function Billing({
             {bar.entered && (
               <>
                 <rect
+                  data-segment="retainer"
                   fill="var(--chart-retainer)"
                   height={bar.retainerHeight}
                   rx="2"
@@ -289,6 +347,7 @@ export function Billing({
                 />
                 {bar.projectHeight > 0 && (
                   <rect
+                    data-segment="project"
                     fill="var(--chart-project)"
                     height={bar.projectHeight}
                     rx="2"
@@ -334,7 +393,7 @@ export function Billing({
           style={{ left: `${cardX}px`, top: `${cardY}px` }}
         >
           <span className={styles.hoverMonth}>{formatPeriod(activeMonth.period)}</span>
-          {describeMonth(activeMonth, totals)}
+          {describeMonth(activeMonth, totals, point.segment)}
         </p>
       )}
 

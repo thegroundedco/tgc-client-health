@@ -470,6 +470,67 @@ describe('Billing', () => {
     expect(tip.getAttribute('data-source')).toBe('focus')
   })
 
+  // ROWS September: $5,000 retainer, $500 project, $5,500 total, +$1,000 on
+  // August. Hovering one segment is a question about THAT segment, so the
+  // other figure is noise -- but the month's total and its movement are the
+  // context that makes either number mean anything, so they always stay.
+  function hoverSegment(barIndex: number, which: number) {
+    const bar = screen.getAllByTestId('billing-bar')[barIndex]
+    const rect = bar.querySelectorAll('rect')[which]
+    fireEvent.mouseEnter(bar, { clientX: 300, clientY: 200 })
+    fireEvent.mouseMove(rect, { clientX: 300, clientY: 200 })
+    return screen.getByTestId('billing-tooltip')
+  }
+
+  it('emphasises the RETAINER and drops the project figure on the lower segment', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const tip = hoverSegment(2, 0)
+    expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$5,000')
+    expect(tip.textContent).toContain('retainer')
+    expect(tip.textContent).not.toContain('project work')
+    expect(tip.textContent).toContain('$5,500')
+    expect(tip.textContent).toContain('+$1,000')
+  })
+
+  it('emphasises the PROJECT figure and drops the retainer on the upper segment', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const tip = hoverSegment(2, 1)
+    expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$500')
+    expect(tip.textContent).toContain('project work')
+    expect(tip.textContent).not.toContain('retainer')
+    expect(tip.textContent).toContain('$5,500')
+    expect(tip.textContent).toContain('+$1,000')
+  })
+
+  it('shows both halves when the pointer is on the bar but not on a segment', () => {
+    // The 2px gap between the two marks, and the bar group's own area. Reading
+    // a stale segment there would label the gap as whichever mark was touched
+    // last.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bar = screen.getAllByTestId('billing-bar')[2]
+    fireEvent.mouseEnter(bar, { clientX: 300, clientY: 200 })
+    fireEvent.mouseMove(bar, { clientX: 300, clientY: 200 })
+
+    const tip = screen.getByTestId('billing-tooltip')
+    expect(tip.textContent).toContain('retainer')
+    expect(tip.textContent).toContain('project work')
+    expect(screen.queryByTestId('billing-hover-figure')).toBeNull()
+  })
+
+  it('shows both halves on KEYBOARD focus, which points at no segment', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.tab()
+
+    const tip = screen.getByTestId('billing-tooltip')
+    expect(tip.textContent).toContain('retainer')
+    expect(tip.textContent).toContain('project work')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

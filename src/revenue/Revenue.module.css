@@ -460,3 +460,28 @@
   display: block;
   color: var(--text-primary);
 }
+
+/* The card's contents stack: month, then the figure being pointed at, then the
+   month's context. A flow of inline spans would run them together into one
+   sentence. */
+.hoverCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The figure for the mark under the pointer, given the room the question
+   deserves. One step up from the caption the rest of the card wears -- enough
+   to be the thing the eye lands on, not enough to shout. */
+.hoverFigure {
+  color: var(--text-primary);
+  font-size: var(--step-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Which half that figure is. Quieter than the number, because the number is
+   the answer and this only names it. */
+.hoverWhich {
+  color: var(--text-secondary);
+  font-size: var(--step--1);
+}
