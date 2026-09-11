@@ -858,6 +858,133 @@ describe('Billing', () => {
     expect(screen.getByRole('region', { name: /August 2026/ }).textContent).toMatch(/no entries/i)
   })
 
+  it('names the comparison in the legend, which otherwise names two of three marks', () => {
+    // The project's own dataviz rule: identity is never form alone. The ghost
+    // is identified purely by being a dashed outline, which is exactly the
+    // encoding that needs naming.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    const legend = screen.getByTestId('billing-legend').textContent ?? ''
+    expect(legend).toContain('Retainer')
+    expect(legend).toContain('Project work')
+    expect(legend).toMatch(/April 2026/)
+  })
+
+  it('leaves the comparison out of the legend when not comparing', () => {
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.getByTestId('billing-legend').textContent).not.toMatch(/earlier/i)
+  })
+
+  it('puts the comparison in the TABLE, not only in pixels', () => {
+    // The table is the chart's text path. With the comparison living only in
+    // an outline, a hover card and one summed figure, a reader who cannot see
+    // the chart gets no comparison at all.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((cell) => cell.textContent)
+    expect(headers).toContain('3 months earlier')
+    expect(headers).toContain('Difference')
+
+    // July is $5,000 against April's $3,000.
+    const july = screen.getByRole('row', { name: /July 2026/ })
+    expect(july.textContent).toContain('$3,000')
+    expect(july.textContent).toContain('+$2,000')
+  })
+
+  it('heads the column by the year when comparing a year back', () => {
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="year"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={ROWS}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.getAllByRole('columnheader').map((c) => c.textContent)).toContain(
+      'A year earlier',
+    )
+  })
+
+  // Cells, not row text. Asserting the ROW contains an em dash passes for
+  // free: Change and the other columns print one too. That weaker form went
+  // green with the comparison cell hard-coded to $0, which is the defect it
+  // was written to catch.
+  //
+  // The six cells are Retainer, Project, Total, Change, Comparison, Difference.
+  const cells = (name: RegExp) =>
+    [...screen.getByRole('row', { name }).querySelectorAll('td')].map((c) => c.textContent)
+
+  it('shows an em dash where the COMPARISON month has no figure', () => {
+    // Not $0, and not a rise from nothing. Nobody entered that month.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={[row(1, '2026-04-01', 300000), ...ROWS]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(cells(/August 2026/)[4]).toBe('—')
+    expect(cells(/August 2026/)[5]).toBe('—')
+    // July does have a comparison, so the same columns carry figures there.
+    expect(cells(/July 2026/)[4]).toBe('$3,000')
+  })
+
+  it('shows an em dash where the PRIMARY month has no figure', () => {
+    // The other direction, and the one that had no test at all: a month nobody
+    // entered has no total, so it cannot have a difference either. Treating
+    // its absence as zero would report a fall of the comparison's whole value.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={[
+          row(1, '2026-04-01', 300000),
+          row(1, '2026-05-01', 400000),
+          row(1, '2026-06-01', 100000),
+          row(1, '2026-07-01', 400000),
+          row(1, '2026-09-01', 500000),
+        ]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    // August is unentered; May, its comparison, is $4,000.
+    expect(cells(/August 2026/)[2]).toBe('—')
+    expect(cells(/August 2026/)[4]).toBe('$4,000')
+    expect(cells(/August 2026/)[5]).toBe('—')
+  })
+
+  it('adds no comparison columns when not comparing', () => {
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

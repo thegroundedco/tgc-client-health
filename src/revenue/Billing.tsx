@@ -94,6 +94,27 @@ function monthsBack(period: string, offset: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-01`
 }
 
+// An em dash, never a zero and never a rise. Null on either side means the
+// comparison cannot be made -- the month was not entered, or the month it
+// would be measured against was not -- and a figure there would invent one.
+function ComparisonCells({
+  against,
+  month,
+}: {
+  against: { cents: number; period: string } | null
+  month: MonthRow
+}) {
+  const difference =
+    against === null || month.totalCents === null ? null : month.totalCents - against.cents
+
+  return (
+    <>
+      <td className={styles.figure}>{against === null ? '—' : formatMoney(against.cents)}</td>
+      <td className={styles.figure}>{difference === null ? '—' : formatChange(difference)}</td>
+    </>
+  )
+}
+
 function describeMonth(
   month: MonthRow,
   totals: readonly MonthTotal[],
@@ -247,6 +268,12 @@ export function Billing({
   // comparison period that predates the records is "nothing to compare
   // against", and treating it as zero would report the range as an infinite
   // rise -- the single most flattering lie available here.
+  // Named once, used by the legend and the table header. The offset is what
+  // the reader needs to align a row with its comparison; naming a single month
+  // cannot work, because every row compares against a different one.
+  const offsetLabel =
+    compare === 'year' ? 'A year earlier' : `${offset} month${offset === 1 ? '' : 's'} earlier`
+
   const comparable = (ghosts ?? []).filter((cents): cents is number => cents !== null)
   const comparedCents = comparable.length === 0 ? null : comparable.reduce((a, b) => a + b, 0)
   const entered = totals.filter((month) => month.entered)
@@ -326,6 +353,14 @@ export function Billing({
         <span className={styles.swatchRetainer} aria-hidden="true" /> Retainer
         {'  '}
         <span className={styles.swatchProject} aria-hidden="true" /> Project work
+        {against !== null && (
+          <>
+            {'  '}
+            <span className={styles.swatchGhost} aria-hidden="true" />{' '}
+            {formatPeriod(against.from)}
+            {against.from === against.to ? '' : `–${formatPeriod(against.to)}`}
+          </>
+        )}
       </p>
 
       {/* preserveAspectRatio="none" is load-bearing, not tidying. The default
@@ -550,6 +585,19 @@ export function Billing({
             <th className={`${styles.figure} ${styles.band} ${styles.bandEnd}`} scope="col">
               Change
             </th>
+            {/* Headed by the OFFSET, not by a month: every row compares against
+                a different month, so a single month in the header would be
+                wrong for eight rows out of nine. */}
+            {against !== null && (
+              <>
+                <th className={styles.figure} scope="col">
+                  {offsetLabel}
+                </th>
+                <th className={styles.figure} scope="col">
+                  Difference
+                </th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -598,6 +646,7 @@ export function Billing({
               <td className={`${styles.figure} ${styles.band} ${styles.bandEnd}`}>
                 {month.changeCents === null ? '—' : formatChange(month.changeCents)}
               </td>
+              {against !== null && <ComparisonCells month={month} against={comparisonFor(month.period)} />}
             </tr>
           ))}
         </tbody>

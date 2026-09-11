@@ -617,3 +617,16 @@
 .table tbody tr[data-selected='true'] {
   background: var(--surface-sunken);
 }
+
+/* The legend's mark for the comparison. An outline, matching the ghost on the
+   chart -- the legend has to show the same encoding the mark uses, and this
+   mark's identity is its dashed edge rather than any fill. */
+.swatchGhost {
+  display: inline-block;
+  inline-size: 0.75em;
+  block-size: 0.75em;
+  border: 1px dashed var(--text-secondary);
+  border-radius: 2px;
+  vertical-align: baseline;
+  margin-inline-end: 0.25em;
+}
