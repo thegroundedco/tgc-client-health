@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error -- a plain .mjs script with JSDoc types, not part of the
+// app's TypeScript program. The same arrangement its sibling
+// revenue-import-plan.mjs uses, and for the same reason: the decisions live in
+// a module that can be tested, and the script around it only does I/O.
 import { parseCsv, planCells } from '../scripts/revenue-import-read.mjs'
 
 // Turning an exported invoice ledger into the cells planImport judges. Kept
@@ -21,6 +25,13 @@ function csv(...rows: string[]): string {
 }
 
 const YEAR = 2026
+
+// planCells lives in a .mjs with JSDoc rather than TypeScript types, so what it
+// returns arrives untyped. Naming the shape here keeps the assertions below
+// readable AND typechecked -- `tsc` under strict mode rejects an implicitly
+// typed callback parameter, which is how this file failed `npm run build`
+// while passing both the tests and the linter.
+type Cell = { clientName: string; period: string; retainer: string; project: string }
 
 describe('parseCsv', () => {
   it('splits rows and cells and trims them', () => {
@@ -152,7 +163,7 @@ describe('planCells — what it leaves out', () => {
       alsoInclude: ['Beta'],
     })
 
-    expect(out.cells.map((c) => c.clientName).sort()).toEqual(['Acme', 'Beta'])
+    expect(out.cells.map((c: Cell) => c.clientName).sort()).toEqual(['Acme', 'Beta'])
     // Gamma alone was dropped for its entity; Beta was kept, so Beta's money
     // must not also be reported as excluded or the reconciliation counts it
     // on both sides.
@@ -221,7 +232,7 @@ describe('planCells — the zero fill', () => {
       year: YEAR,
     })
 
-    expect(out.cells.filter((c) => c.clientName === 'Beta').map((c) => c.period)).toEqual([
+    expect(out.cells.filter((c: Cell) => c.clientName === 'Beta').map((c: Cell) => c.period)).toEqual([
       '2026-03-01',
     ])
   })
@@ -236,7 +247,7 @@ describe('planCells — the zero fill', () => {
       year: YEAR,
     })
 
-    expect(out.cells.filter((c) => c.clientName === 'Acme').map((c) => c.period)).toEqual([
+    expect(out.cells.filter((c: Cell) => c.clientName === 'Acme').map((c: Cell) => c.period)).toEqual([
       '2026-01-01',
       '2026-02-01',
       '2026-03-01',
