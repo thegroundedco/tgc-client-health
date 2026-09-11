@@ -2,23 +2,23 @@
 
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('./useRevenue', () => ({ useRevenue: vi.fn() }))
-
 import { Concentration } from './Concentration'
-import { useRevenue } from './useRevenue'
 
+// No mock any more. Slice 6h moved this section onto the page's shared roster
+// and revenue read, so it takes what it needs as props -- which means these
+// tests exercise the real component against real data instead of a stubbed
+// hook.
 const CLIENTS = [
-  { id: 1, name: 'Acme', status: 'active' },
-  { id: 2, name: 'Delta', status: 'active' },
-  { id: 3, name: 'East Bay', status: 'active' },
-  { id: 4, name: 'Northgate', status: 'active' },
-  { id: 5, name: 'Harbor Row', status: 'active' },
-  { id: 6, name: 'Ivy Lane', status: 'active' },
+  { id: 1, name: 'Acme', status: 'active', started_on: '2020-01-01', ended_on: null },
+  { id: 2, name: 'Delta', status: 'active', started_on: '2020-01-01', ended_on: null },
+  { id: 3, name: 'East Bay', status: 'active', started_on: '2020-01-01', ended_on: null },
+  { id: 4, name: 'Northgate', status: 'active', started_on: '2020-01-01', ended_on: null },
+  { id: 5, name: 'Harbor Row', status: 'active', started_on: '2020-01-01', ended_on: null },
+  { id: 6, name: 'Ivy Lane', status: 'active', started_on: '2020-01-01', ended_on: null },
 ]
 
-function row(client_id: number, retainer_cents: number) {
-  return { client_id, period: '2026-09-01', retainer_cents, project_cents: 0 }
+function row(client_id: number, retainer_cents: number, period = '2026-09-01') {
+  return { client_id, period, retainer_cents, project_cents: 0 }
 }
 
 const FULL = [
@@ -30,21 +30,31 @@ const FULL = [
   row(6, 100000),
 ]
 
-function given(over: Partial<ReturnType<typeof useRevenue>> = {}) {
-  vi.mocked(useRevenue).mockReturnValue({
-    status: 'ready',
-    loadError: null,
-    clients: CLIENTS,
-    rows: FULL,
-    reload: vi.fn(),
-    ...over,
-  })
-  return render(<Concentration month="2026-09-01" />)
+function given(
+  over: {
+    status?: 'loading' | 'ready' | 'error'
+    loadError?: string
+    clients?: typeof CLIENTS
+    rows?: ReturnType<typeof row>[]
+    from?: string
+    to?: string
+  } = {},
+) {
+  return render(
+    <Concentration
+      clients={over.clients ?? CLIENTS}
+      from={over.from ?? '2026-09-01'}
+      loadError={over.loadError ?? null}
+      rows={over.rows ?? FULL}
+      status={over.status ?? 'ready'}
+      to={over.to ?? '2026-09-01'}
+    />,
+  )
 }
 
 afterEach(() => {
   document.body.innerHTML = ''
-  vi.mocked(useRevenue).mockReset()
+  vi.restoreAllMocks()
 })
 
 describe('concentration', () => {

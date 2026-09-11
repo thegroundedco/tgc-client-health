@@ -15,7 +15,7 @@ function client(
   name: string,
   over: Partial<RetentionClient> = {},
 ): RetentionClient {
-  return { id, name, started_on: '2020-01-01', ended_on: null, end_reason_code: null, ...over }
+  return { id, name, status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null, ...over }
 }
 
 function row(client_id: number, period: string, retainer_cents: number): RetentionRow {

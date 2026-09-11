@@ -21,7 +21,7 @@ import type { RevenueRow } from './chartMath'
 // below means the compiler cannot enforce that a column named in the TYPE is
 // actually selected -- a missing one arrives as undefined at runtime -- so
 // useRetention.dom.test.ts pins this string, the useRevenue pattern.
-const ROSTER_COLUMNS = 'id, name, started_on, ended_on, end_reason_code'
+const ROSTER_COLUMNS = 'id, name, status, started_on, ended_on, end_reason_code'
 
 // BOTH money columns, changed in slice 6d, and the guarantee moved rather than
 // weakened.

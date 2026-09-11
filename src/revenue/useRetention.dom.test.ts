@@ -12,6 +12,7 @@ const CLIENT = {
   id: 1,
   name: 'Acme',
   started_on: '2020-01-01',
+  status: 'active',
   ended_on: null,
   end_reason_code: null,
 }
@@ -110,6 +111,11 @@ describe('useRetention', () => {
     // and every departure silently looks unexplained -- which the control
     // treats as "keep", so the toggle would quietly stop excluding anything.
     expect(roster).toContain('end_reason_code')
+    // Concentration reads this from the same roster as of slice 6h, and its
+    // paused-client rule turns on it. Dropped from the string it arrives as
+    // undefined, every client stops matching 'paused', and the missing count
+    // silently gains one per paused client.
+    expect(roster).toContain('status')
 
     const revenue = captured.client_month_revenue?.select[0] ?? ''
     expect(revenue).toContain('client_id')

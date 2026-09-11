@@ -6,8 +6,7 @@ import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
 import { MonthPanel } from './MonthPanel'
 import { formatMoney } from './money'
 import type { RetentionClient } from './retentionMath'
-import { availablePresets, resolveRange } from './rangeMath'
-import type { RangePreset } from './rangeMath'
+import type { Range } from './rangeMath'
 import styles from './Revenue.module.css'
 
 // What we are billing, and whether it is moving. Slice 6d, and the answer to
@@ -125,10 +124,15 @@ function describeMonth(
 
 export function Billing({
   clients,
+  range,
   rows,
   currentPeriod,
 }: {
   clients: readonly RetentionClient[]
+  // Slice 6h. The range is the PAGE's, not this section's: it governs
+  // Concentration too, so a control living inside Billing would be a control
+  // that silently changes a section three screens further down.
+  range: Range | null
   rows: readonly RevenueRow[]
   currentPeriod: string
 }) {
@@ -151,11 +155,6 @@ export function Billing({
   // not. Opened by keyboard the card takes its place from the BAR, or it would
   // appear at wherever the mouse happened to be left, which is nowhere related
   // to what the keyboard is on.
-  // Which months the chart draws. 'all' by default: the whole picture is
-  // where a reader starts, and every narrowing is a deliberate act from there.
-  const [preset, setPreset] = useState<RangePreset>('all')
-  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null)
-
   const [point, setPoint] = useState<{
     x: number
     y: number
@@ -163,82 +162,11 @@ export function Billing({
     segment: Segment
   } | null>(null)
 
-  // The months that actually hold entries, which is what every preset
-  // resolves against and what the custom pickers may offer. A range the data
-  // cannot fill is not a narrow view, it is an empty one.
   const months = [...new Set(rows.filter((r) => r.period <= currentPeriod).map((r) => r.period))].sort()
-  const extent = {
-    anchor: months.length > 0 ? months[months.length - 1] : null,
-    earliest: months.length > 0 ? months[0] : null,
-  }
-  const presets = availablePresets(extent)
-
-  const fallback = custom ?? {
-    from: extent.earliest ?? currentPeriod,
-    to: extent.anchor ?? currentPeriod,
-  }
-  const range = preset === 'custom' ? fallback : resolveRange(preset, extent)
   const backwards = range !== null && range.from > range.to
 
   const totals =
     range === null || backwards ? [] : monthlyTotals(rows, range.to, range.from)
-
-  // Rendered above every branch below, including the refusals: a reader who
-  // has picked a range that shows nothing must be able to pick another without
-  // reloading the page.
-  const controls = (
-    <div className={styles.controls}>
-      <label className="t-caption">
-        Range{' '}
-        <select
-          className={styles.rangeSelect}
-          onChange={(event) => setPreset(event.target.value as RangePreset)}
-          value={preset}
-        >
-          {presets.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* Only months that hold entries. A picker offering a month with no data
-          is a picker that can blank the chart. */}
-      {preset === 'custom' && (
-        <>
-          <label className="t-caption">
-            From{' '}
-            <select
-              className={styles.rangeSelect}
-              onChange={(event) => setCustom({ ...fallback, from: event.target.value })}
-              value={fallback.from}
-            >
-              {months.map((month) => (
-                <option key={month} value={month}>
-                  {formatPeriod(month)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="t-caption">
-            To{' '}
-            <select
-              className={styles.rangeSelect}
-              onChange={(event) => setCustom({ ...fallback, to: event.target.value })}
-              value={fallback.to}
-            >
-              {months.map((month) => (
-                <option key={month} value={month}>
-                  {formatPeriod(month)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
-    </div>
-  )
 
   if (months.length === 0) {
     return (
@@ -256,7 +184,6 @@ export function Billing({
     return (
       <section className={styles.section}>
         <h3 className="t-subhead">Billing</h3>
-        {controls}
         <p className="t-body prose" data-testid="billing-range-problem">
           {backwards
             ? 'That range runs backwards: the first month is after the last. Pick a later month to finish on.'
@@ -309,8 +236,6 @@ export function Billing({
   return (
     <section className={styles.section}>
       <h3 className="t-subhead">Billing</h3>
-
-      {controls}
 
       {/* What the chosen range comes to. The reason the picker exists is to
           ask "what did we bill in that period", and a chart alone answers it

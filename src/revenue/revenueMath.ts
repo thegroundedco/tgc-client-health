@@ -240,3 +240,68 @@ export function concentration(
 
   return { named, rest, totalCents, entered: withShares.length, missing }
 }
+
+/**
+ * Concentration over a span of months rather than one.
+ *
+ * Slice 6h: the owner wanted to see where exposure sat during a chosen period,
+ * not only last month.
+ *
+ * This sums and filters, then hands the result to `concentration` above. It
+ * deliberately does NOT reimplement that function's rules -- a paused client
+ * with no row falling out of both counts, a client with no row counted as
+ * missing rather than drawn at zero -- because two copies of those rules are
+ * two copies to keep in step, and they are the rules that stop this report
+ * saying a quiet month was a collapse.
+ *
+ * A share is of the RANGE's total, so a client present for part of it ranks
+ * smaller. That is the honest answer to "where was the money concentrated over
+ * this period"; it is not the answer to "who is biggest right now", which is
+ * what a single month already gives.
+ */
+export type RangeClient = EligibleClient & {
+  started_on: string | null
+  ended_on: string | null
+}
+
+// Lifecycle boundaries are months, not days: a client who left on the 25th
+// billed most of that month, and one who started on the 20th billed part of
+// it. The same rule retentionMath and breakdownMath apply, for the same reason.
+function monthOf(day: string): string {
+  return `${day.slice(0, 7)}-01`
+}
+
+export function concentrationOverRange(
+  clients: readonly RangeClient[],
+  rows: readonly RevenueRow[],
+  from: string,
+  to: string,
+): ConcentrationReport {
+  // Eligible for the RANGE: overlapping it at all. A client who had already
+  // left before it began was never exposure during it, and one who had not
+  // started by the time it ended was not either -- counting either as somebody
+  // who owes a figure inflates the missing count and makes the disclosure
+  // beneath the chart wrong.
+  const eligible = clients.filter((client) => {
+    if (client.ended_on !== null && monthOf(client.ended_on) < from) return false
+    if (client.started_on !== null && monthOf(client.started_on) > to) return false
+    return true
+  })
+
+  // One synthetic row per client, carrying the range's sum. `concentration`
+  // reads a single row per client and nothing else about the period, so this
+  // is the whole of the adaptation.
+  const summed = new Map<number, RevenueRow>()
+  for (const row of rows) {
+    if (row.period < from || row.period > to) continue
+    const found = summed.get(row.client_id)
+    if (found === undefined) {
+      summed.set(row.client_id, { ...row, period: to })
+    } else {
+      found.retainer_cents += row.retainer_cents
+      found.project_cents += row.project_cents
+    }
+  }
+
+  return concentration(eligible, [...summed.values()])
+}

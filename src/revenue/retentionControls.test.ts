@@ -13,6 +13,7 @@ function client(id: number, over: Partial<RetentionClient> = {}): RetentionClien
   return {
     id,
     name: `Client ${id}`,
+    status: 'active',
     started_on: '2020-01-01',
     ended_on: null,
     end_reason_code: null,

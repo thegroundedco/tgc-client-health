@@ -1,7 +1,7 @@
 import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
-import { allocatePercentages, concentration } from './revenueMath'
-import { useRevenue } from './useRevenue'
+import { allocatePercentages, concentrationOverRange } from './revenueMath'
+import type { RangeClient, RevenueRow } from './revenueMath'
 import styles from './Revenue.module.css'
 
 // Points are already the reconciled, whole-number output of
@@ -17,23 +17,53 @@ function formatPoints(points: number): string {
 // revenue, named individually up to NAMED_CLIENTS, with everyone past that
 // collapsed into one row that says how many rather than listing them --
 // spec's distinction between showing exposure and ranking a roster.
-export function Concentration({ month }: { month: string }) {
-  const report = useRevenue(month)
-
+// Who the firm is most exposed to: the largest clients by revenue over the
+// page's date range, named individually up to NAMED_CLIENTS, with everyone past
+// that collapsed into one row that says how many rather than listing them --
+// the spec's distinction between showing exposure and ranking a roster.
+//
+// Slice 6h: it follows the page's RANGE rather than always last month, on the
+// owner's ask -- "so we can see where we were most exposed during said date
+// range". It also stopped making its own query to do it: the page already
+// holds the whole revenue table and the whole roster for Billing and
+// Retention, so this reads those instead of fetching a month of its own.
+export function Concentration({
+  clients,
+  from,
+  loadError,
+  rows,
+  status,
+  to,
+}: {
+  clients: readonly RangeClient[]
+  from: string | null
+  loadError: string | null
+  rows: readonly RevenueRow[]
+  status: 'loading' | 'ready' | 'error'
+  to: string | null
+}) {
   return (
     <section className={styles.section}>
       <h3 className="t-subhead">Concentration</h3>
 
-      {report.status === 'loading' && <p className="t-body">Loading…</p>}
+      {status === 'loading' && <p className="t-body">Loading…</p>}
 
-      {report.status === 'error' && (
+      {/* A failed read must never fall through to an empty chart: a ranking
+          with nothing in it reads as every client billing nothing at once. */}
+      {status === 'error' && (
         <p className="alert prose" role="alert">
-          {report.loadError}
+          {loadError}
         </p>
       )}
 
-      {report.status === 'ready' && (
-        <ConcentrationReady clients={report.clients} month={month} rows={report.rows} />
+      {status === 'ready' && (from === null || to === null || from > to) && (
+        <p className="t-body prose">
+          No months are selected, so there is nothing to rank.
+        </p>
+      )}
+
+      {status === 'ready' && from !== null && to !== null && from <= to && (
+        <ConcentrationReady clients={clients} from={from} rows={rows} to={to} />
       )}
     </section>
   )
@@ -41,14 +71,20 @@ export function Concentration({ month }: { month: string }) {
 
 function ConcentrationReady({
   clients,
-  month,
+  from,
   rows,
+  to,
 }: {
-  clients: Parameters<typeof concentration>[0]
-  month: string
-  rows: Parameters<typeof concentration>[1]
+  clients: readonly RangeClient[]
+  from: string
+  rows: readonly RevenueRow[]
+  to: string
 }) {
-  const result = concentration(clients, rows)
+  const result = concentrationOverRange(clients, rows, from, to)
+  // What the figures describe, stated: "August 2026" when the range is one
+  // month, "January to September 2026" when it is more. A ranking with no
+  // period named is a ranking a reader will assume is current.
+  const month = from === to ? formatPeriod(from) : `${formatPeriod(from)} to ${formatPeriod(to)}`
   const total = result.entered + result.missing
 
   // NO CLIENTS AT ALL, which is not the same fact as no entries and must not
@@ -71,7 +107,7 @@ function ConcentrationReady({
   if (clients.length === 0) {
     return (
       <p className="t-body prose">
-        No clients were on the books for {formatPeriod(month)}, so there is nothing to rank.
+        No clients were on the books for {month}, so there is nothing to rank.
       </p>
     )
   }
@@ -84,7 +120,7 @@ function ConcentrationReady({
   if (result.entered === 0) {
     return (
       <p className="t-body prose">
-        No revenue has been entered for {formatPeriod(month)}: this chart has nothing entered to
+        No revenue has been entered for {month}: this chart has nothing entered to
         rank.
       </p>
     )
@@ -106,7 +142,7 @@ function ConcentrationReady({
   return (
     <>
       <p className="t-caption" data-testid="concentration-month">
-        {formatPeriod(month)}
+        {month}
       </p>
 
       <ul aria-label="Concentration" className={styles.list} role="list">

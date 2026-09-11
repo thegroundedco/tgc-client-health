@@ -1,4 +1,8 @@
+import { useState } from 'react'
 import { Billing } from '../revenue/Billing'
+import { RangeControl } from '../revenue/RangeControl'
+import { resolveRange } from '../revenue/rangeMath'
+import type { RangePreset } from '../revenue/rangeMath'
 import { Churn } from '../revenue/Churn'
 import { Concentration } from '../revenue/Concentration'
 import { Retention } from '../revenue/Retention'
@@ -42,6 +46,23 @@ export function Revenue() {
   // month is current.
   const anchor = latestPeriod(revenue.rows)
 
+  // The page's date range, slice 6h. Owned here rather than by Billing because
+  // it governs Concentration as well, and state that two siblings share has to
+  // live above both of them.
+  const [preset, setPreset] = useState<RangePreset>('last12')
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null)
+
+  const months = [...new Set(revenue.rows.map((row) => row.period))].sort()
+  const extent = {
+    anchor: months.length > 0 ? months[months.length - 1] : null,
+    earliest: months.length > 0 ? months[0] : null,
+  }
+  const fallback = custom ?? {
+    from: extent.earliest ?? defaultPeriod(),
+    to: extent.anchor ?? defaultPeriod(),
+  }
+  const range = preset === 'custom' ? fallback : resolveRange(preset, extent)
+
   return (
     <section className={styles.page}>
       <h2 className={`t-header ${styles.wide}`}>Revenue</h2>
@@ -60,9 +81,23 @@ export function Revenue() {
           no layout props and stays mountable somewhere that is not this grid. */}
       {revenue.status === 'ready' && (
         <div className={styles.wide}>
+          <RangeControl
+            custom={fallback}
+            extent={extent}
+            months={months}
+            onCustom={setCustom}
+            onPreset={setPreset}
+            preset={preset}
+          />
+        </div>
+      )}
+
+      {revenue.status === 'ready' && (
+        <div className={styles.wide}>
           <Billing
             clients={revenue.clients}
             currentPeriod={anchor ?? defaultPeriod()}
+            range={range}
             rows={revenue.rows}
           />
         </div>
@@ -70,7 +105,14 @@ export function Revenue() {
 
       <Retention read={revenue} />
 
-      <Concentration month={defaultPeriod()} />
+      <Concentration
+        clients={revenue.clients}
+        from={range?.from ?? null}
+        loadError={revenue.loadError}
+        rows={revenue.rows}
+        status={revenue.status}
+        to={range?.to ?? null}
+      />
 
       {report.status === 'loading' && (
         <p className={`t-body ${styles.wide}`}>Loading…</p>

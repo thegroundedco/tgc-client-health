@@ -10,8 +10,8 @@ import { Retention } from './Retention'
 import { useRetention } from './useRetention'
 
 const CLIENTS = [
-  { id: 1, name: 'Acme', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
-  { id: 2, name: 'Delta', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+  { id: 1, name: 'Acme', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+  { id: 2, name: 'Delta', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
 ]
 
 const ROWS = [
@@ -68,7 +68,7 @@ describe('Retention', () => {
     // client silently shrinking the denominator is the failure this prevents.
     // East Bay has no rows AT ALL, so the month missing is the base one.
     given({
-      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
+      clients: [...CLIENTS, { id: 3, name: 'East Bay', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
     })
 
     const basis = screen.getByTestId('retention-basis').textContent ?? ''
@@ -83,7 +83,7 @@ describe('Retention', () => {
     // month the owner has yet to type -- and the old sentence told him his 2025
     // was the gap. The month named must be the month actually absent.
     given({
-      clients: [...CLIENTS, { id: 3, name: 'East Bay', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
+      clients: [...CLIENTS, { id: 3, name: 'East Bay', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null }],
       rows: [...ROWS, { client_id: 3, period: '2025-09-01', retainer_cents: 300000, project_cents: 0 }],
     })
 
@@ -118,9 +118,9 @@ describe('Retention', () => {
     // still match.
     given({
       clients: [
-        { id: 1, name: 'Up', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
-        { id: 2, name: 'Down', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
-        { id: 3, name: 'Gone', started_on: '2020-01-01', ended_on: '2026-01-31', end_reason_code: null },
+        { id: 1, name: 'Up', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+        { id: 2, name: 'Down', status: 'active', started_on: '2020-01-01', ended_on: null, end_reason_code: null },
+        { id: 3, name: 'Gone', status: 'active', started_on: '2020-01-01', ended_on: '2026-01-31', end_reason_code: null },
       ],
       rows: [
         { client_id: 1, period: '2025-09-01', retainer_cents: 100000, project_cents: 0 },
@@ -330,6 +330,7 @@ describe('Retention — the controls, slice 6f-2', () => {
         {
           id: 3,
           name: 'We Ended It',
+          status: 'cancelled',
           started_on: '2020-01-01',
           ended_on: '2026-05-01',
           end_reason_code: 'agency_initiated',
@@ -360,6 +361,7 @@ describe('Retention — the controls, slice 6f-2', () => {
         {
           id: 3,
           name: 'Left On Price',
+          status: 'cancelled',
           started_on: '2020-01-01',
           ended_on: '2026-05-01',
           end_reason_code: 'price',

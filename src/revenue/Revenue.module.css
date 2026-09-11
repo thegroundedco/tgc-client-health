@@ -565,3 +565,10 @@
 .rangeSplit {
   color: var(--text-secondary);
 }
+
+/* What the range governs, said out loud. It covers Billing and Concentration
+   and not Retention, Tenure or Churn -- unstated, a reader would take three
+   sections as answers to a question they never asked. */
+.controlScope {
+  color: var(--text-secondary);
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   allocatePercentages,
   concentration,
+  concentrationOverRange,
   MIN_RATE_PERIODS,
   NAMED_CLIENTS,
   rate,
@@ -307,5 +308,133 @@ describe('concentration', () => {
       'Alpha',
       'Zeta',
     ])
+  })
+})
+
+// Slice 6h: Concentration follows the billing range, so it must collapse many
+// months into one ranking. The single-month rules -- paused clients excluded
+// from both counts, a client with no row counted missing rather than shown at
+// zero -- are NOT reimplemented here: this sums the months and hands the
+// result to concentration(), which already owns them.
+describe('concentrationOverRange', () => {
+  function client(id: number, over: Record<string, unknown> = {}) {
+    return {
+      id,
+      name: `Client ${id}`,
+      status: 'active',
+      started_on: '2020-01-01',
+      ended_on: null,
+      ...over,
+    }
+  }
+  function row(client_id: number, period: string, retainer: number, project = 0) {
+    return { client_id, period, retainer_cents: retainer, project_cents: project }
+  }
+
+  it('sums each client across the months in view', () => {
+    const report = concentrationOverRange(
+      [client(1), client(2)],
+      [
+        row(1, '2026-01-01', 100000),
+        row(1, '2026-02-01', 200000),
+        row(2, '2026-02-01', 100000),
+      ],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.named.find((entry) => entry.name === 'Client 1')?.cents).toBe(300000)
+  })
+
+  it('ignores months outside the range', () => {
+    const report = concentrationOverRange(
+      [client(1)],
+      [row(1, '2026-01-01', 100000), row(1, '2026-05-01', 900000)],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.named[0].cents).toBe(100000)
+  })
+
+  it('counts both halves, because exposure is all the money', () => {
+    const report = concentrationOverRange(
+      [client(1)],
+      [row(1, '2026-01-01', 100000, 50000)],
+      '2026-01-01',
+      '2026-01-01',
+    )
+
+    expect(report.named[0].cents).toBe(150000)
+  })
+
+  // A client who left before the range began was never exposure during it, and
+  // one who starts after it ended was not either. Counting them as clients who
+  // owe a figure inflates the missing count and makes the disclosure wrong.
+  it('drops a client who had already left before the range', () => {
+    const report = concentrationOverRange(
+      [client(1), client(2, { ended_on: '2025-06-30' })],
+      [row(1, '2026-01-01', 100000)],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.missing).toBe(0)
+  })
+
+  it('drops a client who had not started by the end of the range', () => {
+    const report = concentrationOverRange(
+      [client(1), client(2, { started_on: '2026-09-01' })],
+      [row(1, '2026-01-01', 100000)],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.missing).toBe(0)
+  })
+
+  it('KEEPS a client who left partway through the range', () => {
+    // They were exposure for part of it, and their revenue is real. The month
+    // boundary is inclusive: a client who left on the 25th billed most of it.
+    const report = concentrationOverRange(
+      [client(1), client(2, { ended_on: '2026-01-20' })],
+      [row(1, '2026-02-01', 100000), row(2, '2026-01-01', 400000)],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.named[0].name).toBe('Client 2')
+    expect(report.named[0].cents).toBe(400000)
+  })
+
+  it('counts an eligible client with no row in the whole range as missing', () => {
+    const report = concentrationOverRange(
+      [client(1), client(2)],
+      [row(1, '2026-01-01', 100000)],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    expect(report.missing).toBe(1)
+  })
+
+  it('shares out of the RANGE total, not a month of it', () => {
+    const report = concentrationOverRange(
+      [client(1), client(2)],
+      [
+        row(1, '2026-01-01', 300000),
+        row(2, '2026-01-01', 100000),
+        row(2, '2026-02-01', 600000),
+      ],
+      '2026-01-01',
+      '2026-02-01',
+    )
+
+    // Client 2 is 700,000 of 1,000,000. A fraction, not points -- the
+    // component rounds once, through allocatePercentages, so that a column of
+    // shares still sums to 100.
+    expect(report.named[0].name).toBe('Client 2')
+    expect(report.named[0].share).toBe(0.7)
+    expect(report.totalCents).toBe(1000000)
   })
 })

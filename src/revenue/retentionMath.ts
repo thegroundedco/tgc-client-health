@@ -14,6 +14,11 @@
 export type RetentionClient = {
   id: number
   name: string
+  // Read by Concentration, never by retention() itself. Slice 6h moved
+  // Concentration onto this shared roster read, and its paused-client rule
+  // needs the status -- a paused client with no row is not somebody who owes a
+  // figure. retention() has no business knowing it.
+  status: string
   started_on: string | null
   ended_on: string | null
   // Read only by retentionControls.excludeUncontested, never by retention()
