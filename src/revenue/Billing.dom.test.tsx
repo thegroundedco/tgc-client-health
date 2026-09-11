@@ -110,6 +110,10 @@ describe('Billing', () => {
     const user = userEvent.setup()
     render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
+    // The range control now precedes the chart, so the first Tab lands there
+    // and the second reaches the first bar. Asserted rather than assumed: the
+    // bars staying keyboard-reachable is the point of these tests.
+    await user.tab()
     await user.tab()
     const tooltip = screen.getByTestId('billing-tooltip')
     expect(tooltip.textContent).toContain('July 2026')
@@ -464,7 +468,12 @@ describe('Billing', () => {
     const user = userEvent.setup()
     render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
+    // The range control now precedes the chart, so the first Tab lands there
+    // and the second reaches the first bar. Asserted rather than assumed: the
+    // bars staying keyboard-reachable is the point of these tests.
     await user.tab()
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getAllByTestId('billing-bar')[0])
 
     const tip = screen.getByTestId('billing-tooltip')
     expect(tip.textContent).toContain('July 2026')
@@ -525,6 +534,10 @@ describe('Billing', () => {
     const user = userEvent.setup()
     render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
 
+    // The range control now precedes the chart, so the first Tab lands there
+    // and the second reaches the first bar. Asserted rather than assumed: the
+    // bars staying keyboard-reachable is the point of these tests.
+    await user.tab()
     await user.tab()
 
     const tip = screen.getByTestId('billing-tooltip')
@@ -559,6 +572,89 @@ describe('Billing', () => {
       cell.className.includes(styles.band),
     )
     expect(banded).toEqual([false, false, true, true])
+  })
+
+  // Slice 6h. ROWS spans July to September 2026.
+  it('offers a range control, defaulting to everything entered', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const select = screen.getByRole('combobox', { name: /range/i })
+    expect((select as HTMLSelectElement).value).toBe('all')
+    expect(screen.getAllByTestId('billing-bar')).toHaveLength(3)
+  })
+
+  it('narrows the chart to the range chosen', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /range/i }), 'last3')
+    expect(screen.getAllByTestId('billing-bar')).toHaveLength(3)
+
+    // A one-month window is still a legitimate view.
+    await user.selectOptions(screen.getByRole('combobox', { name: /range/i }), 'q3')
+    expect(screen.getAllByTestId('billing-bar')).toHaveLength(3)
+  })
+
+  it('narrows the monthly table with the chart, not just the bars', () => {
+    // The table is the text path for the same data. Leaving it at full span
+    // while the chart narrowed would make the two disagree about what is
+    // being looked at.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const table = screen.getByRole('table', { name: /billing/i })
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
+  it('states the range’s own total, split into its two halves', () => {
+    // July 4,000+1,000, August 4,500, September 5,000+500 = 15,000.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const total = screen.getByTestId('billing-range-total').textContent ?? ''
+    expect(total).toContain('$15,000')
+    expect(total).toContain('$13,500')
+    expect(total).toContain('$1,500')
+  })
+
+  it('does not offer a preset the data cannot fill', () => {
+    // Q1 2026 has no rows here, and offering it would blank the chart.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const options = [...screen.getByRole('combobox', { name: /range/i }).querySelectorAll('option')]
+    const ids = options.map((option) => option.value)
+    expect(ids).not.toContain('q1')
+    expect(ids).toContain('q3')
+    expect(ids).toContain('custom')
+  })
+
+  it('reveals two month pickers on Custom, offering only months with data', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.queryByRole('combobox', { name: /from/i })).toBeNull()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /range/i }), 'custom')
+
+    const from = screen.getByRole('combobox', { name: /from/i })
+    expect([...from.querySelectorAll('option')].map((o) => o.value)).toEqual([
+      '2026-07-01',
+      '2026-08-01',
+      '2026-09-01',
+    ])
+    await user.selectOptions(from, '2026-08-01')
+    expect(screen.getAllByTestId('billing-bar')).toHaveLength(2)
+  })
+
+  it('refuses a custom range that runs backwards', async () => {
+    // Picking a "to" before the "from" is an empty range, not a narrow one.
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /range/i }), 'custom')
+    await user.selectOptions(screen.getByRole('combobox', { name: /from/i }), '2026-09-01')
+    await user.selectOptions(screen.getByRole('combobox', { name: /^to/i }), '2026-07-01')
+
+    expect(screen.getByTestId('billing-range-problem')).toBeTruthy()
+    expect(screen.queryAllByTestId('billing-bar')).toHaveLength(0)
   })
 
   it('wears token colours and never a literal', () => {

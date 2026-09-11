@@ -68,6 +68,10 @@ function monthsBefore(period: string, n: number): string {
 export function monthlyTotals(
   rows: readonly RevenueRow[],
   currentPeriod: string,
+  // Slice 6h. Given, the window is exactly this range; omitted, it is the
+  // trailing CHART_MONTHS the chart drew before there was a range control.
+  // Either way it never reaches past the earliest row -- see below.
+  startPeriod?: string,
 ): MonthTotal[] {
   if (rows.length === 0) return []
 
@@ -85,7 +89,7 @@ export function monthlyTotals(
 
   // Walk back from the anchor, stopping at the window OR at the earliest month
   // with data, whichever comes first.
-  const oldest = monthsBefore(currentPeriod, CHART_MONTHS - 1)
+  const oldest = startPeriod ?? monthsBefore(currentPeriod, CHART_MONTHS - 1)
   const start = oldest > earliest ? oldest : earliest
 
   const totals: MonthTotal[] = []

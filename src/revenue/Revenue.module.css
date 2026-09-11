@@ -527,3 +527,41 @@
 .table tbody tr:last-child .band {
   border-block-end: none;
 }
+
+/* The range picker. A native <select> rather than a row of buttons, and that
+   is a capacity decision rather than a stylistic one: the Retention window
+   control is four buttons and reads well, while thirteen presets in a row
+   would wrap into a wall. The board's month picker made the same call.
+
+   appearance is left alone so the browser keeps drawing its own disclosure
+   caret -- that caret is the only thing telling somebody the control opens. */
+.rangeSelect {
+  /* Longhands, and the family from a token. The font shorthand always names a
+     family, and tests/tokens.test.ts refuses BOTH the shorthand and a bare
+     font-family that is not a var(--face-...) -- including `inherit`. It
+     caught this line twice, which is the rule doing exactly its job: a select
+     inherits nothing by default, so "inherit" would have been a real choice
+     dressed as a non-choice. */
+  font-family: var(--face-caption);
+  font-size: inherit;
+  font-weight: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* What the chosen range comes to. The reason the picker exists is to ask "what
+   did we bill in that period", and a chart alone answers that only by eye. */
+.rangeTotal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.rangeSplit {
+  color: var(--text-secondary);
+}

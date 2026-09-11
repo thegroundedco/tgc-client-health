@@ -401,3 +401,45 @@ describe('barGeometry — scaling to the axis', () => {
     expect(bars[0].retainerHeight).toBeLessThanOrEqual(200)
   })
 })
+
+describe('monthlyTotals — an explicit range', () => {
+  // Slice 6h: the chart's window stops being "the trailing thirteen" and
+  // becomes whatever the reader asked for. The old behaviour is the default,
+  // so every caller that predates the range control is unchanged.
+  it('spans exactly the months given', () => {
+    const rows = []
+    for (let m = 1; m <= 9; m++) {
+      rows.push(row(1, `2026-${String(m).padStart(2, '0')}-01`, 100000))
+    }
+    const totals = monthlyTotals(rows, '2026-06-01', '2026-04-01')
+
+    expect(totals.map((t) => t.period)).toEqual(['2026-04-01', '2026-05-01', '2026-06-01'])
+  })
+
+  it('keeps an unentered month inside the range, as ever', () => {
+    const totals = monthlyTotals(
+      [row(1, '2026-04-01', 100000), row(1, '2026-06-01', 100000)],
+      '2026-06-01',
+      '2026-04-01',
+    )
+
+    expect(totals.map((t) => t.entered)).toEqual([true, false, true])
+  })
+
+  it('still falls back to the trailing window when no start is given', () => {
+    const totals = monthlyTotals(
+      [row(1, '2026-08-01', 100000), row(1, '2026-09-01', 100000)],
+      '2026-09-01',
+    )
+
+    expect(totals.map((t) => t.period)).toEqual(['2026-08-01', '2026-09-01'])
+  })
+
+  it('does not invent months before the earliest row even when asked', () => {
+    // A range reaching past the records would draw empty columns for months
+    // the agency has no data for, which reads as "we billed nothing then".
+    const totals = monthlyTotals([row(1, '2026-06-01', 100000)], '2026-06-01', '2026-01-01')
+
+    expect(totals.map((t) => t.period)).toEqual(['2026-06-01'])
+  })
+})
