@@ -50,6 +50,32 @@ export type ConcentrationReport = {
 // exposure -- the question concentration exists to answer.
 export const NAMED_CLIENTS = 4
 
+/**
+ * The share at which one client stops being a good account and starts being a
+ * risk. **[owner's boss]**, 2026-09-11: "anytime we have a single client that
+ * breaks 20% of our revenue, like it should be flagged, because to me, that's
+ * a major concern."
+ *
+ * A business rule, so it lives with the arithmetic rather than inside a
+ * component -- it is the kind of number somebody will want to change, and it
+ * should be changeable in one place with a test that says what it means.
+ */
+export const CONCENTRATION_ALERT = 0.2
+
+/**
+ * BREAKS the threshold, not reaches it. At exactly a fifth nothing has been
+ * broken, and a boundary that fires there would cry wolf on four clients
+ * splitting the book evenly -- the healthiest shape this report can show.
+ *
+ * A null share is not a flag. share() returns null when the whole is zero,
+ * meaning every client billed nothing; an alarm there would be about no
+ * revenue at all, which is a different problem and one this report already
+ * states in words.
+ */
+export function overExposed(share: number | null): boolean {
+  return share !== null && share > CONCENTRATION_ALERT
+}
+
 // A trailing-twelve figure needs a month and the month twelve behind it.
 export const MIN_RATE_PERIODS = 13
 

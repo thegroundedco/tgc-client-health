@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   allocatePercentages,
+  CONCENTRATION_ALERT,
   concentration,
   concentrationOverRange,
+  overExposed,
   MIN_RATE_PERIODS,
   NAMED_CLIENTS,
   rate,
@@ -436,5 +438,35 @@ describe('concentrationOverRange', () => {
     expect(report.named[0].name).toBe('Client 2')
     expect(report.named[0].share).toBe(0.7)
     expect(report.totalCents).toBe(1000000)
+  })
+})
+
+// Nick Stagge, 2026-09-11: "anytime we have a single client that breaks 20% of
+// our revenue, like it should be flagged, because to me, that's a major
+// concern." The threshold is a business rule, so it lives here with the
+// arithmetic rather than in a component.
+describe('CONCENTRATION_ALERT and overExposed', () => {
+  it('is twenty per cent', () => {
+    expect(CONCENTRATION_ALERT).toBe(0.2)
+  })
+
+  it('flags a client at more than a fifth of the revenue', () => {
+    expect(overExposed(0.21)).toBe(true)
+    expect(overExposed(0.5)).toBe(true)
+  })
+
+  // "Breaks 20%" -- at exactly a fifth nothing has been broken. A boundary
+  // that fires AT the threshold cries wolf on four clients splitting the book
+  // evenly, which is the healthiest shape this report can show.
+  it('does not flag a client sitting exactly on the threshold', () => {
+    expect(overExposed(0.2)).toBe(false)
+    expect(overExposed(0.19)).toBe(false)
+  })
+
+  it('says nothing when the share is unknown', () => {
+    // share() returns null when the whole is zero -- every client billed
+    // nothing. A flag there would be an alarm about no revenue at all, which
+    // is a different problem and one this report already states in words.
+    expect(overExposed(null)).toBe(false)
   })
 })

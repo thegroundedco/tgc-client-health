@@ -1,6 +1,11 @@
 import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
-import { allocatePercentages, concentrationOverRange } from './revenueMath'
+import {
+  CONCENTRATION_ALERT,
+  allocatePercentages,
+  concentrationOverRange,
+  overExposed,
+} from './revenueMath'
 import type { RangeClient, RevenueRow } from './revenueMath'
 import styles from './Revenue.module.css'
 
@@ -139,19 +144,53 @@ function ConcentrationReady({
   ]
   const points = allocatePercentages(displayCents, result.totalCents)
 
+  // Nick Stagge, 2026-09-11: "anytime we have a single client that breaks 20%
+  // of our revenue, like it should be flagged... that's a major concern."
+  //
+  // Named clients only. The collapsed "others" row can carry any share at all
+  // and is not one client carrying that risk -- flagging it would fire on
+  // every healthy roster and turn the alarm into wallpaper.
+  const exposed = result.named.filter((entry) => overExposed(entry.share))
+
   return (
     <>
       <p className="t-caption" data-testid="concentration-month">
         {month}
       </p>
 
+      {/* Absent when nobody is over. A permanent "0 flagged" line teaches the
+          reader to skip the place the alarm appears. */}
+      {exposed.length > 0 && (
+        <p className={`t-caption ${styles.caution}`} data-testid="concentration-alert">
+          {/* The threshold is DERIVED from the rule, not typed here.
+              tests/revenueLiterals.test.ts refuses a percentage literal in this
+              page's markup -- a hard-coded percentage is a fabricated statistic
+              -- and it caught this line. Deriving it is the better fix anyway:
+              change CONCENTRATION_ALERT and the sentence follows. */}
+          {exposed.length === 1 ? '1 client is' : `${exposed.length} clients are`} over{' '}
+          {Math.round(CONCENTRATION_ALERT * 100)}% of revenue for this period. Losing one would
+          take that much of the book with it.
+        </p>
+      )}
+
       <ul aria-label="Concentration" className={styles.list} role="list">
         {result.named.map((entry, index) => (
-          <li className={styles.row} key={entry.clientId}>
+          <li
+            aria-label={entry.name}
+            className={styles.row}
+            data-exposed={overExposed(entry.share) ? 'true' : 'false'}
+            key={entry.clientId}
+          >
             <span className={styles.who}>
               <span className="t-body" data-testid="concentration-name">
                 {entry.name}
               </span>
+              {/* Words, not a colour. The primary reader of this tool is
+                  colourblind -- established on the 2026-09-11 call -- so a red
+                  row would say nothing to the person it is warning. */}
+              {overExposed(entry.share) && (
+                <span className={`t-caption ${styles.marker}`}>over-exposed</span>
+              )}
             </span>
             <span className={`t-body ${styles.measure}`}>
               {formatMoney(entry.cents)}
@@ -172,7 +211,12 @@ function ConcentrationReady({
         ))}
 
         {result.rest !== null && (
-          <li className={styles.row} key="rest">
+          <li
+            aria-label={`${result.rest.count} others`}
+            className={styles.row}
+            data-exposed="false"
+            key="rest"
+          >
             <span className={styles.who}>
               <span className="t-body" data-testid="concentration-rest">
                 {result.rest.count} others

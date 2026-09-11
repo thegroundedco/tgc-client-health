@@ -95,7 +95,13 @@ describe('concentration', () => {
     // the same rounding mistake as the code under test.
     given()
 
-    const points = [...document.body.textContent!.matchAll(/(\d+)%/g)].map((match) =>
+    // Scoped to the LIST, not the whole page. The exposure alert added on
+    // 2026-09-11 states its threshold as "over 20%", and a whole-page scrape
+    // counted that sentence as a share -- the column summed to 120. Reading
+    // the rendered output rather than re-deriving it is still the point; the
+    // shares are what is being read.
+    const points = [...screen.getByRole('list', { name: 'Concentration' })
+      .textContent!.matchAll(/(\d+)%/g)].map((match) =>
       Number(match[1]),
     )
 
@@ -210,5 +216,64 @@ describe('concentration', () => {
     given({ status: 'loading', clients: [], rows: [] })
 
     expect(screen.getByText(/loading/i)).toBeTruthy()
+  })
+
+  // Nick Stagge, 2026-09-11: "anytime we have a single client that breaks 20%
+  // of our revenue, like it should be flagged... that's a major concern."
+  describe('the exposure flag', () => {
+    it('marks a client over a fifth of the range', () => {
+      // East Bay is 600,000 of 2,000,000 -- 30%.
+      given()
+
+      const row = screen.getByRole('listitem', { name: /East Bay/ })
+      expect(row.getAttribute('data-exposed')).toBe('true')
+      // The row marker carries no percentage of its own: the test that sums
+      // the share column scrapes every "NN%" on screen, and a marker reading
+      // "over 20%" was counted as a share. The threshold is stated once, in
+      // the alert line above the list.
+      expect(row.textContent).toMatch(/over-exposed/i)
+    })
+
+    it('leaves a client under the threshold unmarked', () => {
+      // Delta is 250,000 of 2,000,000 -- 12.5%.
+      given()
+
+      expect(
+        screen.getByRole('listitem', { name: /Delta/ }).getAttribute('data-exposed'),
+      ).toBe('false')
+    })
+
+    it('does not flag the collapsed "others" row', () => {
+      // "11 others" at 59% is not one client carrying 59% of the risk, and
+      // flagging it would turn the alarm into noise on every healthy roster.
+      given()
+
+      for (const row of screen.getAllByRole('listitem')) {
+        if ((row.textContent ?? '').match(/others/)) {
+          expect(row.getAttribute('data-exposed')).toBe('false')
+        }
+      }
+    })
+
+    it('says how many clients are over, above the list', () => {
+      given()
+
+      // Acme is 450,000 and East Bay 600,000 of 2,000,000 -- 22.5% and 30%.
+      // Two, not one: the expectation was wrong, not the count.
+      expect(screen.getByTestId('concentration-alert').textContent).toMatch(
+        /2 clients are over 20%/i,
+      )
+    })
+
+    it('says nothing at all when nobody is over', () => {
+      // An always-present "0 clients flagged" line trains the reader to skip
+      // the place the alarm appears.
+      given({
+        clients: CLIENTS.slice(0, 5),
+        rows: [row(1, 100000), row(2, 100000), row(3, 100000), row(4, 100000), row(5, 100000)],
+      })
+
+      expect(screen.queryByTestId('concentration-alert')).toBeNull()
+    })
   })
 })

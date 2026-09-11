@@ -49,6 +49,35 @@ const GUARDED_FILES = [
   join(ROOT, 'src', 'revenue', 'Concentration.tsx'),
 ]
 
+// Comments stripped before the check reads the file. The rule is about MARKUP:
+// a percentage typed into the page is a fabricated statistic, and a percentage
+// QUOTED IN A COMMENT is the opposite -- it is the requirement being recorded.
+// This caught a comment quoting the owner's boss asking for a 20% exposure
+// flag, which is precisely the sentence worth keeping.
+//
+// Every other source-reading check in this repository already does this, and
+// says why: tokenRules.ts warns about it in its own header, and
+// matrixGrid.test.ts hit it for real.
+function markupOf(source: string): string {
+  return source
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|\s)\/\/[^\n]*/g, '$1')
+}
+
+// Loosening a guard to let code through is how a guard stops guarding, so the
+// loosening gets its own proof.
+describe('the comment stripping', () => {
+  it('still catches a percentage written into markup', () => {
+    expect(markupOf('const a = 1\nreturn <span>91.2% GRR</span>')).toMatch(/\d\s*%/)
+  })
+
+  it('ignores one quoted in a comment', () => {
+    expect(markupOf('// he asked for a 20% flag\nconst a = 1')).not.toMatch(/\d\s*%/)
+    expect(markupOf('{/* a 20% flag */}\nconst a = 1')).not.toMatch(/\d\s*%/)
+  })
+})
+
 describe('the Revenue page', () => {
   it('writes no percentage into its own markup', () => {
     for (const path of GUARDED_FILES) {
@@ -59,7 +88,7 @@ describe('the Revenue page', () => {
       // absence of a percentage would prove nothing about the file's real
       // content.
       expect(source.length).toBeGreaterThan(200)
-      expect(source).not.toMatch(/\d\s*%/)
+      expect(markupOf(source)).not.toMatch(/\d\s*%/)
     }
   })
 })
