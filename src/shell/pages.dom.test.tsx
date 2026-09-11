@@ -8,24 +8,23 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-// Spec §6. Both pages are short and honest rather than spinners or the words
-// "coming soon". A page that admits what it does not have yet is better than one
-// that looks broken -- the position this codebase already takes with the boot
-// fallback and the startup-error screen.
+// Spec §6. This page was empty on purpose until 2026-09-11: six stat lines were
+// invented for it once, the owner did not recognise them, and they were retired
+// as never-sourced. A tripwire lived here asserting the page invented nothing,
+// with a note that whoever filled it "will have to delete this assertion
+// deliberately".
+//
+// THAT IS WHAT HAPPENED, and the replacement below is the point. The contents
+// came from the owner describing this screen to his boss on the 2026-09-11
+// call -- clients over 20% of revenue, and clients scoring at risk -- so the
+// tripwire is replaced by a test that the page shows THOSE THINGS and not
+// something else. Its behaviour lives in Overview.dom.test.tsx; what is pinned
+// here is the provenance, and it lives in tests/overviewProvenance.test.ts
+// because it reads the source and src/ has no Node types.
 describe('Overview', () => {
-  it('names itself and says its contents are still being designed', () => {
+  it('names itself', () => {
     render(<Overview />)
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeTruthy()
-    expect(document.body.textContent).toContain('snapshot')
   })
 
-  // Spec §6.1. Six stat lines were invented for this page once, the owner did
-  // not recognise them, and they were retired as never-sourced. This test is a
-  // tripwire against a second guess: if a future change fills this page, it
-  // should be because the owner said what goes on it, and whoever does that
-  // will have to delete this assertion deliberately.
-  it('does not invent any contents', () => {
-    render(<Overview />)
-    expect(document.body.textContent).not.toMatch(/\d+%/)
-  })
 })

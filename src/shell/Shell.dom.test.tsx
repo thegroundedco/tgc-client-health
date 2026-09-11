@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Shell } from './Shell'
 import type { Profile } from '../auth/useProfile'
 import { useBoard } from '../board/useBoard'
@@ -90,6 +90,14 @@ async function useRealBoard(state: Partial<UseBoard>) {
   boardImpl = (props) => <actual.Board {...props} />
 }
 
+// A DEFAULT return, not just a reset. Overview started calling useBoard on
+// 2026-09-11, and a mock reset to returning undefined crashed the navigation
+// test the moment that page was opened -- the Board component here is stubbed,
+// so nothing had needed the hook to return anything before.
+beforeEach(() => {
+  vi.mocked(useBoard).mockReturnValue(BOARD)
+})
+
 afterEach(() => {
   document.body.innerHTML = ''
   boardImpl = () => <CountingBoard />
@@ -146,7 +154,12 @@ describe('the shell', () => {
     // literal text used to.
     expect(screen.getByRole('heading', { name: 'Concentration' })).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
-    expect(document.body.textContent).toContain('snapshot')
+    // Overview's own heading, unconditional like Concentration's above: it
+    // renders before either of its two reads resolves, so it survives this
+    // file's stubbed Supabase client. The old marker was the word "snapshot"
+    // from the placeholder paragraph, retired when the page was filled from
+    // the owner's own description on 2026-09-11.
+    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     expect(screen.getByText('the board')).toBeTruthy()
   })

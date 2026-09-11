@@ -1,0 +1,41 @@
+/* The snapshot. A reading measure rather than the dashboard width Revenue
+   uses: this page is a short list and a sentence, and stretching it across a
+   desktop would put a client's name and its reason a screen apart. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-inline-size: var(--measure-prose);
+}
+
+.basis {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The same bordered card the revenue lists use, so a flagged client here reads
+   as the same kind of object it is over there. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+/* Why it is flagged, in words. The primary reader is colourblind, so a red row
+   would say nothing to the person it warns. */
+.why {
+  color: var(--text-secondary);
+  text-align: end;
+}
