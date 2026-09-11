@@ -363,6 +363,68 @@ describe('Billing', () => {
     )
   })
 
+  it('carries a y axis of round figures, starting at zero', () => {
+    // The owner's ask: a rough feel for what each bar is worth. Zero first is
+    // not negotiable -- a bar's LENGTH is the quantity, so a truncated
+    // baseline makes a small difference look like a large one.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const labels = screen.getAllByTestId('billing-y-label').map((n) => n.textContent)
+    expect(labels[0]).toBe('$0')
+    expect(labels.length).toBeGreaterThan(2)
+    // ROWS tops out at $5,500, so the ceiling is a round figure above it.
+    expect(labels[labels.length - 1]).toMatch(/^\$[\d,.]+k?$/)
+  })
+
+  it('draws a gridline for every label, so the two cannot drift', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.getAllByTestId('billing-gridline')).toHaveLength(
+      screen.getAllByTestId('billing-y-label').length,
+    )
+  })
+
+  it('scales the bars to the TOP GRIDLINE, not to the tallest bar', () => {
+    // Otherwise the tallest bar touches the top of the plot while the axis
+    // says it falls short of the last label -- an axis describing a chart it
+    // does not match.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bars = screen.getAllByTestId('billing-bar')
+    const tallest = [...bars[2].querySelectorAll('rect')].reduce(
+      (sum, rect) => sum + Number(rect.getAttribute('height')),
+      0,
+    )
+    // The EXACT height, not merely "less than the plot" -- that weaker
+    // assertion passed with the ceiling removed, because the inter-segment gap
+    // already keeps a full-height bar at 198. It was a test that could not
+    // fail, caught by mutating the thing it claimed to check.
+    //
+    // September is $5,500 against a $6,000 ceiling, in a 200-high plot whose
+    // usable height is 198 once the 2px gap is taken: 5500/6000 * 198 = 181.5.
+    expect(tallest).toBeCloseTo(181.5, 1)
+  })
+
+  it('hides the axis from a screen reader, which has the table', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    expect(screen.getByTestId('billing-y-axis').getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('draws no axis when there is nothing to scale', () => {
+    // Every month entered at zero. A $0-to-$100 axis would imply a scale the
+    // data does not have.
+    render(
+      <Billing
+        clients={CLIENTS}
+        rows={[row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 0, 0)]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.queryAllByTestId('billing-gridline')).toHaveLength(0)
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

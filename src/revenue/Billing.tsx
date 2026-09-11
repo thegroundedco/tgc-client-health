@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatPeriod } from '../lib/month'
-import { axisLabels, barGeometry, monthRows, monthlyTotals } from './chartMath'
+import { axisLabels, axisTicks, barGeometry, monthRows, monthlyTotals } from './chartMath'
 import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
 import { MonthPanel } from './MonthPanel'
 import { formatMoney } from './money'
@@ -31,6 +31,17 @@ function totalOf(month: MonthTotal): number {
 // A rise carries its plus sign. formatMoney already signs a fall, and a column
 // where only the negatives are marked reads as though the unmarked ones are
 // neutral rather than positive.
+// Compact, because the axis is for a rough feel and six full digits on every
+// gridline crowds the plot into a strip. $125,000 reads as $125k; anything
+// under a thousand keeps its exact figure, where "$0.5k" would be worse than
+// useless.
+function formatAxis(cents: number): string {
+  const dollars = cents / 100
+  if (dollars === 0) return '$0'
+  if (dollars < 1000) return formatMoney(cents)
+  return `$${Math.round(dollars / 100) / 10}k`.replace('.0k', 'k')
+}
+
 function formatChange(cents: number): string {
   return cents > 0 ? `+${formatMoney(cents)}` : formatMoney(cents)
 }
@@ -94,7 +105,14 @@ export function Billing({
     )
   }
 
-  const { bars } = barGeometry(totals, VIEW)
+  // The axis is derived from the data, then the bars are scaled to IT rather
+  // than to the tallest bar. Round figures are the whole point of an axis
+  // meant to give a rough feel; scaling to an exact $108,574.50 maximum would
+  // put the tallest bar at the top of the plot and leave every label an
+  // awkward number.
+  const ticks = axisTicks(totals.reduce((max, m) => Math.max(max, totalOf(m)), 0))
+  const ceiling = ticks[ticks.length - 1]
+  const { bars } = barGeometry(totals, VIEW, ceiling)
   const entered = totals.filter((month) => month.entered)
   const first = entered[0]
   const last = entered[entered.length - 1]
@@ -139,6 +157,24 @@ export function Billing({
           container. Nothing distorts that matters: the 2px inter-segment gap
           is vertical, and the rects' 2px corner radius is the only thing that
           stretches. */}
+      <div className={styles.plot}>
+        {/* aria-hidden: read aloud, "$0 $25k $50k" between the chart's
+            description and the table is noise. The table carries the numbers. */}
+        {ceiling > 0 && (
+          <span aria-hidden="true" className={styles.yAxis} data-testid="billing-y-axis">
+            {ticks.map((value) => (
+              <span
+                className={`t-caption ${styles.yLabel}`}
+                data-testid="billing-y-label"
+                key={value}
+                style={{ insetBlockEnd: `${(value / ceiling) * 100}%` }}
+              >
+                {formatAxis(value)}
+              </span>
+            ))}
+          </span>
+        )}
+
       <svg
         aria-label={summary}
         className={styles.chart}
@@ -146,6 +182,24 @@ export function Billing({
         role="img"
         viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
       >
+        {/* Gridlines live INSIDE the svg and the labels beside it do not, and
+            that split is forced: preserveAspectRatio="none" stretches the
+            horizontal axis, which leaves a horizontal RULE unharmed and would
+            stretch every glyph of a <text>. */}
+        {ceiling > 0 &&
+          ticks.map((value) => (
+            <line
+              data-testid="billing-gridline"
+              key={value}
+              stroke="var(--rule-hairline)"
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+              x1="0"
+              x2={VIEW.width}
+              y1={VIEW.height - (value / ceiling) * VIEW.height}
+              y2={VIEW.height - (value / ceiling) * VIEW.height}
+            />
+          ))}
         {bars.map((bar) => (
           /* A button, not a focusable <g>. Before slice 6e these were
              tabIndex={0} with no role: reachable by keyboard, announced as
@@ -204,6 +258,7 @@ export function Billing({
           </g>
         ))}
       </svg>
+      </div>
 
       {/* The months, as HTML beneath the svg rather than <text> inside it.
           The chart is stretched with preserveAspectRatio="none", which would

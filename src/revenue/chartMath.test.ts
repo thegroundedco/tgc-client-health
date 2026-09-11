@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CHART_MONTHS,
+  axisTicks,
   axisLabels,
   barGeometry,
   monthRows,
@@ -319,5 +320,84 @@ describe('axisLabels — the months under the bars', () => {
     expect(axisLabels(totals).map((label) => label.period)).toEqual(
       totals.map((total) => total.period),
     )
+  })
+})
+
+describe('axisTicks — the y scale', () => {
+  it('always starts at zero', () => {
+    // Non-negotiable for a bar chart: a bar's LENGTH is the quantity, so a
+    // truncated baseline makes a 5% difference look like a doubling.
+    expect(axisTicks(1234500)[0]).toBe(0)
+  })
+
+  it('ends at or above the tallest bar, never below it', () => {
+    // A bar taller than the top gridline would be drawn outside the plot, or
+    // clipped -- either way the axis would be describing a chart it does not
+    // match.
+    for (const max of [1, 999, 100000, 1234500, 10857450, 99999999]) {
+      const ticks = axisTicks(max)
+      expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(max)
+    }
+  })
+
+  it('uses round numbers a reader can hold in their head', () => {
+    // $108,574.50 rounds up to $125,000, in steps of $25,000. The whole point
+    // of the axis is a ROUGH feel, which an exact maximum cannot give.
+    expect(axisTicks(10857450)).toEqual([0, 2500000, 5000000, 7500000, 10000000, 12500000])
+  })
+
+  it('is evenly spaced', () => {
+    for (const max of [500, 48000, 1234500, 10857450]) {
+      const ticks = axisTicks(max)
+      const step = ticks[1] - ticks[0]
+      for (let i = 1; i < ticks.length; i++) {
+        expect(ticks[i] - ticks[i - 1]).toBe(step)
+      }
+    }
+  })
+
+  it('keeps the count near what was asked for', () => {
+    for (const max of [500, 48000, 1234500, 10857450, 77000000]) {
+      const ticks = axisTicks(max, 4)
+      expect(ticks.length).toBeGreaterThanOrEqual(3)
+      expect(ticks.length).toBeLessThanOrEqual(7)
+    }
+  })
+
+  it('gives a single zero tick when there is nothing to scale', () => {
+    // No revenue at all. Inventing a $0–$100 axis would imply a scale the data
+    // does not have.
+    expect(axisTicks(0)).toEqual([0])
+  })
+
+  it('handles a tiny maximum without collapsing to one step', () => {
+    const ticks = axisTicks(500)
+    expect(ticks[0]).toBe(0)
+    expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(500)
+    expect(ticks.length).toBeGreaterThan(1)
+  })
+})
+
+describe('barGeometry — scaling to the axis', () => {
+  // The consequence of having an axis at all: bars must be measured against
+  // the TOP GRIDLINE, not against the tallest bar, or the tallest bar touches
+  // the top of the plot while the axis says it is short of the last label.
+  it('scales against a given ceiling rather than the tallest bar', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000)
+
+    expect(bars[0].retainerHeight).toBe(100)
+  })
+
+  it('still fills the height when no ceiling is given', () => {
+    // The behaviour every caller before the axis relied on.
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE)
+
+    expect(bars[0].retainerHeight).toBe(200)
+  })
+
+  it('ignores a ceiling below the data rather than drawing outside the plot', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 50000)
+
+    expect(bars[0].retainerHeight).toBeLessThanOrEqual(200)
   })
 })

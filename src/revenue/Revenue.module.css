@@ -362,3 +362,36 @@
     var(--surface-page) 3px 5px
   );
 }
+
+/* The plot: the chart with its y axis beside it. Positioned so the labels can
+   be placed against the same box the gridlines are drawn in -- that shared box
+   is the ONLY thing keeping label and line on the same level, because the
+   labels are HTML and the lines are inside a stretched svg. */
+.plot {
+  position: relative;
+  /* Room for the widest label at the inline start. The svg fills what is left,
+     so a bar's baseline and the $0 line are the same line. */
+  padding-inline-start: 3.5rem;
+}
+
+.yAxis {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3.5rem;
+  /* The axis sits over the chart's own vertical margin, so it has to be
+     inset by the same amount or every label sits low by half a space. */
+  margin-block: var(--space-3);
+}
+
+/* Each label hangs from its own value as a percentage of the plot height, the
+   same fraction the gridline uses, so the two cannot drift apart. The 50%
+   translate centres the text ON the line rather than above it. */
+.yLabel {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  transform: translateY(50%);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

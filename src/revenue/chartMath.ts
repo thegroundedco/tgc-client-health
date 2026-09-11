@@ -112,12 +112,24 @@ export function monthlyTotals(
 export function barGeometry(
   totals: readonly MonthTotal[],
   { width, height, gap }: { width: number; height: number; gap: number },
+  // The value the top of the plot represents. Given by the caller once there
+  // is a Y AXIS, because bars then have to be measured against the top
+  // GRIDLINE rather than against the tallest bar -- otherwise the tallest bar
+  // touches the top of the plot while the axis says it falls short of the last
+  // label, and the axis describes a chart it does not match.
+  //
+  // Omitted, it falls back to the tallest bar, which is what every caller
+  // before the axis relied on. A ceiling BELOW the data is ignored for the
+  // same reason: a bar taller than the plot is either drawn outside it or
+  // clipped, and both lie.
+  scaleTo?: number,
 ): { bars: Bar[]; maxCents: number } {
   let maxCents = 0
   for (const total of totals) {
     const sum = total.retainerCents + total.projectCents
     if (sum > maxCents) maxCents = sum
   }
+  const ceiling = scaleTo !== undefined && scaleTo > maxCents ? scaleTo : maxCents
 
   const slot = totals.length === 0 ? 0 : width / totals.length
   // A little air either side of each bar, so adjacent months do not touch --
@@ -129,10 +141,10 @@ export function barGeometry(
 
     // No maximum means every month is zero; scaling against it would divide by
     // zero and render NaN-tall bars, which in SVG silently draw nothing at all.
-    const stacked = total.entered && maxCents > 0
+    const stacked = total.entered && ceiling > 0
     const usable = height - (total.projectCents > 0 ? gap : 0)
-    const retainerHeight = stacked ? (total.retainerCents / maxCents) * usable : 0
-    const projectHeight = stacked ? (total.projectCents / maxCents) * usable : 0
+    const retainerHeight = stacked ? (total.retainerCents / ceiling) * usable : 0
+    const projectHeight = stacked ? (total.projectCents / ceiling) * usable : 0
 
     const retainerY = height - retainerHeight
     const projectY = retainerY - gap - projectHeight
@@ -242,4 +254,41 @@ export function axisLabels(totals: readonly MonthTotal[]): AxisLabel[] {
     previousYear = year
     return label
   })
+}
+
+/**
+ * Round values from zero up to a ceiling at or above `maxCents`, evenly
+ * spaced, for the Y axis.
+ *
+ * ZERO ALWAYS. A bar's length is the quantity it represents, so a truncated
+ * baseline makes a five per cent difference look like a doubling. This is the
+ * one axis rule that is not a matter of taste.
+ *
+ * The step is snapped to 1, 2, 2.5 or 5 times a power of ten -- the values a
+ * reader can do arithmetic with at a glance. $108,574.50 becomes a $125,000
+ * axis in $25,000 steps, which is the "rough feel" the axis exists to give;
+ * an exact maximum of $108,574.50 gives none.
+ */
+// Five, not four. Four steps against this data rounds $108,574.50 up to a
+// $150,000 ceiling and leaves the tallest bar at 72% of the plot height --
+// a flatter chart and a coarser scale. Five gives $125,000 in $25,000 steps
+// and fills 87%.
+export function axisTicks(maxCents: number, count = 5): number[] {
+  if (maxCents <= 0) return [0]
+
+  const rough = maxCents / count
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  const normalised = rough / magnitude
+  const nice = normalised <= 1 ? 1 : normalised <= 2 ? 2 : normalised <= 2.5 ? 2.5 : normalised <= 5 ? 5 : 10
+  const step = nice * magnitude
+
+  const ticks: number[] = []
+  // Rounded at each step rather than accumulated: a 2.5 x 10^n step is not
+  // exactly representable in binary, and adding it repeatedly drifts the later
+  // labels off the round numbers that are the whole point.
+  for (let i = 0; i * step < maxCents + step; i++) {
+    ticks.push(Math.round(i * step))
+    if (ticks[ticks.length - 1] >= maxCents) break
+  }
+  return ticks
 }
