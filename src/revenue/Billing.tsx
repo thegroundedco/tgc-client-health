@@ -9,7 +9,7 @@ import {
   monthRows,
   monthlyTotals,
 } from './chartMath'
-import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
+import type { CompareTotal, MonthRow, MonthTotal, RevenueRow } from './chartMath'
 import { MonthPanel } from './MonthPanel'
 import { formatMoney } from './money'
 import type { RetentionClient } from './retentionMath'
@@ -42,6 +42,12 @@ const VIEW = { width: 600, height: 200, gap: 2 }
 // half rather than the other.
 type Segment = 'retainer' | 'project' | null
 
+// Which of the two bars the pointer is over. The comparison bar stands for a
+// DIFFERENT MONTH, so a card that named the period's month while the pointer
+// was on the grey bar was describing something the reader was not pointing at
+// -- reported on the 2026-09-11 call.
+type Series = 'period' | 'compare'
+
 // Read off the element under the pointer rather than held as its own state.
 // Two handlers racing -- one on each rect, one on the group -- would leave a
 // stale segment whenever the pointer crossed the gap, and label it as
@@ -50,6 +56,11 @@ function segmentAt(target: EventTarget | null): Segment {
   if (!(target instanceof Element)) return null
   const value = target.getAttribute('data-segment')
   return value === 'retainer' || value === 'project' ? value : null
+}
+
+function seriesAt(target: EventTarget | null): Series {
+  if (!(target instanceof Element)) return 'period'
+  return target.getAttribute('data-series') === 'compare' ? 'compare' : 'period'
 }
 
 const CARD_OFFSET = 16
@@ -101,16 +112,59 @@ function ComparisonCells({
   against,
   month,
 }: {
-  against: { cents: number; period: string } | null
+  against: (CompareTotal & { period: string }) | null
   month: MonthRow
 }) {
+  const againstCents =
+    against === null ? null : against.retainerCents + against.projectCents
   const difference =
-    against === null || month.totalCents === null ? null : month.totalCents - against.cents
+    againstCents === null || month.totalCents === null ? null : month.totalCents - againstCents
 
   return (
     <>
-      <td className={styles.figure}>{against === null ? '—' : formatMoney(against.cents)}</td>
+      <td className={styles.figure}>{againstCents === null ? '—' : formatMoney(againstCents)}</td>
       <td className={styles.figure}>{difference === null ? '—' : formatChange(difference)}</td>
+    </>
+  )
+}
+
+// The comparison month, described in its own right. The grey bar stands for a
+// different month, so pointing at it is a question about THAT month -- naming
+// the period's month there was the defect reported on the 2026-09-11 call.
+//
+// It says what it is compared with, because a month named with no hint of why
+// leaves the reader to work out which bar they are on.
+function describeComparison(
+  against: CompareTotal & { period: string },
+  periodMonth: string,
+  segment: Segment,
+): ReactNode {
+  const total = against.retainerCents + against.projectCents
+  const figure =
+    segment === null
+      ? null
+      : segment === 'retainer'
+        ? against.retainerCents
+        : against.projectCents
+
+  return (
+    <>
+      <span className={styles.hoverMonth}>{formatPeriod(against.period)}</span>
+      {figure === null ? (
+        <span>
+          {formatMoney(against.retainerCents)} retainer ·{' '}
+          {formatMoney(against.projectCents)} project work
+        </span>
+      ) : (
+        <span className={styles.hoverFigure} data-testid="billing-hover-figure">
+          {formatMoney(figure)}{' '}
+          <span className={styles.hoverWhich}>
+            {segment === 'retainer' ? 'retainer' : 'project work'}
+          </span>
+        </span>
+      )}
+      <span>{formatMoney(total)} total</span>
+      <span>compared with {formatPeriod(periodMonth)}</span>
     </>
   )
 }
@@ -119,9 +173,17 @@ function describeMonth(
   month: MonthRow,
   totals: readonly MonthTotal[],
   segment: Segment,
-  against: { cents: number; period: string } | null,
+  against: (CompareTotal & { period: string }) | null,
 ): ReactNode {
-  if (!month.entered) return <span> · not entered</span>
+  const heading = <span className={styles.hoverMonth}>{formatPeriod(month.period)}</span>
+  if (!month.entered) {
+    return (
+      <>
+        {heading}
+        <span>not entered</span>
+      </>
+    )
+  }
 
   // Only when there IS a pair to compare. monthRows returns null where there
   // is not, and a "vs" clause naming a month nobody entered would be the
@@ -137,11 +199,12 @@ function describeMonth(
   const comparison =
     against === null
       ? null
-      : `${formatMoney(against.cents)} in ${formatPeriod(against.period)}`
+      : `${formatMoney(against.retainerCents + against.projectCents)} in ${formatPeriod(against.period)}`
 
   if (segment === null) {
     return (
       <>
+        {heading}
         <span>
           {formatMoney(month.retainerCents)} retainer ·{' '}
           {formatMoney(month.projectCents)} project work
@@ -155,6 +218,7 @@ function describeMonth(
   const cents = segment === 'retainer' ? month.retainerCents : month.projectCents
   return (
     <>
+      {heading}
       <span className={styles.hoverFigure} data-testid="billing-hover-figure">
         {formatMoney(cents)}{' '}
         <span className={styles.hoverWhich}>
@@ -207,6 +271,7 @@ export function Billing({
     y: number
     source: 'pointer' | 'focus'
     segment: Segment
+    series: Series
   } | null>(null)
 
   const months = [...new Set(rows.filter((r) => r.period <= currentPeriod).map((r) => r.period))].sort()
@@ -309,12 +374,7 @@ export function Billing({
     if (ghosts === undefined || against === null) return null
     const index = totals.findIndex((month) => month.period === period)
     const found = index === -1 ? null : ghosts[index]
-    return found === null
-      ? null
-      : {
-          cents: found.retainerCents + found.projectCents,
-          period: monthsBack(period, offset),
-        }
+    return found === null ? null : { ...found, period: monthsBack(period, offset) }
   }
 
   // Clicking the open month closes it; clicking another switches straight to
@@ -444,7 +504,13 @@ export function Billing({
             onFocus={(event) => {
               setActive(bar.period)
               const box = event.currentTarget.getBoundingClientRect()
-              setPoint({ x: box.left + box.width / 2, y: box.top, source: 'focus', segment: null })
+              setPoint({
+                x: box.left + box.width / 2,
+                y: box.top,
+                source: 'focus',
+                segment: null,
+                series: 'period',
+              })
             }}
             onKeyDown={(event) => {
               // A native <button> does this for free; an SVG group with a
@@ -465,6 +531,7 @@ export function Billing({
                 y: event.clientY,
                 source: 'pointer',
                 segment: segmentAt(event.target),
+                series: seriesAt(event.target),
               })
             }}
             onMouseLeave={() => {
@@ -477,6 +544,7 @@ export function Billing({
                 y: event.clientY,
                 source: 'pointer',
                 segment: segmentAt(event.target),
+                series: seriesAt(event.target),
               })
             }
             role="button"
@@ -497,6 +565,8 @@ export function Billing({
               <g data-testid="billing-compare">
                 <rect
                   className={styles.compareRetainer}
+                  data-segment="retainer"
+                  data-series="compare"
                   height={bar.compareRetainerHeight}
                   rx="2"
                   width={bar.compareWidth}
@@ -506,6 +576,8 @@ export function Billing({
                 {bar.compareProjectHeight > 0 && (
                   <rect
                     className={styles.compareProject}
+                    data-segment="project"
+                    data-series="compare"
                     height={bar.compareProjectHeight}
                     rx="2"
                     width={bar.compareWidth}
@@ -574,8 +646,18 @@ export function Billing({
           data-testid="billing-tooltip"
           style={{ left: `${cardX}px`, top: `${cardY}px` }}
         >
-          <span className={styles.hoverMonth}>{formatPeriod(activeMonth.period)}</span>
-          {describeMonth(activeMonth, totals, point.segment, comparisonFor(activeMonth.period))}
+          {point.series === 'compare' && comparisonFor(activeMonth.period) !== null
+            ? describeComparison(
+                comparisonFor(activeMonth.period)!,
+                activeMonth.period,
+                point.segment,
+              )
+            : describeMonth(
+                activeMonth,
+                totals,
+                point.segment,
+                comparisonFor(activeMonth.period),
+              )}
         </p>
       )}
 

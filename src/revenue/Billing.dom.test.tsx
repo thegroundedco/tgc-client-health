@@ -993,6 +993,79 @@ describe('Billing', () => {
     expect(screen.getAllByRole('columnheader')).toHaveLength(5)
   })
 
+  // Reported by the owner and his boss on the 2026-09-11 call: hovering the
+  // grey bar showed the PERIOD's month, not the month the grey bar stands for.
+  // "it's showing July 2026 on there, but that's wrong. It should be April."
+  function hoverCompare(barIndex: number, which: number) {
+    const bar = screen.getAllByTestId('billing-bar')[barIndex]
+    const rect = bar.querySelector('[data-testid="billing-compare"]')!.querySelectorAll('rect')[
+      which
+    ]
+    fireEvent.mouseEnter(bar, { clientX: 10, clientY: 10 })
+    fireEvent.mouseMove(rect, { clientX: 10, clientY: 10 })
+    return screen.getByTestId('billing-tooltip')
+  }
+
+  const COMPARED_SPLIT = [
+    row(1, '2026-04-01', 300000, 100000),
+    row(1, '2026-05-01', 400000),
+    row(1, '2026-06-01', 100000),
+    ...ROWS,
+  ]
+
+  function compared() {
+    return render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED_SPLIT}
+        currentPeriod="2026-09-01"
+      />,
+    )
+  }
+
+  it('names the COMPARISON month when the grey bar is hovered', () => {
+    compared()
+
+    const tip = hoverCompare(0, 0).textContent ?? ''
+    expect(tip).toContain('April 2026')
+    expect(tip).not.toContain('July 2026, ')
+  })
+
+  it('shows the comparison month’s own retainer on its lower segment', () => {
+    compared()
+
+    hoverCompare(0, 0)
+    expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$3,000')
+    expect(screen.getByTestId('billing-tooltip').textContent).toContain('retainer')
+  })
+
+  it('shows the comparison month’s own project work on its upper segment', () => {
+    compared()
+
+    hoverCompare(0, 1)
+    expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$1,000')
+    expect(screen.getByTestId('billing-tooltip').textContent).toContain('project work')
+  })
+
+  it('says which month the comparison is measured against', () => {
+    // Without it the card names a month with no hint of why that month.
+    compared()
+
+    expect(hoverCompare(0, 0).textContent).toMatch(/compared with July 2026/i)
+  })
+
+  it('still names the PERIOD’s month when its own bar is hovered', () => {
+    compared()
+
+    const bar = screen.getAllByTestId('billing-bar')[0]
+    fireEvent.mouseEnter(bar, { clientX: 10, clientY: 10 })
+    fireEvent.mouseMove(bar.querySelectorAll('[data-segment]')[0], { clientX: 10, clientY: 10 })
+
+    expect(screen.getByTestId('billing-tooltip').textContent).toContain('July 2026')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in
