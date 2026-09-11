@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Billing } from './Billing'
@@ -782,6 +782,80 @@ describe('Billing', () => {
     // July is $5,000; April, three months back, is $3,000.
     expect(tip).toContain('$3,000')
     expect(tip).toContain('April 2026')
+  })
+
+  // The owner's ask, 2026-09-11: the months listed under the chart should open
+  // the same panel the bars do. Same action, two ways in.
+  //
+  // Scoped to the TABLE, deliberately. The bars carry the same accessible name,
+  // so an unscoped query finds a bar and five of these tests passed before the
+  // table was clickable at all -- passing against the wrong element is the
+  // failure mode these tests exist to avoid.
+  const monthRow = (name: RegExp) =>
+    within(screen.getByRole('table', { name: /billing/i })).getByRole('button', { name })
+  it('opens a month from its row in the table', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.click(monthRow(/September 2026, open breakdown/i))
+
+    expect(screen.getByRole('region', { name: /September 2026 breakdown/ })).toBeTruthy()
+  })
+
+  it('closes it again on a second click, like the bar', async () => {
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const row = () => monthRow(/August 2026, open breakdown/i)
+    await user.click(row())
+    await user.click(row())
+
+    expect(screen.queryByRole('region', { name: /breakdown/ })).toBeNull()
+  })
+
+  it('is one selection, however it was opened', () => {
+    // Opening from the table must mark the BAR too, or the chart and its own
+    // table would disagree about what is open.
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    fireEvent.click(monthRow(/August 2026, open breakdown/i))
+
+    const bars = screen.getAllByTestId('billing-bar')
+    expect(bars[1].getAttribute('data-selected')).toBe('true')
+    expect(bars[2].getAttribute('data-selected')).toBe('false')
+    expect(screen.getByTestId('billing-row-august-2026').getAttribute('data-selected')).toBe(
+      'true',
+    )
+  })
+
+  it('says whether the row is open, for a screen reader', () => {
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const button = monthRow(/July 2026, open breakdown/i)
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(button)
+    expect(
+      monthRow(/July 2026, open breakdown/i).getAttribute('aria-expanded'),
+    ).toBe('true')
+  })
+
+  it('opens a month nobody entered too, rather than doing nothing', () => {
+    // A dead row is worse than one that explains itself. The panel is where
+    // "nobody entered this" gets said.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="none"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    fireEvent.click(monthRow(/August 2026, open breakdown/i))
+
+    expect(screen.getByRole('region', { name: /August 2026/ }).textContent).toMatch(/no entries/i)
   })
 
   it('wears token colours and never a literal', () => {

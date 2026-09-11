@@ -554,8 +554,34 @@ export function Billing({
         </thead>
         <tbody>
           {rowsByMonth.map((month) => (
-            <tr key={month.period}>
-              <th scope="row">{formatPeriod(month.period)}</th>
+            <tr
+              data-selected={opened === month.period ? 'true' : 'false'}
+              data-testid={`billing-row-${formatPeriod(month.period).toLowerCase().replace(' ', '-')}`}
+              key={month.period}
+            >
+              {/* A real <button> inside the header cell, not a clickable row.
+                  A <tr> is not a button: giving it a role would break the
+                  table's semantics and hand a keyboard user a row they can
+                  focus but not operate. The button fills the cell, so the whole
+                  month column is a target while staying a button underneath.
+
+                  Same accessible name as the bar, and the same handler: one
+                  action with two ways in, so the chart and its own table can
+                  never disagree about what is open. */}
+              <th scope="row">
+                <button
+                  aria-expanded={opened === month.period}
+                  className={styles.monthButton}
+                  onClick={() => toggle(month.period)}
+                  type="button"
+                >
+                  {formatPeriod(month.period)}
+                  {/* The month alone is what a sighted reader needs; the verb
+                      is what a screen reader needs, and putting it on screen
+                      would print ", open breakdown" down the whole column. */}
+                  <span className="visually-hidden">, open breakdown</span>
+                </button>
+              </th>
               <td className={styles.figure}>
                 {month.entered ? formatMoney(month.retainerCents) : 'not entered'}
               </td>

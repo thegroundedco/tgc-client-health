@@ -587,3 +587,33 @@
   stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke;
 }
+
+/* The month cell's button. Dressed as the text it replaces -- all this removes
+   is the chrome that would make a table cell look like a form control -- while
+   staying a real button underneath, so the keyboard and the accessibility tree
+   get one for free.
+
+   It fills the cell so the whole month column is a target, which is what makes
+   it feel like clicking the row rather than hunting for a link. */
+.monthButton {
+  inline-size: 100%;
+  text-align: start;
+  font-family: var(--face-body);
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.monthButton:hover {
+  text-decoration: underline;
+}
+
+/* The open month, marked in the table as well as on the bar. One selection,
+   however it was opened. */
+.table tbody tr[data-selected='true'] {
+  background: var(--surface-sunken);
+}
