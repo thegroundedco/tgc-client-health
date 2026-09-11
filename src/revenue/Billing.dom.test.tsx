@@ -664,7 +664,7 @@ describe('Billing', () => {
       />,
     )
 
-    expect(screen.getAllByTestId('billing-ghost')).toHaveLength(3)
+    expect(screen.getAllByTestId('billing-compare')).toHaveLength(3)
   })
 
   it('draws NO ghost for a comparison month nobody entered', () => {
@@ -680,7 +680,7 @@ describe('Billing', () => {
       />,
     )
 
-    expect(screen.getAllByTestId('billing-ghost')).toHaveLength(1)
+    expect(screen.getAllByTestId('billing-compare')).toHaveLength(1)
   })
 
   it('draws no ghosts at all when not comparing', () => {
@@ -694,7 +694,7 @@ describe('Billing', () => {
       />,
     )
 
-    expect(screen.queryAllByTestId('billing-ghost')).toHaveLength(0)
+    expect(screen.queryAllByTestId('billing-compare')).toHaveLength(0)
   })
 
   it('states the comparison total and how the range moved against it', () => {
@@ -756,7 +756,7 @@ describe('Billing', () => {
       />,
     )
 
-    for (const ghost of screen.getAllByTestId('billing-ghost')) {
+    for (const ghost of screen.getAllByTestId('billing-compare')) {
       expect(Number(ghost.getAttribute('height'))).toBeLessThanOrEqual(200)
     }
     for (const bar of screen.getAllByTestId('billing-bar')) {

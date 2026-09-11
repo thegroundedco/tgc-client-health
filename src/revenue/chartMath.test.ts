@@ -499,50 +499,71 @@ describe('comparisonTotals', () => {
   })
 })
 
-describe('barGeometry — the comparison ghost', () => {
-  it('measures the ghost against the same ceiling as the bar', () => {
+describe('barGeometry — the comparison bar', () => {
+  it('measures the comparison against the same ceiling as the bar', () => {
     // Two scales on one plot is the dual-axis mistake wearing a different hat.
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [100000])
 
-    expect(bars[0].ghostHeight).toBe(100)
+    expect(bars[0].compareHeight).toBe(100)
     expect(bars[0].retainerHeight).toBe(100)
   })
 
-  it('NARROWS the solid bar so the ghost brackets it', () => {
-    // Without this the ghost is only visible in the months the comparison beat
-    // -- exactly half the information, and the half that flatters.
+  it('PAIRS the two bars side by side, at equal width', () => {
+    // Two lengths from a common baseline is the easiest comparison the eye can
+    // make. The outline this replaced asked the reader to compare an edge with
+    // an area, which the owner reported as hard to read.
     const plain = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE)
     const compared = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+    const bar = compared.bars[0]
 
-    expect(compared.bars[0].width).toBeLessThan(plain.bars[0].width)
-    expect(compared.bars[0].ghostWidth).toBeGreaterThan(compared.bars[0].width)
+    expect(bar.width).toBeLessThan(plain.bars[0].width)
+    expect(bar.compareWidth).toBe(bar.width)
+    // Beside, not behind: the comparison begins after the period's bar ends.
+    expect(bar.compareX).toBeGreaterThanOrEqual(bar.x + bar.width)
   })
 
-  it('centres the ghost on the bar', () => {
-    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
-    const bar = bars[0]
+  it('keeps the comparison on the period\u2019s right, always', () => {
+    // A fixed order is what lets a reader tell the two apart without relying on
+    // colour -- the secondary encoding the comparison's low chroma requires.
+    const { bars } = barGeometry(
+      totalsOf(['2026-08-01', 100000, 0], ['2026-09-01', 100000, 0]),
+      SIZE,
+      200000,
+      [50000, 150000],
+    )
 
-    expect(bar.x + bar.width / 2).toBeCloseTo(bar.ghostX + bar.ghostWidth / 2, 6)
+    for (const bar of bars) expect(bar.compareX).toBeGreaterThan(bar.x)
   })
 
-  it('sits the ghost on the baseline, like the bar', () => {
+  it('keeps the pair inside its own month\u2019s slot', () => {
+    const { bars } = barGeometry(
+      totalsOf(['2026-08-01', 100000, 0], ['2026-09-01', 100000, 0]),
+      SIZE,
+      200000,
+      [50000, 50000],
+    )
+
+    expect(bars[0].compareX + bars[0].compareWidth).toBeLessThanOrEqual(bars[1].x)
+  })
+
+  it('sits the comparison on the baseline, like the bar', () => {
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
 
-    expect(bars[0].ghostY + (bars[0].ghostHeight ?? 0)).toBe(SIZE.height)
+    expect(bars[0].compareY + (bars[0].compareHeight ?? 0)).toBe(SIZE.height)
   })
 
   // A comparison month nobody entered draws nothing. Null is not zero, and a
-  // flat ghost on the baseline would read as "they billed nothing then".
-  it('draws no ghost where the comparison has no figure', () => {
+  // flat bar on the baseline would read as "they billed nothing then".
+  it('draws no comparison bar where the comparison has no figure', () => {
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [null])
 
-    expect(bars[0].ghostHeight).toBeNull()
+    expect(bars[0].compareHeight).toBeNull()
   })
 
-  it('leaves the bars full width and ghostless when no comparison is given', () => {
+  it('leaves the bars full width and unpaired when no comparison is given', () => {
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000)
 
-    expect(bars[0].ghostHeight).toBeNull()
+    expect(bars[0].compareHeight).toBeNull()
     expect(bars[0].width).toBeCloseTo(600 * 0.7, 6)
   })
 })

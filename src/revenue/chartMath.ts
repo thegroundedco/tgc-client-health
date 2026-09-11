@@ -36,13 +36,13 @@ export type Bar = {
   retainerHeight: number
   projectY: number
   projectHeight: number
-  // The comparison period's total for this month, as a rectangle standing
-  // behind the bar. Null where that month has no figure -- a ghost at zero
-  // would claim the agency billed nothing then.
-  ghostX: number
-  ghostWidth: number
-  ghostY: number
-  ghostHeight: number | null
+  // The comparison period's total for this month, as a bar BESIDE this one.
+  // Null where that month has no figure -- a bar at zero would claim the
+  // agency billed nothing then.
+  compareX: number
+  compareWidth: number
+  compareY: number
+  compareHeight: number | null
 }
 
 // Thirteen: a year plus the month that anchors it. The same span
@@ -135,9 +135,10 @@ export function barGeometry(
   // clipped, and both lie.
   scaleTo?: number,
   // One entry per month, aligned by index, from comparisonTotals. Its presence
-  // also narrows the solid bars so the ghost brackets them -- without that the
-  // ghost is only visible in the months the comparison beat, which is half the
-  // information and the half that flatters.
+  // splits each month's slot into a PAIR: the period's bar and the comparison's,
+  // side by side on the same baseline. Two lengths from a common baseline is
+  // the easiest comparison the eye can make -- an outline drawn around a solid
+  // bar, which this replaced, asks the reader to compare an edge with an area.
   comparison?: readonly (number | null)[],
 ): { bars: Bar[]; maxCents: number } {
   let maxCents = 0
@@ -149,13 +150,15 @@ export function barGeometry(
 
   const slot = totals.length === 0 ? 0 : width / totals.length
   // A little air either side of each bar, so adjacent months do not touch --
-  // the same reason the two segments get a gap. Narrower when a comparison is
-  // drawn, so the ghost can stand around the bar rather than behind it.
-  const ghostWidth = slot * 0.7
-  const barWidth = comparison === undefined ? ghostWidth : slot * 0.5
+  // the same reason the two segments get a gap. With a comparison the slot
+  // holds two bars and a hairline between them, so each is narrower and the
+  // PAIR occupies the space one bar had.
+  const pairGap = slot * 0.04
+  const barWidth = comparison === undefined ? slot * 0.7 : slot * 0.33
+  const groupWidth = comparison === undefined ? barWidth : barWidth * 2 + pairGap
 
   const bars = totals.map((total, index) => {
-    const x = slot * index + (slot - barWidth) / 2
+    const x = slot * index + (slot - groupWidth) / 2
 
     // No maximum means every month is zero; scaling against it would divide by
     // zero and render NaN-tall bars, which in SVG silently draw nothing at all.
@@ -169,15 +172,18 @@ export function barGeometry(
 
     // Measured against the SAME ceiling as the bar. Two scales on one plot is
     // the dual-axis mistake wearing a different hat.
-    const ghostCents = comparison?.[index] ?? null
-    const ghostHeight =
-      ghostCents === null || ceiling <= 0 ? null : (ghostCents / ceiling) * height
+    const compareCents = comparison?.[index] ?? null
+    const compareHeight =
+      compareCents === null || ceiling <= 0 ? null : (compareCents / ceiling) * height
 
     return {
-      ghostX: slot * index + (slot - ghostWidth) / 2,
-      ghostWidth,
-      ghostY: ghostHeight === null ? height : height - ghostHeight,
-      ghostHeight,
+      // Immediately to the period's right, always. A fixed order is what lets
+      // the reader tell the two apart without relying on colour -- which is
+      // the secondary encoding the comparison's low chroma requires.
+      compareX: x + barWidth + pairGap,
+      compareWidth: barWidth,
+      compareY: compareHeight === null ? height : height - compareHeight,
+      compareHeight,
       period: total.period,
       entered: total.entered,
       x,

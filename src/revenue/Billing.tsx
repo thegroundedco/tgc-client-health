@@ -356,7 +356,7 @@ export function Billing({
         {against !== null && (
           <>
             {'  '}
-            <span className={styles.swatchGhost} aria-hidden="true" />{' '}
+            <span className={styles.swatchCompare} aria-hidden="true" />{' '}
             {formatPeriod(against.from)}
             {against.from === against.to ? '' : `–${formatPeriod(against.to)}`}
           </>
@@ -476,18 +476,23 @@ export function Billing({
             {/* An unentered month renders NO rect at all -- the gap, drawn. An
                 entered zero renders a retainer rect of zero height, which is a
                 different thing and must stay distinguishable. */}
-            {/* Drawn before the bar, so the solid mark sits over it. Outline
-                only and NO fill: a filled comparison would need a fifth hue,
-                and the validator refused every candidate against this page's
-                existing four. */}
-            {bar.ghostHeight !== null && (
+            {/* A solid bar BESIDE the period's, not an outline behind it. The
+                owner reported the outline hard to read against a filled bar,
+                and he was right: comparing an edge with an area is a harder
+                task than comparing two lengths from one baseline.
+
+                It is deliberately achromatic -- a reference, not a category --
+                and its position is fixed to the period's right, which is the
+                secondary encoding its low chroma requires. */}
+            {bar.compareHeight !== null && (
               <rect
-                className={styles.ghost}
-                data-testid="billing-ghost"
-                height={bar.ghostHeight}
-                width={bar.ghostWidth}
-                x={bar.ghostX}
-                y={bar.ghostY}
+                className={styles.compareBar}
+                data-testid="billing-compare"
+                height={bar.compareHeight}
+                rx="2"
+                width={bar.compareWidth}
+                x={bar.compareX}
+                y={bar.compareY}
               />
             )}
 

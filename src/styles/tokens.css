@@ -135,6 +135,34 @@
   --brand-chart-gain: #2563EB;
   --brand-chart-loss: #A21CAF;
 
+  /* The comparison series on the billing chart. The FIRST chart colour in this
+     project that flips between themes, and the reason is the job it does: the
+     other four are chromatic marks that must stay identifiable, so they are
+     pinned; this one must stay RECESSIVE RELATIVE TO ITS GROUND, and recessive
+     is ground-dependent -- #B5AE9E is a quiet step down from the cream page and
+     a loud step up from the dark one (2.06 against light, 7.61 against dark).
+
+     Measured, and the measurements say something uncomfortable that is worth
+     recording rather than hiding. Against the two series:
+
+       chroma floor    FAIL  0.021 -- it reads gray, which is the point
+       lightness band  FAIL  outside the categorical band, also the point
+       CVD separation  WARN  deltaE 7.8 protan (dark), 11.3 (light)
+       contrast        WARN  2.06 light, 2.36 dark
+       normal vision   PASS  18.7 light, 18.5 dark
+
+     The two FAILs are the checks for a CATEGORICAL series of equal weight, and
+     this is deliberately not one. The CVD warning is legal only with secondary
+     encoding, and there are three: the comparison bar always sits in the same
+     position beside its month's bar, it is named in the legend, and every
+     figure is in the table. The contrast warning is discharged the way the
+     skill says -- a table view -- which this chart has.
+
+     A first attempt used #8C8578, which measured deltaE 2.6 protan and 11.2 to
+     NORMAL vision against the retainer teal. "Grey is safe because it is
+     achromatic" turned out to be false at that lightness. */
+  --brand-chart-compare: #B5AE9E;
+
   /* ==========================================================================
      DARK — the same roles at night. Paper is the ground and ink is the mark;
      neither is a lightness, which is why the SEMANTIC layer below needs no
@@ -157,6 +185,10 @@
   --dark-ink-muted: #A69E8E;
   --dark-rule: #4A443A;
   --dark-red-legible: #FF6B60;
+  /* The comparison series' dark step. Chosen for the same job, not derived:
+     2.36 against the dark page, matching the 2.06 the light value has against
+     the cream one, so the mark stays equally quiet on both grounds. */
+  --dark-chart-compare: #5C5548;
 
   /* ==========================================================================
      FUNCTIONAL — meaning without identity. Not brand, and must not move with
@@ -185,6 +217,7 @@
   --chart-project: var(--brand-chart-project);
   --chart-gain: var(--brand-chart-gain);
   --chart-loss: var(--brand-chart-loss);
+  --chart-compare: var(--brand-chart-compare);
 
   /* text. 15.39:1 and 5.46:1 on the page. */
   --text-primary: var(--brand-ink);
@@ -414,6 +447,7 @@
     --brand-ink-muted: var(--dark-ink-muted);
     --brand-rule: var(--dark-rule);
     --brand-red-legible: var(--dark-red-legible);
+    --brand-chart-compare: var(--dark-chart-compare);
   }
 }
 
@@ -426,4 +460,5 @@
   --brand-ink-muted: var(--dark-ink-muted);
   --brand-rule: var(--dark-rule);
   --brand-red-legible: var(--dark-red-legible);
+  --brand-chart-compare: var(--dark-chart-compare);
 }

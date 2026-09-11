@@ -573,19 +573,16 @@
   color: var(--text-secondary);
 }
 
-/* The comparison period, as an outline standing around the bar. No fill, and
-   that is measured rather than stylistic: a filled comparison would need a
-   fifth hue, and every candidate failed CVD separation against this page's
-   existing four (see tokens.css). An outline adds no colour at all.
+/* The comparison period, as a solid bar beside the period's own. Replaced a
+   dashed outline on 2026-09-11: the owner reported it hard to read against a
+   filled bar, and comparing an edge with an area IS harder than comparing two
+   lengths from one baseline.
 
-   Dashed so it reads as a reference mark rather than as another quantity, and
-   non-scaling so the stroke stays even under the chart's horizontal stretch. */
-.ghost {
-  fill: none;
-  stroke: var(--text-secondary);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-  vector-effect: non-scaling-stroke;
+   Achromatic on purpose -- a reference, not a category -- and quiet enough
+   against its ground to stay behind the series it is measured against. See
+   tokens.css for what that cost and what the validator said about it. */
+.compareBar {
+  fill: var(--chart-compare);
 }
 
 /* The month cell's button. Dressed as the text it replaces -- all this removes
@@ -618,14 +615,14 @@
   background: var(--surface-sunken);
 }
 
-/* The legend's mark for the comparison. An outline, matching the ghost on the
-   chart -- the legend has to show the same encoding the mark uses, and this
-   mark's identity is its dashed edge rather than any fill. */
-.swatchGhost {
+/* The legend's mark for the comparison. A filled chip like the other two, in
+   the same colour the bar uses -- the legend must show the encoding the mark
+   actually uses, and the mark is now a fill rather than an edge. */
+.swatchCompare {
   display: inline-block;
   inline-size: 0.75em;
   block-size: 0.75em;
-  border: 1px dashed var(--text-secondary);
+  background: var(--chart-compare);
   border-radius: 2px;
   vertical-align: baseline;
   margin-inline-end: 0.25em;
