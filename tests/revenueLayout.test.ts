@@ -139,4 +139,28 @@ describe('the revenue sections', () => {
     expect(figure).toContain('text-align: end')
     expect(figure).toContain('font-variant-numeric: tabular-nums')
   })
+
+  // border-radius is IGNORED on a cell of a collapsed table, in every browser.
+  // The band's rounded corners are the reason this table separates its borders
+  // -- a detail that looks like a stylistic choice and is a hard requirement.
+  it('separates its borders, because a collapsed table cannot round a cell', () => {
+    const table = sectionRule('.table')
+    expect(table).toContain('border-collapse: separate')
+    expect(table).toContain('border-spacing: 0')
+  })
+
+  it('gives the banded columns a ground and a weight', () => {
+    const band = sectionRule('.table .band')
+    expect(band).toContain('background: var(--surface-sunken)')
+    expect(band).toMatch(/font-weight: var\(--wght-/)
+  })
+
+  // Rounded at the OUTER corners of the block only: the band is one shape
+  // behind two columns, not a pill per cell.
+  it('rounds only the four outer corners of the band', () => {
+    expect(SECTIONS).toContain('border-start-start-radius')
+    expect(SECTIONS).toContain('border-start-end-radius')
+    expect(SECTIONS).toContain('border-end-start-radius')
+    expect(SECTIONS).toContain('border-end-end-radius')
+  })
 })

@@ -422,10 +422,10 @@ export function Billing({
             <th className={styles.figure} scope="col">
               Project work
             </th>
-            <th className={styles.figure} scope="col">
+            <th className={`${styles.figure} ${styles.band} ${styles.bandStart}`} scope="col">
               Total
             </th>
-            <th className={styles.figure} scope="col">
+            <th className={`${styles.figure} ${styles.band} ${styles.bandEnd}`} scope="col">
               Change
             </th>
           </tr>
@@ -440,14 +440,14 @@ export function Billing({
               <td className={styles.figure}>
                 {month.entered ? formatMoney(month.projectCents) : '—'}
               </td>
-              <td className={styles.figure}>
+              <td className={`${styles.figure} ${styles.band} ${styles.bandStart}`}>
                 {month.totalCents === null ? '—' : formatMoney(month.totalCents)}
               </td>
               {/* An em dash, never $0. null here means the comparison could not
                   be made -- no month before this one, or the one before it was
                   never entered -- and $0 would report that absence as a finding
                   of no change. chartMath.monthRows sets the rule. */}
-              <td className={styles.figure}>
+              <td className={`${styles.figure} ${styles.band} ${styles.bandEnd}`}>
                 {month.changeCents === null ? '—' : formatChange(month.changeCents)}
               </td>
             </tr>

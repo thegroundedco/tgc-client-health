@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Billing } from './Billing'
 import type { RevenueRow } from './chartMath'
 import type { RetentionClient } from './retentionMath'
+import styles from './Revenue.module.css'
 
 function row(client_id: number, period: string, retainer: number, project = 0): RevenueRow {
   return { client_id, period, retainer_cents: retainer, project_cents: project }
@@ -529,6 +530,35 @@ describe('Billing', () => {
     const tip = screen.getByTestId('billing-tooltip')
     expect(tip.textContent).toContain('retainer')
     expect(tip.textContent).toContain('project work')
+  })
+
+  it('bands the total and change columns, and only those', () => {
+    // The owner's ask: the two columns he actually reads should carry weight
+    // the four raw figures beside them do not.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const header = screen.getAllByRole('columnheader').map((cell) => ({
+      label: cell.textContent,
+      banded: cell.className.includes(styles.band),
+    }))
+
+    expect(header).toEqual([
+      { label: 'Month', banded: false },
+      { label: 'Retainer', banded: false },
+      { label: 'Project work', banded: false },
+      { label: 'Total', banded: true },
+      { label: 'Change', banded: true },
+    ])
+  })
+
+  it('bands the same two cells on every body row', () => {
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const row = screen.getByRole('row', { name: /September 2026/ })
+    const banded = [...row.querySelectorAll('td')].map((cell) =>
+      cell.className.includes(styles.band),
+    )
+    expect(banded).toEqual([false, false, true, true])
   })
 
   it('wears token colours and never a literal', () => {

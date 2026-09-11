@@ -198,7 +198,12 @@
    that in the text path rather than only in the picture. */
 .table {
   inline-size: 100%;
-  border-collapse: collapse;
+  /* SEPARATE, not collapse, and this is a requirement rather than a
+     preference: border-radius is ignored on a cell of a collapsed table in
+     every browser, and the banded columns below are rounded. Spacing is zero,
+     so adjacent cells still meet and the row rules read as continuous lines. */
+  border-collapse: separate;
+  border-spacing: 0;
   margin-block-start: var(--space-3);
 }
 
@@ -484,4 +489,41 @@
 .hoverWhich {
   color: var(--text-secondary);
   font-size: var(--step--1);
+}
+
+
+/* The two columns the reader actually reads. Retainer and project work are the
+   workings; the total and its movement are the answer, and they were competing
+   with the workings at identical weight on an identical ground.
+
+   One shape behind two columns, not a pill per cell: the rounding lands on the
+   four OUTER corners only, so the band reads as a block the eye can run down
+   rather than a stack of separate chips. */
+.table .band {
+  background: var(--surface-sunken);
+  font-weight: var(--wght-header);
+  color: var(--text-primary);
+  padding-inline: var(--space-3);
+}
+
+.table thead .bandStart {
+  border-start-start-radius: var(--radius-md);
+}
+
+.table thead .bandEnd {
+  border-start-end-radius: var(--radius-md);
+}
+
+.table tbody tr:last-child .bandStart {
+  border-end-start-radius: var(--radius-md);
+}
+
+.table tbody tr:last-child .bandEnd {
+  border-end-end-radius: var(--radius-md);
+}
+
+/* The last row's rule would otherwise cut straight across the rounded corner
+   it sits under. */
+.table tbody tr:last-child .band {
+  border-block-end: none;
 }
