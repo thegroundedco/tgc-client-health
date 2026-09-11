@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { RANGE_PRESETS, availablePresets, resolveRange } from './rangeMath'
+import {
+  RANGE_PRESETS,
+  availablePresets,
+  comparisonRange,
+  rangeLength,
+  resolveRange,
+} from './rangeMath'
 
 // Anchor is the latest month holding an entry, earliest the first -- the same
 // two facts the chart already derives from the rows. Every preset resolves
@@ -126,5 +132,66 @@ describe('availablePresets', () => {
       expect(preset.label).not.toBe(preset.id)
       expect(preset.label.length).toBeGreaterThan(1)
     }
+  })
+})
+
+describe('rangeLength', () => {
+  it('counts months inclusively, because a range includes both ends', () => {
+    expect(rangeLength({ from: '2026-01-01', to: '2026-01-01' })).toBe(1)
+    expect(rangeLength({ from: '2026-01-01', to: '2026-03-01' })).toBe(3)
+    expect(rangeLength({ from: '2025-11-01', to: '2026-02-01' })).toBe(4)
+  })
+})
+
+describe('comparisonRange', () => {
+  // Shopify's constraint, and the reason it works: a comparison is always the
+  // SAME LENGTH as the primary, offset backwards. Two ranges of different
+  // lengths cannot share an x axis honestly -- month three of one would sit
+  // above month three of the other while meaning something else entirely.
+  it('is the period immediately before, of equal length', () => {
+    expect(comparisonRange({ from: '2026-04-01', to: '2026-06-01' }, 'previous')).toEqual({
+      from: '2026-01-01',
+      to: '2026-03-01',
+    })
+  })
+
+  it('crosses a year boundary going back', () => {
+    expect(comparisonRange({ from: '2026-01-01', to: '2026-03-01' }, 'previous')).toEqual({
+      from: '2025-10-01',
+      to: '2025-12-01',
+    })
+  })
+
+  it('is the same months a year earlier for the yearly comparison', () => {
+    expect(comparisonRange({ from: '2026-04-01', to: '2026-06-01' }, 'year')).toEqual({
+      from: '2025-04-01',
+      to: '2025-06-01',
+    })
+  })
+
+  it('handles a single month either way', () => {
+    expect(comparisonRange({ from: '2026-01-01', to: '2026-01-01' }, 'previous')).toEqual({
+      from: '2025-12-01',
+      to: '2025-12-01',
+    })
+    expect(comparisonRange({ from: '2026-01-01', to: '2026-01-01' }, 'year')).toEqual({
+      from: '2025-01-01',
+      to: '2025-01-01',
+    })
+  })
+
+  it('is null when no comparison was asked for', () => {
+    expect(comparisonRange({ from: '2026-01-01', to: '2026-03-01' }, 'none')).toBeNull()
+  })
+
+  // Deliberately NOT clamped to the data. A comparison period that predates the
+  // records is a real answer -- "there is nothing to compare against" -- and
+  // clamping it would silently compare against a shorter span instead, which
+  // is the same arithmetic dressed as a different question.
+  it('is not clamped to what has been entered', () => {
+    expect(comparisonRange({ from: '2026-01-01', to: '2026-09-01' }, 'year')).toEqual({
+      from: '2025-01-01',
+      to: '2025-09-01',
+    })
   })
 })

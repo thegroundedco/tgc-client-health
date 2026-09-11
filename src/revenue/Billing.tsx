@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { formatPeriod } from '../lib/month'
-import { axisLabels, axisTicks, barGeometry, monthRows, monthlyTotals } from './chartMath'
+import {
+  axisLabels,
+  axisTicks,
+  barGeometry,
+  comparisonTotals,
+  monthRows,
+  monthlyTotals,
+} from './chartMath'
 import type { MonthRow, MonthTotal, RevenueRow } from './chartMath'
 import { MonthPanel } from './MonthPanel'
 import { formatMoney } from './money'
 import type { RetentionClient } from './retentionMath'
-import type { Range } from './rangeMath'
+import { comparisonRange, rangeLength } from './rangeMath'
+import type { CompareMode, Range } from './rangeMath'
 import styles from './Revenue.module.css'
 
 // What we are billing, and whether it is moving. Slice 6d, and the answer to
@@ -79,10 +87,18 @@ function formatChange(cents: number): string {
 // The retention RATE is still deliberately absent: it is retainer-only, it is
 // noise over one month on this roster, and it cannot carry the sentence that
 // makes it defensible. Spec 6e §3.1 has the argument; the panel has the rate.
+// The month a fixed offset behind another. String arithmetic, never a parsed
+// Date -- the trap every module here avoids the same way.
+function monthsBack(period: string, offset: number): string {
+  const total = Number(period.slice(0, 4)) * 12 + (Number(period.slice(5, 7)) - 1) - offset
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-01`
+}
+
 function describeMonth(
   month: MonthRow,
   totals: readonly MonthTotal[],
   segment: Segment,
+  against: { cents: number; period: string } | null,
 ): ReactNode {
   if (!month.entered) return <span> · not entered</span>
 
@@ -95,6 +111,12 @@ function describeMonth(
     movement = ` · ${formatChange(month.changeCents)} vs ${formatPeriod(totals[index - 1].period)}`
   }
   const context = `${formatMoney(month.totalCents ?? 0)} total${movement}`
+  // Named, not just numbered: "$3,000" alone leaves the reader to work out
+  // which month it came from.
+  const comparison =
+    against === null
+      ? null
+      : `${formatMoney(against.cents)} in ${formatPeriod(against.period)}`
 
   if (segment === null) {
     return (
@@ -104,6 +126,7 @@ function describeMonth(
           {formatMoney(month.projectCents)} project work
         </span>
         <span>{context}</span>
+        {comparison !== null && <span>{comparison}</span>}
       </>
     )
   }
@@ -118,17 +141,20 @@ function describeMonth(
         </span>
       </span>
       <span>{context}</span>
+      {comparison !== null && <span>{comparison}</span>}
     </>
   )
 }
 
 export function Billing({
   clients,
+  compare,
   range,
   rows,
   currentPeriod,
 }: {
   clients: readonly RetentionClient[]
+  compare: CompareMode
   // Slice 6h. The range is the PAGE's, not this section's: it governs
   // Concentration too, so a control living inside Billing would be a control
   // that silently changes a section three screens further down.
@@ -168,6 +194,13 @@ export function Billing({
   const totals =
     range === null || backwards ? [] : monthlyTotals(rows, range.to, range.from)
 
+  // Same length as the primary, offset backwards -- the constraint that makes
+  // month-for-month alignment honest. Null when nothing is being compared.
+  const against = range === null || backwards ? null : comparisonRange(range, compare)
+  const offset = against === null ? 0 : compare === 'year' ? 12 : rangeLength(range!)
+  const ghosts =
+    against === null ? undefined : comparisonTotals(rows, totals.map((m) => m.period), offset)
+
   if (months.length === 0) {
     return (
       <section className={styles.section}>
@@ -198,11 +231,24 @@ export function Billing({
   // meant to give a rough feel; scaling to an exact $108,574.50 maximum would
   // put the tallest bar at the top of the plot and leave every label an
   // awkward number.
-  const ticks = axisTicks(totals.reduce((max, m) => Math.max(max, totalOf(m)), 0))
+  // The ceiling takes the HIGHER of the two series, or a taller comparison
+  // month would be drawn outside the plot.
+  const highest = Math.max(
+    totals.reduce((max, m) => Math.max(max, totalOf(m)), 0),
+    ...(ghosts ?? []).map((cents) => cents ?? 0),
+  )
+  const ticks = axisTicks(highest)
   const ceiling = ticks[ticks.length - 1]
-  const { bars } = barGeometry(totals, VIEW, ceiling)
+  const { bars } = barGeometry(totals, VIEW, ceiling, ghosts)
   const rangeRetainer = totals.reduce((sum, month) => sum + month.retainerCents, 0)
   const rangeProject = totals.reduce((sum, month) => sum + month.projectCents, 0)
+
+  // Summed only over the months that HAVE a figure. Null when none do: a
+  // comparison period that predates the records is "nothing to compare
+  // against", and treating it as zero would report the range as an infinite
+  // rise -- the single most flattering lie available here.
+  const comparable = (ghosts ?? []).filter((cents): cents is number => cents !== null)
+  const comparedCents = comparable.length === 0 ? null : comparable.reduce((a, b) => a + b, 0)
   const entered = totals.filter((month) => month.entered)
   const first = entered[0]
   const last = entered[entered.length - 1]
@@ -226,6 +272,16 @@ export function Billing({
   const rowsByMonth = monthRows(totals)
   const activeMonth = rowsByMonth.find((month) => month.period === active) ?? null
 
+  // The comparison figure for one month, with the month it came from, so the
+  // card can name what it is measuring against rather than printing a bare
+  // second number.
+  function comparisonFor(period: string) {
+    if (ghosts === undefined || against === null) return null
+    const index = totals.findIndex((month) => month.period === period)
+    const cents = index === -1 ? null : ghosts[index]
+    return cents === null ? null : { cents, period: monthsBack(period, offset) }
+  }
+
   // Clicking the open month closes it; clicking another switches straight to
   // it. Making the reader close one before opening the next would double every
   // click, and comparing two months is the point of the panel.
@@ -244,8 +300,24 @@ export function Billing({
         {formatMoney(rangeRetainer + rangeProject)}
         <span className={`t-caption ${styles.rangeSplit}`}>
           {formatMoney(rangeRetainer)} retainer · {formatMoney(rangeProject)} project work
+          {against !== null && comparedCents !== null && (
+            <>
+              {' · '}
+              {formatChange(rangeRetainer + rangeProject - comparedCents)} on{' '}
+              {formatPeriod(against.from)}
+              {against.from === against.to ? '' : `–${formatPeriod(against.to)}`}
+            </>
+          )}
         </span>
       </p>
+
+      {against !== null && comparedCents === null && (
+        <p className={`t-caption ${styles.summary}`} data-testid="billing-compare-empty">
+          Nothing entered for {formatPeriod(against.from)}
+          {against.from === against.to ? '' : ` to ${formatPeriod(against.to)}`}, so there is
+          nothing to compare against.
+        </p>
+      )}
 
       {/* Two series, so a legend is compulsory -- identity may never rest on
           colour alone, which is precisely what a colourblind reader cannot
@@ -369,6 +441,21 @@ export function Billing({
             {/* An unentered month renders NO rect at all -- the gap, drawn. An
                 entered zero renders a retainer rect of zero height, which is a
                 different thing and must stay distinguishable. */}
+            {/* Drawn before the bar, so the solid mark sits over it. Outline
+                only and NO fill: a filled comparison would need a fifth hue,
+                and the validator refused every candidate against this page's
+                existing four. */}
+            {bar.ghostHeight !== null && (
+              <rect
+                className={styles.ghost}
+                data-testid="billing-ghost"
+                height={bar.ghostHeight}
+                width={bar.ghostWidth}
+                x={bar.ghostX}
+                y={bar.ghostY}
+              />
+            )}
+
             {bar.entered && (
               <>
                 <rect
@@ -428,7 +515,7 @@ export function Billing({
           style={{ left: `${cardX}px`, top: `${cardY}px` }}
         >
           <span className={styles.hoverMonth}>{formatPeriod(activeMonth.period)}</span>
-          {describeMonth(activeMonth, totals, point.segment)}
+          {describeMonth(activeMonth, totals, point.segment, comparisonFor(activeMonth.period))}
         </p>
       )}
 

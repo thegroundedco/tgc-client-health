@@ -36,6 +36,13 @@ export type Bar = {
   retainerHeight: number
   projectY: number
   projectHeight: number
+  // The comparison period's total for this month, as a rectangle standing
+  // behind the bar. Null where that month has no figure -- a ghost at zero
+  // would claim the agency billed nothing then.
+  ghostX: number
+  ghostWidth: number
+  ghostY: number
+  ghostHeight: number | null
 }
 
 // Thirteen: a year plus the month that anchors it. The same span
@@ -127,6 +134,11 @@ export function barGeometry(
   // same reason: a bar taller than the plot is either drawn outside it or
   // clipped, and both lie.
   scaleTo?: number,
+  // One entry per month, aligned by index, from comparisonTotals. Its presence
+  // also narrows the solid bars so the ghost brackets them -- without that the
+  // ghost is only visible in the months the comparison beat, which is half the
+  // information and the half that flatters.
+  comparison?: readonly (number | null)[],
 ): { bars: Bar[]; maxCents: number } {
   let maxCents = 0
   for (const total of totals) {
@@ -137,8 +149,10 @@ export function barGeometry(
 
   const slot = totals.length === 0 ? 0 : width / totals.length
   // A little air either side of each bar, so adjacent months do not touch --
-  // the same reason the two segments get a gap.
-  const barWidth = slot * 0.7
+  // the same reason the two segments get a gap. Narrower when a comparison is
+  // drawn, so the ghost can stand around the bar rather than behind it.
+  const ghostWidth = slot * 0.7
+  const barWidth = comparison === undefined ? ghostWidth : slot * 0.5
 
   const bars = totals.map((total, index) => {
     const x = slot * index + (slot - barWidth) / 2
@@ -153,7 +167,17 @@ export function barGeometry(
     const retainerY = height - retainerHeight
     const projectY = retainerY - gap - projectHeight
 
+    // Measured against the SAME ceiling as the bar. Two scales on one plot is
+    // the dual-axis mistake wearing a different hat.
+    const ghostCents = comparison?.[index] ?? null
+    const ghostHeight =
+      ghostCents === null || ceiling <= 0 ? null : (ghostCents / ceiling) * height
+
     return {
+      ghostX: slot * index + (slot - ghostWidth) / 2,
+      ghostWidth,
+      ghostY: ghostHeight === null ? height : height - ghostHeight,
+      ghostHeight,
       period: total.period,
       entered: total.entered,
       x,
@@ -295,4 +319,29 @@ export function axisTicks(maxCents: number, count = 5): number[] {
     if (ticks[ticks.length - 1] >= maxCents) break
   }
   return ticks
+}
+
+/**
+ * The comparison period's monthly totals, aligned to the primary months.
+ *
+ * One entry per primary month, each being the month `offset` behind it. Built
+ * this way rather than by assembling a second list and pairing by index: two
+ * independently-built lists drift the moment one is trimmed for want of data,
+ * and the drift is invisible -- every bar still gets a ghost, just the wrong
+ * one.
+ *
+ * NULL, never zero, for a month with no rows. A ghost at zero would claim the
+ * agency billed nothing then, which is the claim this whole module exists to
+ * refuse. An ENTERED zero is 0, and is a different fact.
+ */
+export function comparisonTotals(
+  rows: readonly RevenueRow[],
+  periods: readonly string[],
+  offset: number,
+): (number | null)[] {
+  const byPeriod = new Map<string, number>()
+  for (const row of rows) {
+    byPeriod.set(row.period, (byPeriod.get(row.period) ?? 0) + row.retainer_cents + row.project_cents)
+  }
+  return periods.map((period) => byPeriod.get(monthsBefore(period, offset)) ?? null)
 }

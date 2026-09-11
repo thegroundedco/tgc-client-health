@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Billing } from '../revenue/Billing'
 import { RangeControl } from '../revenue/RangeControl'
 import { resolveRange } from '../revenue/rangeMath'
-import type { RangePreset } from '../revenue/rangeMath'
+import type { CompareMode, RangePreset } from '../revenue/rangeMath'
 import { Churn } from '../revenue/Churn'
 import { Concentration } from '../revenue/Concentration'
 import { Retention } from '../revenue/Retention'
@@ -51,6 +51,7 @@ export function Revenue() {
   // live above both of them.
   const [preset, setPreset] = useState<RangePreset>('last12')
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(null)
+  const [compare, setCompare] = useState<CompareMode>('none')
 
   const months = [...new Set(revenue.rows.map((row) => row.period))].sort()
   const extent = {
@@ -82,9 +83,11 @@ export function Revenue() {
       {revenue.status === 'ready' && (
         <div className={styles.wide}>
           <RangeControl
+            compare={compare}
             custom={fallback}
             extent={extent}
             months={months}
+            onCompare={setCompare}
             onCustom={setCustom}
             onPreset={setPreset}
             preset={preset}
@@ -96,6 +99,7 @@ export function Revenue() {
         <div className={styles.wide}>
           <Billing
             clients={revenue.clients}
+            compare={compare}
             currentPeriod={anchor ?? defaultPeriod()}
             range={range}
             rows={revenue.rows}

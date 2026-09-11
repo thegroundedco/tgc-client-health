@@ -1,6 +1,6 @@
 import { formatPeriod } from '../lib/month'
 import { availablePresets } from './rangeMath'
-import type { Extent, RangePreset } from './rangeMath'
+import type { CompareMode, Extent, RangePreset } from './rangeMath'
 import styles from './Revenue.module.css'
 
 // The page's date range, as a control. Slice 6h.
@@ -15,18 +15,28 @@ import styles from './Revenue.module.css'
 // thirteen presets in a row would wrap into a wall. The board's month picker
 // made the same call, and a native select is keyboard- and screen-reader
 // correct without any work.
+const COMPARISONS: readonly { id: CompareMode; label: string }[] = [
+  { id: 'none', label: 'No comparison' },
+  { id: 'previous', label: 'Previous period' },
+  { id: 'year', label: 'Previous year' },
+]
+
 export function RangeControl({
+  compare,
   custom,
   extent,
   months,
+  onCompare,
   onCustom,
   onPreset,
   preset,
 }: {
+  compare: CompareMode
   custom: { from: string; to: string }
   extent: Extent
   /** Only the months that hold entries: a picker offering an empty month can blank the chart. */
   months: readonly string[]
+  onCompare: (mode: CompareMode) => void
   onCustom: (range: { from: string; to: string }) => void
   onPreset: (preset: RangePreset) => void
   preset: RangePreset
@@ -82,6 +92,24 @@ export function RangeControl({
           </label>
         </>
       )}
+
+      {/* The comparison is always the SAME LENGTH as the range, offset
+          backwards -- two ranges of different lengths cannot share an x axis
+          honestly, so there is no third option here that takes a span. */}
+      <label className="t-caption">
+        Compare{' '}
+        <select
+          className={styles.rangeSelect}
+          onChange={(event) => onCompare(event.target.value as CompareMode)}
+          value={compare}
+        >
+          {COMPARISONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* Named, because the range does NOT govern the whole page. Retention
           keeps its own windows and Tenure and Churn are not month-scoped at

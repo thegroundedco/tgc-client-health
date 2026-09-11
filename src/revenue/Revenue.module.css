@@ -572,3 +572,18 @@
 .controlScope {
   color: var(--text-secondary);
 }
+
+/* The comparison period, as an outline standing around the bar. No fill, and
+   that is measured rather than stylistic: a filled comparison would need a
+   fifth hue, and every candidate failed CVD separation against this page's
+   existing four (see tokens.css). An outline adds no colour at all.
+
+   Dashed so it reads as a reference mark rather than as another quantity, and
+   non-scaling so the stroke stays even under the chart's horizontal stretch. */
+.ghost {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}

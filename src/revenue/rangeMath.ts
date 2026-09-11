@@ -26,6 +26,9 @@ export type RangePreset =
 
 export type Range = { from: string; to: string }
 
+/** What a range is measured against, if anything. */
+export type CompareMode = 'none' | 'previous' | 'year'
+
 /** What the chart knows about its own data. Both null when nothing is entered. */
 export type Extent = { anchor: string | null; earliest: string | null }
 
@@ -144,4 +147,30 @@ export function availablePresets(extent: Extent): { id: RangePreset; label: stri
     ...preset,
     label: DATED.includes(preset.id) ? `${preset.label} ${year}` : preset.label,
   }))
+}
+
+/** Months in a range, counting both ends: January to March is three. */
+export function rangeLength(range: Range): number {
+  const months = (period: string) =>
+    Number(period.slice(0, 4)) * 12 + Number(period.slice(5, 7))
+  return months(range.to) - months(range.from) + 1
+}
+
+/**
+ * The period a range is measured against.
+ *
+ * ALWAYS THE SAME LENGTH as the primary, offset backwards. That is Shopify's
+ * constraint and the reason the comparison works at all: two ranges of
+ * different lengths cannot share an x axis honestly, because month three of
+ * one would sit above month three of the other while meaning something else.
+ *
+ * Deliberately NOT clamped to the data. A comparison period that predates the
+ * records is a real answer -- "there is nothing to compare against" -- and
+ * clamping it would quietly compare against a shorter span instead, which is
+ * the same arithmetic presented as a different question.
+ */
+export function comparisonRange(range: Range, mode: CompareMode): Range | null {
+  if (mode === 'none') return null
+  const back = mode === 'year' ? 12 : rangeLength(range)
+  return { from: shift(range.from, -back), to: shift(range.to, -back) }
 }

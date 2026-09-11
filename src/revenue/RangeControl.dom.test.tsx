@@ -11,18 +11,21 @@ const EXTENT = { anchor: '2026-09-01', earliest: '2026-07-01' }
 function show(over: Record<string, unknown> = {}) {
   const onPreset = vi.fn()
   const onCustom = vi.fn()
+  const onCompare = vi.fn()
   render(
     <RangeControl
+      compare="none"
       custom={{ from: '2026-07-01', to: '2026-09-01' }}
       extent={EXTENT}
       months={MONTHS}
+      onCompare={onCompare}
       onCustom={onCustom}
       onPreset={onPreset}
       preset="last12"
       {...over}
     />,
   )
-  return { onPreset, onCustom }
+  return { onPreset, onCustom, onCompare }
 }
 
 afterEach(() => {

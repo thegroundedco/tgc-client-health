@@ -38,13 +38,13 @@ afterEach(() => {
 
 describe('Billing', () => {
   it('names itself', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getByRole('heading', { name: 'Billing' })).toBeTruthy()
   })
 
   it('draws one bar group per month', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getAllByTestId('billing-bar')).toHaveLength(3)
   })
@@ -53,7 +53,7 @@ describe('Billing', () => {
     // The dataviz skill's non-negotiable for two or more series. Without it the
     // only thing distinguishing retainer from project work is a fill, which is
     // exactly what a colourblind reader cannot use.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const legend = screen.getByTestId('billing-legend')
     expect(legend.textContent).toContain('Retainer')
@@ -64,7 +64,7 @@ describe('Billing', () => {
     // Also the skill's requirement, and this project's: a chart that exists
     // only as a picture is unreadable to a screen reader and unassertable in a
     // test. The table is the text path.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const table = screen.getByRole('table', { name: /billing/i })
     expect(table.textContent).toContain('September 2026')
@@ -73,7 +73,7 @@ describe('Billing', () => {
   })
 
   it('describes the chart to a screen reader rather than leaving it silent', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const figure = screen.getByRole('img', { name: /billing/i })
     expect(figure.getAttribute('aria-label')).toMatch(/July 2026/)
@@ -84,7 +84,7 @@ describe('Billing', () => {
     // fireEvent, not userEvent.hover: jsdom has no layout, so pointer
     // simulation over an SVG rect resolves to nothing and the assertion below
     // would pass for the wrong reason.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bars = screen.getAllByTestId('billing-bar')
     expect(screen.queryByTestId('billing-tooltip')).toBeNull()
@@ -103,6 +103,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -119,7 +120,7 @@ describe('Billing', () => {
     // A tooltip reachable only by pointer is a tooltip a keyboard user does not
     // have. Each bar is focusable and reveals the same panel.
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.tab()
     const tooltip = screen.getByTestId('billing-tooltip')
@@ -128,7 +129,7 @@ describe('Billing', () => {
   })
 
   it('says so when there is nothing to chart, rather than drawing an empty box', () => {
-    render(<Billing clients={CLIENTS} range={null} rows={[]} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={null} rows={[]} currentPeriod="2026-09-01" />)
 
     expect(screen.queryByTestId('billing-bar')).toBeNull()
     expect(document.body.textContent).toMatch(/no revenue|nothing to chart/i)
@@ -141,6 +142,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -157,6 +159,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -174,7 +177,7 @@ describe('Billing', () => {
     // empty space either side, and looking for all the world like a chart that
     // simply did not widen. `none` is what lets the horizontal axis follow the
     // container. The 2px inter-segment gap is vertical and is unaffected.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const figure = screen.getByRole('img', { name: /billing/i })
     expect(figure.getAttribute('preserveAspectRatio')).toBe('none')
@@ -184,7 +187,7 @@ describe('Billing', () => {
     // The owner's ask on 2026-09-10: a chart of thirteen unlabelled bars makes
     // the reader count backwards from the right to work out which month they
     // are looking at.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const labels = screen.getAllByTestId('billing-axis-label')
     expect(labels).toHaveLength(screen.getAllByTestId('billing-bar').length)
@@ -199,6 +202,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2025-12-01', 100000), row(1, '2026-01-01', 100000)])}
         rows={[row(1, '2025-12-01', 100000), row(1, '2026-01-01', 100000)]}
         currentPeriod="2026-01-01"
@@ -213,7 +217,7 @@ describe('Billing', () => {
   it('hides the axis row from a screen reader, which has the table', () => {
     // "Jul Aug Sep" read aloud with no values attached is noise between the
     // chart's description and the table that actually carries the numbers.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getByTestId('billing-axis').getAttribute('aria-hidden')).toBe('true')
   })
@@ -226,6 +230,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -236,7 +241,7 @@ describe('Billing', () => {
   })
 
   it('totals each month and says how it moved against the one before', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const table = screen.getByRole('table', { name: /billing/i })
     expect(table.textContent).toContain('Total')
@@ -250,7 +255,7 @@ describe('Billing', () => {
   it('leaves the first month\'s change blank rather than calling it zero', () => {
     // Nothing precedes it. "$0" would claim it matched a month that is not
     // there.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const first = screen.getByRole('row', { name: /July 2026/ })
     expect(first.textContent).toContain('—')
@@ -261,6 +266,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -279,7 +285,7 @@ describe('Billing', () => {
 
   it('carries the total and the change in the hover, not only the two halves', () => {
     // The owner's ask, 2026-09-10. Spec 6e §3.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     fireEvent.mouseEnter(screen.getAllByTestId('billing-bar')[2])
     const tooltip = screen.getByTestId('billing-tooltip').textContent ?? ''
@@ -288,7 +294,7 @@ describe('Billing', () => {
   })
 
   it('leaves the change out of the hover where there is no pair to compare', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     fireEvent.mouseEnter(screen.getAllByTestId('billing-bar')[0])
     expect(screen.getByTestId('billing-tooltip').textContent).not.toContain('vs')
@@ -298,7 +304,7 @@ describe('Billing', () => {
   // nothing and not activatable by keyboard. A click turns that from an
   // untidiness into a defect.
   it('makes each bar a button that names its own month', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bars = screen.getAllByTestId('billing-bar')
     expect(bars[2].getAttribute('role')).toBe('button')
@@ -308,7 +314,7 @@ describe('Billing', () => {
 
   it('opens that month on click', async () => {
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.click(screen.getAllByTestId('billing-bar')[2])
 
@@ -319,7 +325,7 @@ describe('Billing', () => {
   it('opens it from the KEYBOARD too, on Enter and on Space', () => {
     // A drill-down reachable only by pointer is a drill-down a keyboard user
     // does not have.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     fireEvent.keyDown(screen.getAllByTestId('billing-bar')[2], { key: 'Enter' })
     expect(screen.getByRole('region', { name: /September 2026/ })).toBeTruthy()
@@ -330,7 +336,7 @@ describe('Billing', () => {
   })
 
   it('marks the open bar as selected, and not with colour alone', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     fireEvent.click(screen.getAllByTestId('billing-bar')[2])
 
@@ -340,7 +346,7 @@ describe('Billing', () => {
 
   it('closes when the same bar is clicked again', async () => {
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bar = () => screen.getAllByTestId('billing-bar')[2]
     await user.click(bar())
@@ -353,7 +359,7 @@ describe('Billing', () => {
     // Comparing two months is the point. Making the reader close one before
     // opening the next would double every click.
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.click(screen.getAllByTestId('billing-bar')[2])
     await user.click(screen.getAllByTestId('billing-bar')[1])
@@ -368,6 +374,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)])}
         rows={[row(1, '2026-07-01', 400000), row(1, '2026-09-01', 500000)]}
         currentPeriod="2026-09-01"
@@ -385,7 +392,7 @@ describe('Billing', () => {
     // The owner's ask: a rough feel for what each bar is worth. Zero first is
     // not negotiable -- a bar's LENGTH is the quantity, so a truncated
     // baseline makes a small difference look like a large one.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const labels = screen.getAllByTestId('billing-y-label').map((n) => n.textContent)
     expect(labels[0]).toBe('$0')
@@ -395,7 +402,7 @@ describe('Billing', () => {
   })
 
   it('draws a gridline for every label, so the two cannot drift', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getAllByTestId('billing-gridline')).toHaveLength(
       screen.getAllByTestId('billing-y-label').length,
@@ -406,7 +413,7 @@ describe('Billing', () => {
     // Otherwise the tallest bar touches the top of the plot while the axis
     // says it falls short of the last label -- an axis describing a chart it
     // does not match.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bars = screen.getAllByTestId('billing-bar')
     const tallest = [...bars[2].querySelectorAll('rect')].reduce(
@@ -424,7 +431,7 @@ describe('Billing', () => {
   })
 
   it('hides the axis from a screen reader, which has the table', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     expect(screen.getByTestId('billing-y-axis').getAttribute('aria-hidden')).toBe('true')
   })
@@ -435,6 +442,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={spanOf([row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 0, 0)])}
         rows={[row(1, '2026-08-01', 0, 0), row(1, '2026-09-01', 0, 0)]}
         currentPeriod="2026-09-01"
@@ -447,7 +455,7 @@ describe('Billing', () => {
   it('follows the cursor rather than sitting below the chart', () => {
     // The owner's ask. A caption parked under the plot makes the reader look
     // away from the bar they are pointing at to read its figures.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bar = screen.getAllByTestId('billing-bar')[2]
     fireEvent.mouseEnter(bar)
@@ -464,7 +472,7 @@ describe('Billing', () => {
   it('flips to the other side of the cursor near the right edge', () => {
     // jsdom's viewport is 1024 wide. Without this the card is drawn off-screen
     // for the last months of the year, which are the ones most often read.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bar = screen.getAllByTestId('billing-bar')[2]
     fireEvent.mouseEnter(bar)
@@ -480,7 +488,7 @@ describe('Billing', () => {
     // or to nothing -- would put the card somewhere unrelated to the bar the
     // keyboard is on.
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.tab()
     expect(document.activeElement).toBe(screen.getAllByTestId('billing-bar')[0])
@@ -503,7 +511,7 @@ describe('Billing', () => {
   }
 
   it('emphasises the RETAINER and drops the project figure on the lower segment', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const tip = hoverSegment(2, 0)
     expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$5,000')
@@ -514,7 +522,7 @@ describe('Billing', () => {
   })
 
   it('emphasises the PROJECT figure and drops the retainer on the upper segment', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const tip = hoverSegment(2, 1)
     expect(screen.getByTestId('billing-hover-figure').textContent).toContain('$500')
@@ -528,7 +536,7 @@ describe('Billing', () => {
     // The 2px gap between the two marks, and the bar group's own area. Reading
     // a stale segment there would label the gap as whichever mark was touched
     // last.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const bar = screen.getAllByTestId('billing-bar')[2]
     fireEvent.mouseEnter(bar, { clientX: 300, clientY: 200 })
@@ -542,7 +550,7 @@ describe('Billing', () => {
 
   it('shows both halves on KEYBOARD focus, which points at no segment', async () => {
     const user = userEvent.setup()
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     await user.tab()
 
@@ -554,7 +562,7 @@ describe('Billing', () => {
   it('bands the total and change columns, and only those', () => {
     // The owner's ask: the two columns he actually reads should carry weight
     // the four raw figures beside them do not.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const header = screen.getAllByRole('columnheader').map((cell) => ({
       label: cell.textContent,
@@ -571,7 +579,7 @@ describe('Billing', () => {
   })
 
   it('bands the same two cells on every body row', () => {
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const row = screen.getByRole('row', { name: /September 2026/ })
     const banded = [...row.querySelectorAll('td')].map((cell) =>
@@ -587,6 +595,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={{ from: '2026-08-01', to: '2026-09-01' }}
         rows={ROWS}
         currentPeriod="2026-09-01"
@@ -600,6 +609,7 @@ describe('Billing', () => {
     render(
       <Billing
         clients={CLIENTS}
+        compare="none"
         range={{ from: '2026-09-01', to: '2026-07-01' }}
         rows={ROWS}
         currentPeriod="2026-09-01"
@@ -614,7 +624,7 @@ describe('Billing', () => {
     // The table is the text path for the same data. Leaving it at full span
     // while the chart narrowed would make the two disagree about what is
     // being looked at.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const table = screen.getByRole('table', { name: /billing/i })
     expect(table.querySelectorAll('tbody tr')).toHaveLength(3)
@@ -622,7 +632,7 @@ describe('Billing', () => {
 
   it('states the range’s own total, split into its two halves', () => {
     // July 4,000+1,000, August 4,500, September 5,000+500 = 15,000.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const total = screen.getByTestId('billing-range-total').textContent ?? ''
     expect(total).toContain('$15,000')
@@ -633,12 +643,153 @@ describe('Billing', () => {
 
 
 
+  // Slice 6h part 2. ROWS is July-September 2026; comparing back three months
+  // reaches April-June, which these rows do not have -- so the comparison is
+  // supplied explicitly where a figure is wanted.
+  const COMPARED = [
+    row(1, '2026-04-01', 300000),
+    row(1, '2026-05-01', 400000),
+    row(1, '2026-06-01', 100000),
+    ...ROWS,
+  ]
+
+  it('draws a ghost behind each bar when comparing', () => {
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.getAllByTestId('billing-ghost')).toHaveLength(3)
+  })
+
+  it('draws NO ghost for a comparison month nobody entered', () => {
+    // Null is not zero. A flat ghost on the baseline would say the agency
+    // billed nothing then.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={[row(1, '2026-04-01', 300000), ...ROWS]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.getAllByTestId('billing-ghost')).toHaveLength(1)
+  })
+
+  it('draws no ghosts at all when not comparing', () => {
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="none"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    expect(screen.queryAllByTestId('billing-ghost')).toHaveLength(0)
+  })
+
+  it('states the comparison total and how the range moved against it', () => {
+    // Range July-September is 15,000; April-June is 8,000. Up 7,000.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    const total = screen.getByTestId('billing-range-total').textContent ?? ''
+    expect(total).toContain('$15,000')
+    expect(total).toContain('+$7,000')
+    expect(total).toContain('April 2026')
+  })
+
+  it('says there is nothing to compare against rather than showing a fall to zero', () => {
+    // The comparison months predate the records entirely. Treating that as a
+    // 100% rise is the single most flattering lie available here.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="year"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={ROWS}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    const total = screen.getByTestId('billing-range-total').textContent ?? ''
+    expect(total).not.toContain('+$15,000')
+    expect(screen.getByTestId('billing-compare-empty').textContent).toMatch(/nothing entered/i)
+  })
+
+  it('raises the axis ceiling so a TALLER comparison still fits the plot', () => {
+    // Without this the ceiling is read off the primary series alone and a
+    // bigger comparison month is drawn outside the plot -- off the top of the
+    // chart, silently, because SVG does not clip by default.
+    //
+    // Asserted on the rendered geometry rather than on the tick labels: the
+    // labels could be right while the rect was wrong. Comparison April is
+    // $50,000 against a primary that tops out at $1,000.
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={[
+          row(1, '2026-04-01', 5000000),
+          row(1, '2026-07-01', 100000),
+          row(1, '2026-08-01', 100000),
+          row(1, '2026-09-01', 100000),
+        ]}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    for (const ghost of screen.getAllByTestId('billing-ghost')) {
+      expect(Number(ghost.getAttribute('height'))).toBeLessThanOrEqual(200)
+    }
+    for (const bar of screen.getAllByTestId('billing-bar')) {
+      for (const rect of bar.querySelectorAll('rect')) {
+        expect(Number(rect.getAttribute('height'))).toBeLessThanOrEqual(200)
+      }
+    }
+  })
+
+  it('puts the comparison figure in the hover card', () => {
+    render(
+      <Billing
+        clients={CLIENTS}
+        compare="previous"
+        range={{ from: '2026-07-01', to: '2026-09-01' }}
+        rows={COMPARED}
+        currentPeriod="2026-09-01"
+      />,
+    )
+
+    fireEvent.mouseEnter(screen.getAllByTestId('billing-bar')[0], { clientX: 10, clientY: 10 })
+    const tip = screen.getByTestId('billing-tooltip').textContent ?? ''
+    // July is $5,000; April, three months back, is $3,000.
+    expect(tip).toContain('$3,000')
+    expect(tip).toContain('April 2026')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in
     // particular reaches for the validated series tokens rather than inventing
     // a fill inline.
-    render(<Billing clients={CLIENTS} range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
+    render(<Billing clients={CLIENTS} compare="none" range={spanOf(ROWS)} rows={ROWS} currentPeriod="2026-09-01" />)
 
     const markup = document.body.innerHTML
     expect(markup).toContain('var(--chart-retainer)')

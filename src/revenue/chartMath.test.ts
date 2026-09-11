@@ -3,6 +3,7 @@ import {
   CHART_MONTHS,
   axisTicks,
   axisLabels,
+  comparisonTotals,
   barGeometry,
   monthRows,
   monthlyTotals,
@@ -441,5 +442,107 @@ describe('monthlyTotals — an explicit range', () => {
     const totals = monthlyTotals([row(1, '2026-06-01', 100000)], '2026-06-01', '2026-01-01')
 
     expect(totals.map((t) => t.period)).toEqual(['2026-06-01'])
+  })
+})
+
+describe('comparisonTotals', () => {
+  // Aligned to the primary months BY CONSTRUCTION: each entry is the month a
+  // fixed offset behind the primary month at the same index. Pairing two
+  // independently-built lists by index would drift the moment one of them was
+  // trimmed for want of data, and the drift would be invisible -- every bar
+  // would still have a ghost, just the wrong one.
+  const PERIODS = ['2026-04-01', '2026-05-01', '2026-06-01']
+
+  it('returns one figure per primary month, offset back', () => {
+    const rows = [
+      row(1, '2026-01-01', 100000),
+      row(1, '2026-02-01', 200000),
+      row(1, '2026-03-01', 300000),
+    ]
+
+    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([100000, 200000, 300000])
+  })
+
+  it('counts both halves, because the ghost is the month’s whole billing', () => {
+    expect(comparisonTotals([row(1, '2026-01-01', 100000, 50000)], PERIODS, 3)).toEqual([
+      150000,
+      null,
+      null,
+    ])
+  })
+
+  it('sums every client in the comparison month', () => {
+    const rows = [row(1, '2026-01-01', 100000), row(2, '2026-01-01', 400000)]
+
+    expect(comparisonTotals(rows, PERIODS, 3)[0]).toBe(500000)
+  })
+
+  // NULL, never zero. A comparison month nobody entered has no ghost at all --
+  // a ghost at zero would claim the agency billed nothing then, which is the
+  // one thing this codebase refuses to say.
+  it('is null for a comparison month with no rows', () => {
+    expect(comparisonTotals([], PERIODS, 3)).toEqual([null, null, null])
+  })
+
+  it('distinguishes an ENTERED zero from a month nobody entered', () => {
+    const rows = [row(1, '2026-01-01', 0, 0)]
+
+    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([0, null, null])
+  })
+
+  it('reaches back a year when that is the offset', () => {
+    expect(comparisonTotals([row(1, '2025-04-01', 700000)], PERIODS, 12)).toEqual([
+      700000,
+      null,
+      null,
+    ])
+  })
+})
+
+describe('barGeometry — the comparison ghost', () => {
+  it('measures the ghost against the same ceiling as the bar', () => {
+    // Two scales on one plot is the dual-axis mistake wearing a different hat.
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [100000])
+
+    expect(bars[0].ghostHeight).toBe(100)
+    expect(bars[0].retainerHeight).toBe(100)
+  })
+
+  it('NARROWS the solid bar so the ghost brackets it', () => {
+    // Without this the ghost is only visible in the months the comparison beat
+    // -- exactly half the information, and the half that flatters.
+    const plain = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE)
+    const compared = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+
+    expect(compared.bars[0].width).toBeLessThan(plain.bars[0].width)
+    expect(compared.bars[0].ghostWidth).toBeGreaterThan(compared.bars[0].width)
+  })
+
+  it('centres the ghost on the bar', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+    const bar = bars[0]
+
+    expect(bar.x + bar.width / 2).toBeCloseTo(bar.ghostX + bar.ghostWidth / 2, 6)
+  })
+
+  it('sits the ghost on the baseline, like the bar', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+
+    expect(bars[0].ghostY + (bars[0].ghostHeight ?? 0)).toBe(SIZE.height)
+  })
+
+  // A comparison month nobody entered draws nothing. Null is not zero, and a
+  // flat ghost on the baseline would read as "they billed nothing then".
+  it('draws no ghost where the comparison has no figure', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [null])
+
+    expect(bars[0].ghostHeight).toBeNull()
+  })
+
+  it('leaves the bars full width and ghostless when no comparison is given', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000)
+
+    expect(bars[0].ghostHeight).toBeNull()
+    expect(bars[0].width).toBeCloseTo(600 * 0.7, 6)
   })
 })
