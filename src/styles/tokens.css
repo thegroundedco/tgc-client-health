@@ -160,8 +160,18 @@
 
      A first attempt used #8C8578, which measured deltaE 2.6 protan and 11.2 to
      NORMAL vision against the retainer teal. "Grey is safe because it is
-     achromatic" turned out to be false at that lightness. */
-  --brand-chart-compare: #B5AE9E;
+     achromatic" turned out to be false at that lightness.
+
+     TWO greys, because the comparison carries the same retainer/project split
+     the period's own bar does -- the owner's call on 2026-09-11 after seeing
+     one flat grey block beside a divided one. They separate from each other at
+     3.34:1, above the 3:1 two adjacent marks need, and they SWAP between
+     themes rather than each having a counterpart: the quiet one is whichever
+     sits closer to its ground, and the prominent one is the other. Light
+     #B5AE9E is 2.06 on cream and #5C5548 is 6.88; on the dark page those
+     numbers are 7.61 and 2.28, so the roles reverse exactly. */
+  --brand-chart-compare-retainer: #B5AE9E;
+  --brand-chart-compare-project: #5C5548;
 
   /* ==========================================================================
      DARK — the same roles at night. Paper is the ground and ink is the mark;
@@ -188,7 +198,8 @@
   /* The comparison series' dark step. Chosen for the same job, not derived:
      2.36 against the dark page, matching the 2.06 the light value has against
      the cream one, so the mark stays equally quiet on both grounds. */
-  --dark-chart-compare: #5C5548;
+  --dark-chart-compare-retainer: #5C5548;
+  --dark-chart-compare-project: #B5AE9E;
 
   /* ==========================================================================
      FUNCTIONAL — meaning without identity. Not brand, and must not move with
@@ -217,7 +228,8 @@
   --chart-project: var(--brand-chart-project);
   --chart-gain: var(--brand-chart-gain);
   --chart-loss: var(--brand-chart-loss);
-  --chart-compare: var(--brand-chart-compare);
+  --chart-compare-retainer: var(--brand-chart-compare-retainer);
+  --chart-compare-project: var(--brand-chart-compare-project);
 
   /* text. 15.39:1 and 5.46:1 on the page. */
   --text-primary: var(--brand-ink);
@@ -447,7 +459,8 @@
     --brand-ink-muted: var(--dark-ink-muted);
     --brand-rule: var(--dark-rule);
     --brand-red-legible: var(--dark-red-legible);
-    --brand-chart-compare: var(--dark-chart-compare);
+    --brand-chart-compare-retainer: var(--dark-chart-compare-retainer);
+    --brand-chart-compare-project: var(--dark-chart-compare-project);
   }
 }
 
@@ -460,5 +473,6 @@
   --brand-ink-muted: var(--dark-ink-muted);
   --brand-rule: var(--dark-rule);
   --brand-red-legible: var(--dark-red-legible);
-  --brand-chart-compare: var(--dark-chart-compare);
+  --brand-chart-compare-retainer: var(--dark-chart-compare-retainer);
+  --brand-chart-compare-project: var(--dark-chart-compare-project);
 }

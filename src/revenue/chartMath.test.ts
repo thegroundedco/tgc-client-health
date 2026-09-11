@@ -460,12 +460,18 @@ describe('comparisonTotals', () => {
       row(1, '2026-03-01', 300000),
     ]
 
-    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([100000, 200000, 300000])
+    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([
+      { retainerCents: 100000, projectCents: 0 },
+      { retainerCents: 200000, projectCents: 0 },
+      { retainerCents: 300000, projectCents: 0 },
+    ])
   })
 
-  it('counts both halves, because the ghost is the month’s whole billing', () => {
+  it('keeps the two halves apart, because the comparison bar is stacked too', () => {
+    // The owner's call, 2026-09-11: one flat grey block beside a divided one
+    // made the halves incomparable. The split has to survive this far.
     expect(comparisonTotals([row(1, '2026-01-01', 100000, 50000)], PERIODS, 3)).toEqual([
-      150000,
+      { retainerCents: 100000, projectCents: 50000 },
       null,
       null,
     ])
@@ -474,7 +480,10 @@ describe('comparisonTotals', () => {
   it('sums every client in the comparison month', () => {
     const rows = [row(1, '2026-01-01', 100000), row(2, '2026-01-01', 400000)]
 
-    expect(comparisonTotals(rows, PERIODS, 3)[0]).toBe(500000)
+    expect(comparisonTotals(rows, PERIODS, 3)[0]).toEqual({
+      retainerCents: 500000,
+      projectCents: 0,
+    })
   })
 
   // NULL, never zero. A comparison month nobody entered has no ghost at all --
@@ -487,12 +496,16 @@ describe('comparisonTotals', () => {
   it('distinguishes an ENTERED zero from a month nobody entered', () => {
     const rows = [row(1, '2026-01-01', 0, 0)]
 
-    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([0, null, null])
+    expect(comparisonTotals(rows, PERIODS, 3)).toEqual([
+      { retainerCents: 0, projectCents: 0 },
+      null,
+      null,
+    ])
   })
 
   it('reaches back a year when that is the offset', () => {
     expect(comparisonTotals([row(1, '2025-04-01', 700000)], PERIODS, 12)).toEqual([
-      700000,
+      { retainerCents: 700000, projectCents: 0 },
       null,
       null,
     ])
@@ -502,9 +515,9 @@ describe('comparisonTotals', () => {
 describe('barGeometry — the comparison bar', () => {
   it('measures the comparison against the same ceiling as the bar', () => {
     // Two scales on one plot is the dual-axis mistake wearing a different hat.
-    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [100000])
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [{ retainerCents: 100000, projectCents: 0 }])
 
-    expect(bars[0].compareHeight).toBe(100)
+    expect(bars[0].compareRetainerHeight).toBe(100)
     expect(bars[0].retainerHeight).toBe(100)
   })
 
@@ -513,7 +526,7 @@ describe('barGeometry — the comparison bar', () => {
     // make. The outline this replaced asked the reader to compare an edge with
     // an area, which the owner reported as hard to read.
     const plain = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE)
-    const compared = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+    const compared = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [{ retainerCents: 50000, projectCents: 0 }])
     const bar = compared.bars[0]
 
     expect(bar.width).toBeLessThan(plain.bars[0].width)
@@ -529,7 +542,10 @@ describe('barGeometry — the comparison bar', () => {
       totalsOf(['2026-08-01', 100000, 0], ['2026-09-01', 100000, 0]),
       SIZE,
       200000,
-      [50000, 150000],
+      [
+        { retainerCents: 50000, projectCents: 0 },
+        { retainerCents: 150000, projectCents: 0 },
+      ],
     )
 
     for (const bar of bars) expect(bar.compareX).toBeGreaterThan(bar.x)
@@ -540,16 +556,19 @@ describe('barGeometry — the comparison bar', () => {
       totalsOf(['2026-08-01', 100000, 0], ['2026-09-01', 100000, 0]),
       SIZE,
       200000,
-      [50000, 50000],
+      [
+        { retainerCents: 50000, projectCents: 0 },
+        { retainerCents: 50000, projectCents: 0 },
+      ],
     )
 
     expect(bars[0].compareX + bars[0].compareWidth).toBeLessThanOrEqual(bars[1].x)
   })
 
   it('sits the comparison on the baseline, like the bar', () => {
-    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [50000])
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [{ retainerCents: 50000, projectCents: 0 }])
 
-    expect(bars[0].compareY + (bars[0].compareHeight ?? 0)).toBe(SIZE.height)
+    expect(bars[0].compareRetainerY + (bars[0].compareRetainerHeight ?? 0)).toBe(SIZE.height)
   })
 
   // A comparison month nobody entered draws nothing. Null is not zero, and a
@@ -557,13 +576,42 @@ describe('barGeometry — the comparison bar', () => {
   it('draws no comparison bar where the comparison has no figure', () => {
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [null])
 
-    expect(bars[0].compareHeight).toBeNull()
+    expect(bars[0].compareRetainerHeight).toBeNull()
   })
 
   it('leaves the bars full width and unpaired when no comparison is given', () => {
     const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000)
 
-    expect(bars[0].compareHeight).toBeNull()
+    expect(bars[0].compareRetainerHeight).toBeNull()
     expect(bars[0].width).toBeCloseTo(600 * 0.7, 6)
+  })
+
+  it('stacks the comparison the same way the period’s bar stacks', () => {
+    // Retainer underneath, project above, with the same surface gap between
+    // them -- if the two bars stacked differently the eye would have to learn
+    // two conventions to read one chart.
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [
+      { retainerCents: 100000, projectCents: 50000 },
+    ])
+    const bar = bars[0]
+
+    expect(bar.compareRetainerY).toBeGreaterThan(bar.compareProjectY)
+    // The gap comes out of the USABLE height, exactly as it does for the
+    // period's own bar -- so the two segments together occupy the value's
+    // share of (height - gap), not of height. Asserting the latter is what
+    // this test tried first, and it was the expectation that was wrong.
+    expect((bar.compareRetainerHeight ?? 0) + bar.compareProjectHeight).toBeCloseTo(
+      (150000 / 200000) * (SIZE.height - SIZE.gap),
+      6,
+    )
+    expect(bar.compareRetainerY + (bar.compareRetainerHeight ?? 0)).toBe(SIZE.height)
+  })
+
+  it('gives a comparison month with no project work no upper segment', () => {
+    const { bars } = barGeometry(totalsOf(['2026-09-01', 100000, 0]), SIZE, 200000, [
+      { retainerCents: 100000, projectCents: 0 },
+    ])
+
+    expect(bars[0].compareProjectHeight).toBe(0)
   })
 })

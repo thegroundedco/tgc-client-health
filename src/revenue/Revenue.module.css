@@ -581,8 +581,16 @@
    Achromatic on purpose -- a reference, not a category -- and quiet enough
    against its ground to stay behind the series it is measured against. See
    tokens.css for what that cost and what the validator said about it. */
-.compareBar {
-  fill: var(--chart-compare);
+.compareRetainer {
+  fill: var(--chart-compare-retainer);
+}
+
+/* The upper segment is the PROMINENT of the two greys in both themes -- the
+   quiet one is whichever sits closer to its ground. Project work is the
+   smaller segment and sits on top, where it would otherwise be the first thing
+   to disappear. */
+.compareProject {
+  fill: var(--chart-compare-project);
 }
 
 /* The month cell's button. Dressed as the text it replaces -- all this removes
@@ -618,12 +626,23 @@
 /* The legend's mark for the comparison. A filled chip like the other two, in
    the same colour the bar uses -- the legend must show the encoding the mark
    actually uses, and the mark is now a fill rather than an edge. */
-.swatchCompare {
+.swatchCompareRetainer,
+.swatchCompareProject {
   display: inline-block;
   inline-size: 0.75em;
   block-size: 0.75em;
-  background: var(--chart-compare);
   border-radius: 2px;
   vertical-align: baseline;
+}
+
+/* Two chips, touching, so the legend shows the comparison carries the SAME
+   two categories the period's bar does -- one chip would say the grey bar is
+   a single quantity, which it is not. */
+.swatchCompareRetainer {
+  background: var(--chart-compare-retainer);
+}
+
+.swatchCompareProject {
+  background: var(--chart-compare-project);
   margin-inline-end: 0.25em;
 }

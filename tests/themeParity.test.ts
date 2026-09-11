@@ -110,7 +110,7 @@ describe('the two dark blocks', () => {
     // modes for the same reason and by the same script.
     expect(both).not.toContain('--brand-chart-gain')
     expect(both).not.toContain('--brand-chart-loss')
-    // --brand-chart-compare deliberately DOES flip, and is asserted below.
+    // The comparison pair deliberately DOES flip, and is asserted below.
     // The four above are chromatic marks that must stay identifiable; the
     // comparison must stay recessive relative to its ground, and recessive is
     // ground-dependent.
@@ -123,7 +123,8 @@ describe('the two dark blocks', () => {
     expect(CODE).toContain('--chart-project: var(--brand-chart-project)')
     expect(CODE).toContain('--chart-gain: var(--brand-chart-gain)')
     expect(CODE).toContain('--chart-loss: var(--brand-chart-loss)')
-    expect(CODE).toContain('--chart-compare: var(--brand-chart-compare)')
+    expect(CODE).toContain('--chart-compare-retainer: var(--brand-chart-compare-retainer)')
+    expect(CODE).toContain('--chart-compare-project: var(--brand-chart-compare-project)')
   })
 
   // The pair the validator REJECTED. --brand-teal against --brand-blush is
@@ -175,7 +176,13 @@ describe('theme coverage', () => {
   // quiet step down from the cream one (2.06:1) -- the same value doing
   // opposite jobs. Asserted positively so nobody "fixes" it back.
   it('DOES repoint the comparison series, which must follow its ground', () => {
-    expect(declarations(MEDIA)).toContain('--brand-chart-compare: var(--dark-chart-compare)')
-    expect(declarations(OVERRIDE)).toContain('--brand-chart-compare: var(--dark-chart-compare)')
+    for (const block of [declarations(MEDIA), declarations(OVERRIDE)]) {
+      expect(block).toContain(
+        '--brand-chart-compare-retainer: var(--dark-chart-compare-retainer)',
+      )
+      expect(block).toContain(
+        '--brand-chart-compare-project: var(--dark-chart-compare-project)',
+      )
+    }
   })
 })

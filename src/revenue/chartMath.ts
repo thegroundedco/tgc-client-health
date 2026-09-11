@@ -41,8 +41,12 @@ export type Bar = {
   // agency billed nothing then.
   compareX: number
   compareWidth: number
-  compareY: number
-  compareHeight: number | null
+  // The comparison's own retainer/project split, stacked the same way the
+  // period's bar stacks. Null where that month has no figure at all.
+  compareRetainerY: number
+  compareRetainerHeight: number | null
+  compareProjectY: number
+  compareProjectHeight: number
 }
 
 // Thirteen: a year plus the month that anchors it. The same span
@@ -139,7 +143,7 @@ export function barGeometry(
   // side by side on the same baseline. Two lengths from a common baseline is
   // the easiest comparison the eye can make -- an outline drawn around a solid
   // bar, which this replaced, asks the reader to compare an edge with an area.
-  comparison?: readonly (number | null)[],
+  comparison?: readonly (CompareTotal | null)[],
 ): { bars: Bar[]; maxCents: number } {
   let maxCents = 0
   for (const total of totals) {
@@ -172,9 +176,14 @@ export function barGeometry(
 
     // Measured against the SAME ceiling as the bar. Two scales on one plot is
     // the dual-axis mistake wearing a different hat.
-    const compareCents = comparison?.[index] ?? null
-    const compareHeight =
-      compareCents === null || ceiling <= 0 ? null : (compareCents / ceiling) * height
+    const compare = comparison?.[index] ?? null
+    const compareUsable =
+      height - (compare !== null && compare.projectCents > 0 ? gap : 0)
+    const compareRetainerHeight =
+      compare === null || ceiling <= 0 ? null : (compare.retainerCents / ceiling) * compareUsable
+    const compareProjectHeight =
+      compare === null || ceiling <= 0 ? 0 : (compare.projectCents / ceiling) * compareUsable
+    const compareRetainerY = height - (compareRetainerHeight ?? 0)
 
     return {
       // Immediately to the period's right, always. A fixed order is what lets
@@ -182,8 +191,10 @@ export function barGeometry(
       // the secondary encoding the comparison's low chroma requires.
       compareX: x + barWidth + pairGap,
       compareWidth: barWidth,
-      compareY: compareHeight === null ? height : height - compareHeight,
-      compareHeight,
+      compareRetainerY,
+      compareRetainerHeight,
+      compareProjectY: compareRetainerY - gap - compareProjectHeight,
+      compareProjectHeight,
       period: total.period,
       entered: total.entered,
       x,
@@ -208,6 +219,9 @@ export type MonthRow = MonthTotal & {
   /** null where a change cannot be measured. See monthRows. */
   changeCents: number | null
 }
+
+/** A comparison month, split the same way the period's own bar is. */
+export type CompareTotal = { retainerCents: number; projectCents: number }
 
 export type AxisLabel = {
   period: string
@@ -344,10 +358,13 @@ export function comparisonTotals(
   rows: readonly RevenueRow[],
   periods: readonly string[],
   offset: number,
-): (number | null)[] {
-  const byPeriod = new Map<string, number>()
+): (CompareTotal | null)[] {
+  const byPeriod = new Map<string, CompareTotal>()
   for (const row of rows) {
-    byPeriod.set(row.period, (byPeriod.get(row.period) ?? 0) + row.retainer_cents + row.project_cents)
+    const found = byPeriod.get(row.period) ?? { retainerCents: 0, projectCents: 0 }
+    found.retainerCents += row.retainer_cents
+    found.projectCents += row.project_cents
+    byPeriod.set(row.period, found)
   }
   return periods.map((period) => byPeriod.get(monthsBefore(period, offset)) ?? null)
 }

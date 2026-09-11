@@ -747,7 +747,11 @@ describe('Billing', () => {
         compare="previous"
         range={{ from: '2026-07-01', to: '2026-09-01' }}
         rows={[
-          row(1, '2026-04-01', 5000000),
+          // Retainer AND project in the comparison month: a ceiling computed
+          // from the retainer alone passed this test until the project half
+          // was added, and the comparison's project segment would have been
+          // drawn off the top of the plot.
+          row(1, '2026-04-01', 2500000, 2500000),
           row(1, '2026-07-01', 100000),
           row(1, '2026-08-01', 100000),
           row(1, '2026-09-01', 100000),
@@ -756,12 +760,16 @@ describe('Billing', () => {
       />,
     )
 
-    for (const ghost of screen.getAllByTestId('billing-compare')) {
-      expect(Number(ghost.getAttribute('height'))).toBeLessThanOrEqual(200)
-    }
+    // Height alone is not enough, and that weaker form passed with the
+    // comparison's project half left out of the ceiling: each SEGMENT stayed
+    // under 200 while the stack of them ran off the top of the plot. The top
+    // edge is what shows the overflow, so y is what gets asserted.
     for (const bar of screen.getAllByTestId('billing-bar')) {
       for (const rect of bar.querySelectorAll('rect')) {
-        expect(Number(rect.getAttribute('height'))).toBeLessThanOrEqual(200)
+        expect(Number(rect.getAttribute('y'))).toBeGreaterThanOrEqual(0)
+        expect(
+          Number(rect.getAttribute('y')) + Number(rect.getAttribute('height')),
+        ).toBeLessThanOrEqual(200)
       }
     }
   })

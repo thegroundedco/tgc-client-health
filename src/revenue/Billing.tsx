@@ -256,7 +256,7 @@ export function Billing({
   // month would be drawn outside the plot.
   const highest = Math.max(
     totals.reduce((max, m) => Math.max(max, totalOf(m)), 0),
-    ...(ghosts ?? []).map((cents) => cents ?? 0),
+    ...(ghosts ?? []).map((m) => (m === null ? 0 : m.retainerCents + m.projectCents)),
   )
   const ticks = axisTicks(highest)
   const ceiling = ticks[ticks.length - 1]
@@ -274,8 +274,11 @@ export function Billing({
   const offsetLabel =
     compare === 'year' ? 'A year earlier' : `${offset} month${offset === 1 ? '' : 's'} earlier`
 
-  const comparable = (ghosts ?? []).filter((cents): cents is number => cents !== null)
-  const comparedCents = comparable.length === 0 ? null : comparable.reduce((a, b) => a + b, 0)
+  const comparable = (ghosts ?? []).filter((m): m is NonNullable<typeof m> => m !== null)
+  const comparedCents =
+    comparable.length === 0
+      ? null
+      : comparable.reduce((sum, m) => sum + m.retainerCents + m.projectCents, 0)
   const entered = totals.filter((month) => month.entered)
   const first = entered[0]
   const last = entered[entered.length - 1]
@@ -305,8 +308,13 @@ export function Billing({
   function comparisonFor(period: string) {
     if (ghosts === undefined || against === null) return null
     const index = totals.findIndex((month) => month.period === period)
-    const cents = index === -1 ? null : ghosts[index]
-    return cents === null ? null : { cents, period: monthsBack(period, offset) }
+    const found = index === -1 ? null : ghosts[index]
+    return found === null
+      ? null
+      : {
+          cents: found.retainerCents + found.projectCents,
+          period: monthsBack(period, offset),
+        }
   }
 
   // Clicking the open month closes it; clicking another switches straight to
@@ -356,7 +364,8 @@ export function Billing({
         {against !== null && (
           <>
             {'  '}
-            <span className={styles.swatchCompare} aria-hidden="true" />{' '}
+            <span className={styles.swatchCompareRetainer} aria-hidden="true" />
+            <span className={styles.swatchCompareProject} aria-hidden="true" />{' '}
             {formatPeriod(against.from)}
             {against.from === against.to ? '' : `–${formatPeriod(against.to)}`}
           </>
@@ -484,16 +493,27 @@ export function Billing({
                 It is deliberately achromatic -- a reference, not a category --
                 and its position is fixed to the period's right, which is the
                 secondary encoding its low chroma requires. */}
-            {bar.compareHeight !== null && (
-              <rect
-                className={styles.compareBar}
-                data-testid="billing-compare"
-                height={bar.compareHeight}
-                rx="2"
-                width={bar.compareWidth}
-                x={bar.compareX}
-                y={bar.compareY}
-              />
+            {bar.compareRetainerHeight !== null && (
+              <g data-testid="billing-compare">
+                <rect
+                  className={styles.compareRetainer}
+                  height={bar.compareRetainerHeight}
+                  rx="2"
+                  width={bar.compareWidth}
+                  x={bar.compareX}
+                  y={bar.compareRetainerY}
+                />
+                {bar.compareProjectHeight > 0 && (
+                  <rect
+                    className={styles.compareProject}
+                    height={bar.compareProjectHeight}
+                    rx="2"
+                    width={bar.compareWidth}
+                    x={bar.compareX}
+                    y={bar.compareProjectY}
+                  />
+                )}
+              </g>
             )}
 
             {bar.entered && (
