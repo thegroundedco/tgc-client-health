@@ -413,3 +413,50 @@
 .panelSplit {
   color: var(--text-secondary);
 }
+
+/* The hover card. Fixed to the viewport because its position comes from
+   clientX/clientY and getBoundingClientRect, which are viewport coordinates --
+   an absolutely positioned card would need scroll arithmetic to agree with
+   them, and would be wrong the moment the page moved.
+
+   pointer-events: none is load-bearing, not tidying. Without it the card sits
+   under the cursor it follows, the pointer enters the card, the bar's
+   mouseleave fires, the card unmounts, the pointer is over the bar again --
+   and the whole thing flickers at the frame rate. */
+.hoverCard {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  margin: 0;
+  max-inline-size: 15rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  /* Raised off the page rather than flat against it: this is the one element
+     on the screen that is meant to read as floating above everything. */
+  box-shadow: var(--shadow-floating);
+}
+
+/* Flipped left when the cursor is near the right edge: the card is drawn from
+   its own inline end so it grows away from the viewport boundary instead of
+   through it. */
+.hoverCard[data-flipped='true'] {
+  transform: translateX(-100%);
+}
+
+/* Opened by keyboard the card sits ABOVE the bar, so it does not cover the
+   months below the one being read. */
+.hoverCard[data-source='focus'] {
+  transform: translate(-50%, -100%);
+}
+
+.hoverCard[data-source='focus'][data-flipped='true'] {
+  transform: translate(-100%, -100%);
+}
+
+.hoverMonth {
+  display: block;
+  color: var(--text-primary);
+}

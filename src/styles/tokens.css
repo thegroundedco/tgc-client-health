@@ -365,6 +365,23 @@
      columns plus the gap between them at the root font size, which is exactly
      what the page puts in it. */
   --measure-dashboard: 72rem;
+
+  /* The first shadow in this project, and it is deliberately the only one.
+     Nothing else on these screens floats: cards sit on a raised SURFACE and
+     are separated by hairlines, which is how the whole visual language has
+     worked so far. The hover card is the single element that genuinely is
+     above the page rather than part of it, and a shadow is what says so.
+
+     Declared here as a whole value rather than as a colour, because a shadow
+     is an offset, a blur and a colour together -- splitting it would put the
+     two halves in different files and let them drift. tokens.css is the only
+     file permitted the colour literal inside it; tests/tokens.test.ts caught
+     the first attempt to write this shadow directly into a module.
+
+     Black at low alpha rather than a brand ink, so it darkens whatever it
+     falls on instead of tinting it. It does not flip for dark: a shadow on a
+     dark ground reads as depth there too, and a lighter one would glow. */
+  --shadow-floating: 0 2px 12px rgb(0 0 0 / 0.18);
 }
 
 /* ============================================================================

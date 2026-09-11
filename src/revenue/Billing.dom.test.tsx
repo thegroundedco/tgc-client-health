@@ -425,6 +425,51 @@ describe('Billing', () => {
     expect(screen.queryAllByTestId('billing-gridline')).toHaveLength(0)
   })
 
+  it('follows the cursor rather than sitting below the chart', () => {
+    // The owner's ask. A caption parked under the plot makes the reader look
+    // away from the bar they are pointing at to read its figures.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bar = screen.getAllByTestId('billing-bar')[2]
+    fireEvent.mouseEnter(bar)
+    fireEvent.mouseMove(bar, { clientX: 300, clientY: 200 })
+
+    const tip = screen.getByTestId('billing-tooltip')
+    expect(tip.style.left).toBe('316px')
+    expect(tip.style.top).toBe('216px')
+
+    fireEvent.mouseMove(bar, { clientX: 420, clientY: 90 })
+    expect(screen.getByTestId('billing-tooltip').style.left).toBe('436px')
+  })
+
+  it('flips to the other side of the cursor near the right edge', () => {
+    // jsdom's viewport is 1024 wide. Without this the card is drawn off-screen
+    // for the last months of the year, which are the ones most often read.
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    const bar = screen.getAllByTestId('billing-bar')[2]
+    fireEvent.mouseEnter(bar)
+    fireEvent.mouseMove(bar, { clientX: 1000, clientY: 200 })
+
+    const tip = screen.getByTestId('billing-tooltip')
+    expect(tip.getAttribute('data-flipped')).toBe('true')
+    expect(Number.parseInt(tip.style.left, 10)).toBeLessThan(1000)
+  })
+
+  it('positions itself from the BAR when opened by keyboard, not from a cursor', async () => {
+    // There is no pointer in a tab. Falling back to the last mouse position --
+    // or to nothing -- would put the card somewhere unrelated to the bar the
+    // keyboard is on.
+    const user = userEvent.setup()
+    render(<Billing clients={CLIENTS} rows={ROWS} currentPeriod="2026-09-01" />)
+
+    await user.tab()
+
+    const tip = screen.getByTestId('billing-tooltip')
+    expect(tip.textContent).toContain('July 2026')
+    expect(tip.getAttribute('data-source')).toBe('focus')
+  })
+
   it('wears token colours and never a literal', () => {
     // tokens.css is the only file permitted a colour literal, and
     // tests/tokens.test.ts enforces it globally -- this asserts the chart in

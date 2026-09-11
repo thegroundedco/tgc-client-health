@@ -24,6 +24,12 @@ import styles from './Revenue.module.css'
 // are a coordinate space rather than a size on anybody's screen.
 const VIEW = { width: 600, height: 200, gap: 2 }
 
+// How far the card sits from the cursor, and how much room it needs before it
+// has to flip to the other side. A card drawn off the right edge is invisible
+// for the most recent months, which are the ones most often read.
+const CARD_OFFSET = 16
+const CARD_ROOM = 240
+
 function totalOf(month: MonthTotal): number {
   return month.retainerCents + month.projectCents
 }
@@ -91,6 +97,18 @@ export function Billing({
   // chart reading tooltips while August stays put.
   const [opened, setOpened] = useState<string | null>(null)
 
+  // Where the hover card is drawn, in VIEWPORT coordinates -- the card is
+  // position: fixed, so clientX/clientY and getBoundingClientRect agree with
+  // it without any scroll arithmetic.
+  //
+  // `source` is not decoration: a pointer has a position and a Tab key does
+  // not. Opened by keyboard the card takes its place from the BAR, or it would
+  // appear at wherever the mouse happened to be left, which is nowhere related
+  // to what the keyboard is on.
+  const [point, setPoint] = useState<{ x: number; y: number; source: 'pointer' | 'focus' } | null>(
+    null,
+  )
+
   const totals = monthlyTotals(rows, currentPeriod)
 
   if (totals.length === 0) {
@@ -125,6 +143,13 @@ export function Billing({
       ? `Billing by month, ${formatPeriod(totals[0].period)} to ${formatPeriod(currentPeriod)}.`
       : `Billing by month, ${formatPeriod(first.period)} to ${formatPeriod(last.period)}: ` +
         `${formatMoney(totalOf(first))} to ${formatMoney(totalOf(last))}.`
+
+  // Placed rather than positioned by CSS alone: only JavaScript knows where
+  // the pointer is. The flip is measured against the viewport's own width, so
+  // it holds on a phone and on a wide monitor without a breakpoint.
+  const flipped = point !== null && point.x > window.innerWidth - CARD_ROOM
+  const cardX = point === null ? 0 : flipped ? point.x - CARD_OFFSET : point.x + CARD_OFFSET
+  const cardY = point === null ? 0 : point.y + (point.source === 'focus' ? -CARD_OFFSET : CARD_OFFSET)
 
   const rowsByMonth = monthRows(totals)
   const activeMonth = rowsByMonth.find((month) => month.period === active) ?? null
@@ -213,9 +238,16 @@ export function Billing({
             data-selected={opened === bar.period ? 'true' : 'false'}
             data-testid="billing-bar"
             key={bar.period}
-            onBlur={() => setActive(null)}
+            onBlur={() => {
+              setActive(null)
+              setPoint(null)
+            }}
             onClick={() => toggle(bar.period)}
-            onFocus={() => setActive(bar.period)}
+            onFocus={(event) => {
+              setActive(bar.period)
+              const box = event.currentTarget.getBoundingClientRect()
+              setPoint({ x: box.left + box.width / 2, y: box.top, source: 'focus' })
+            }}
             onKeyDown={(event) => {
               // A native <button> does this for free; an SVG group with a
               // button role has to do it by hand, and Space must not also
@@ -225,8 +257,20 @@ export function Billing({
                 toggle(bar.period)
               }
             }}
-            onMouseEnter={() => setActive(bar.period)}
-            onMouseLeave={() => setActive(null)}
+            onMouseEnter={(event) => {
+              setActive(bar.period)
+              // Placed on ENTER as well as on move. A pointer that comes to
+              // rest on a bar without moving again emits no mousemove, and the
+              // card would never appear.
+              setPoint({ x: event.clientX, y: event.clientY, source: 'pointer' })
+            }}
+            onMouseLeave={() => {
+              setActive(null)
+              setPoint(null)
+            }}
+            onMouseMove={(event) =>
+              setPoint({ x: event.clientX, y: event.clientY, source: 'pointer' })
+            }
             role="button"
             tabIndex={0}
           >
@@ -278,9 +322,18 @@ export function Billing({
         ))}
       </p>
 
-      {activeMonth !== null && (
-        <p className={`t-caption ${styles.summary}`} data-testid="billing-tooltip">
-          {formatPeriod(activeMonth.period)}
+      {activeMonth !== null && point !== null && (
+        /* Fixed to the viewport and pointer-events: none, so the card can never
+           sit between the cursor and the bar it describes -- which would make
+           it flicker as the pointer entered and left its own tooltip. */
+        <p
+          className={`t-caption ${styles.hoverCard}`}
+          data-flipped={flipped ? 'true' : 'false'}
+          data-source={point.source}
+          data-testid="billing-tooltip"
+          style={{ left: `${cardX}px`, top: `${cardY}px` }}
+        >
+          <span className={styles.hoverMonth}>{formatPeriod(activeMonth.period)}</span>
           {describeMonth(activeMonth, totals)}
         </p>
       )}
