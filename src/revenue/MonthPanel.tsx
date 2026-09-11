@@ -59,6 +59,22 @@ export function MonthPanel({
         </button>
       </div>
 
+      {/* The answer first, the workings after. Opening a month is a question
+          about its total, and leaving that at the foot of the client list puts
+          it behind a scroll -- which is what the owner reported.
+
+          Absent entirely for a month nobody entered: $0 would be a claim about
+          the month, and there is no total of nothing. */}
+      {report.clients.length > 0 && (
+        <p className={`t-score ${styles.panelTotal}`} data-testid="month-panel-total">
+          {formatMoney(report.totalCents)}
+          <span className={`t-caption ${styles.panelSplit}`}>
+            {formatMoney(report.retainerCents)} retainer ·{' '}
+            {formatMoney(report.projectCents)} project work
+          </span>
+        </p>
+      )}
+
       <Rate
         basePeriod={basePeriod}
         clients={clients}
@@ -100,14 +116,6 @@ export function MonthPanel({
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr data-testid="month-panel-total">
-                <th scope="row">Total</th>
-                <td className={styles.figure}>{formatMoney(report.retainerCents)}</td>
-                <td className={styles.figure}>{formatMoney(report.projectCents)}</td>
-                <td className={styles.figure}>{formatMoney(report.totalCents)}</td>
-              </tr>
-            </tfoot>
           </table>
 
           {/* Stated, never drawn as rows of $0. Spec 6e §4.1: a table with a

@@ -395,3 +395,21 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* The month's total, at the head of its panel. Large, because it is the
+   question the panel was opened to answer; the per-client list below is the
+   working. */
+.panelTotal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+/* The two halves beside it, in the quieter caption role -- the same figures
+   the table repeats per client, so they are context rather than a second
+   headline. */
+.panelSplit {
+  color: var(--text-secondary);
+}

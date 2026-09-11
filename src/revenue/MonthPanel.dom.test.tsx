@@ -64,10 +64,39 @@ describe('MonthPanel', () => {
     expect(names).toEqual(['Acme', 'Beta'])
   })
 
-  it('gives the month a total', () => {
+  it('gives the month a total, split into its two halves', () => {
     show()
 
-    expect(screen.getByTestId('month-panel-total').textContent).toContain('$8,000')
+    const total = screen.getByTestId('month-panel-total').textContent ?? ''
+    expect(total).toContain('$8,000')
+    expect(total).toContain('$7,000')
+    expect(total).toContain('$1,000')
+  })
+
+  // The owner's ask: the point of opening a month is the figure, and having to
+  // scroll a client list to reach it puts the answer behind the workings.
+  it('puts the total ABOVE the client list, not after it', () => {
+    show()
+
+    const total = screen.getByTestId('month-panel-total')
+    const table = screen.getByRole('table', { name: /August 2026/ })
+    // Node.DOCUMENT_POSITION_FOLLOWING: the table comes after the total.
+    expect(total.compareDocumentPosition(table) & 4).toBeTruthy()
+  })
+
+  it('does not repeat the total at the foot of the table', () => {
+    // Said once. Two copies of one figure is two things to keep in step, and
+    // the reason to have it at the bottom was that it was not at the top.
+    show()
+
+    expect(screen.getByRole('table', { name: /August 2026/ }).querySelector('tfoot')).toBeNull()
+  })
+
+  it('shows no total for a month nobody entered', () => {
+    // $0 would be a claim about the month. There is no total of nothing.
+    show({ rows: [] })
+
+    expect(screen.queryByTestId('month-panel-total')).toBeNull()
   })
 
   // The owner's ask, moved here from the tooltip because this is the only
