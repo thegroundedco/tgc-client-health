@@ -102,6 +102,7 @@ export function planCells({
   csv,
   year,
   entity = 'TGC',
+  alsoInclude = [],
   overrides = {},
   defaultKind = 'retainer',
 }) {
@@ -131,6 +132,13 @@ export function planCells({
   }
   if (problems.length > 0) return empty(problems)
 
+  // Clients whose work is invoiced through a different entity but who belong
+  // in this tool anyway. An explicit, reviewed list of names -- never a
+  // heuristic: the entity column is the only thing separating two businesses,
+  // and guessing which exceptions are intended would quietly import the wrong
+  // company's revenue.
+  const kept = new Set(alsoInclude)
+
   const byClient = new Map()
 
   for (let i = 1; i < rows.length; i++) {
@@ -144,7 +152,7 @@ export function planCells({
     // refused -- an exported pivot carries them and they are not errors.
     if (client === '' || monthName === '') continue
 
-    if ((row[at['Entity']] ?? '') !== entity) {
+    if ((row[at['Entity']] ?? '') !== entity && !kept.has(client)) {
       const cents = parseMoney(amount)
       if (cents !== null) excludedEntity += cents
       continue

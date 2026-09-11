@@ -136,6 +136,29 @@ describe('planCells — what it leaves out', () => {
     expect(out.excludedEntity).toBe(900000)
   })
 
+  // One client's work is invoiced through a second entity while the client
+  // itself belongs in this tool. Naming them is an explicit, reviewed
+  // exception -- the alternative is either losing a real retainer or importing
+  // a whole second business.
+  it('keeps a NAMED client from another entity, and does not count them as dropped', () => {
+    const out = planCells({
+      csv: csv(
+        'Jun,6,TGC,Acme,Acme,QP-1,"$5,000",$0,$0',
+        'Jun,6,Other,Beta,Beta,QP-2,"$7,000",$0,$0',
+        'Jun,6,Other,Gamma,Gamma,QP-3,"$9,000",$0,$0',
+      ),
+      year: YEAR,
+      entity: 'TGC',
+      alsoInclude: ['Beta'],
+    })
+
+    expect(out.cells.map((c) => c.clientName).sort()).toEqual(['Acme', 'Beta'])
+    // Gamma alone was dropped for its entity; Beta was kept, so Beta's money
+    // must not also be reported as excluded or the reconciliation counts it
+    // on both sides.
+    expect(out.excludedEntity).toBe(900000)
+  })
+
   it('drops an excluded line item and REPORTS what it removed', () => {
     // A silent exclusion is an unexplained gap against the source sheet. What
     // it removed has to come back so the reconciliation still ties.
