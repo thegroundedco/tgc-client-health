@@ -3,6 +3,7 @@ import {
   CLIENT_COLUMNS,
   CLIENT_STATUSES,
   CONCURRENT_SAVE_TEXT,
+  CLIENT_TYPE_CODES,
   END_REASON_CODES,
   EMPTY_DRAFT,
   UPDATE_MATCHED_NOTHING_TEXT,
@@ -13,6 +14,7 @@ import {
   ownerLabel,
   reactivationWarning,
   reasonLabel,
+  typeLabel,
   sortClients,
   statusLabel,
   statusRank,
@@ -32,6 +34,8 @@ function row(overrides: Partial<AdminClient> = {}): AdminClient {
     ended_on: null,
     end_reason_code: null,
     end_reason_note: null,
+    note: null,
+    type_code: null,
     updated_at: '2026-08-24T15:42:00.000Z',
     ...overrides,
   }
@@ -140,16 +144,22 @@ describe('rule 2 -- reactivating destroys a recorded fact, and says so', () => {
     }
   })
 
-  it('sends all seven columns on every save, whatever the status', () => {
+  // Nine since 2026-09-12: note and type_code joined. The count is in the name
+  // so adding a column without thinking about this rule is impossible -- the
+  // point is that EVERY column goes on EVERY save, so an update that moves a
+  // client off `former` cannot leave one of the constrained three behind.
+  it('sends all nine columns on every save, whatever the status', () => {
     for (const status of CLIENT_STATUSES) {
       expect(Object.keys(updatePayload(draft({ status }))).sort()).toEqual([
         'end_reason_code',
         'end_reason_note',
         'ended_on',
         'name',
+        'note',
         'owner_id',
         'started_on',
         'status',
+        'type_code',
       ])
     }
   })
@@ -200,6 +210,8 @@ describe('a row becoming a form', () => {
         endedOn: '2026-08-01',
         endReasonCode: 'price',
         endReasonNote: '',
+        note: '',
+        typeCode: '',
       })
   })
 
@@ -211,6 +223,8 @@ describe('a row becoming a form', () => {
       ended_on: '2026-07-15',
       end_reason_code: 'went_quiet',
       end_reason_note: 'stopped replying',
+      note: 'a draw, not an engagement',
+      type_code: 'ecommerce',
     })
     expect(updatePayload(draftFromRow(original))).toEqual({
       name: 'Polar Divide',
@@ -220,6 +234,8 @@ describe('a row becoming a form', () => {
       ended_on: '2026-07-15',
       end_reason_code: 'went_quiet',
       end_reason_note: 'stopped replying',
+      note: 'a draw, not an engagement',
+      type_code: 'ecommerce',
     })
   })
 })
@@ -407,5 +423,83 @@ describe('the status line', () => {
     expect(writeStatusLine({ kind: 'idle' }, problems).text).toContain('A client needs a name.')
     expect(writeStatusLine({ kind: 'failed', message: 'Refused. Nothing was changed.' }, problems).tone)
       .toBe('error')
+  })
+})
+
+// Two fields asked for on the 2026-09-11 call. `note` records what a client IS;
+// `type_code` records what KIND of business they are, so kinds can be counted.
+describe('the client type vocabulary', () => {
+  // DELIBERATELY SHORT. Exactly one category was named on the call --
+  // e-commerce -- and this project has a history: six stat lines were once
+  // invented for the Overview screen, the owner did not recognise them, and
+  // they were retired as never-sourced. Inventing five plausible industries
+  // here would be that mistake somewhere far more expensive, because rows get
+  // entered against them.
+  //
+  // This test exists to make growing the list a deliberate act rather than an
+  // accident, not to freeze it.
+  it('holds only what was actually asked for, plus the honest fallback', () => {
+    expect(CLIENT_TYPE_CODES).toEqual(['ecommerce', 'other'])
+  })
+
+  it('gives every code a label a person would recognise', () => {
+    for (const code of CLIENT_TYPE_CODES) {
+      expect(typeLabel(code)).not.toBe(code)
+    }
+  })
+
+  // Null is not 'other'. Nobody has said yet, and a screen that shows those two
+  // the same way loses the difference between an unanswered question and an
+  // answered one.
+  it('distinguishes a type nobody has set from one set to other', () => {
+    expect(typeLabel(null)).toBe('Not recorded')
+    expect(typeLabel('other')).toBe('Other')
+  })
+
+  it('hands an unrecognised code straight back', () => {
+    // A value this screen does not know was written outside it, and
+    // relabelling it into one of the known ones would hide that.
+    expect(typeLabel('saas')).toBe('saas')
+  })
+})
+
+describe('the client type on the payload', () => {
+  it('rides along on an update, and empty becomes null', () => {
+    expect(updatePayload(draft({ typeCode: 'ecommerce' })).type_code).toBe('ecommerce')
+    expect(updatePayload(draft({ typeCode: '' })).type_code).toBeNull()
+  })
+
+  // Unlike the three lifecycle columns, neither of these is governed by the
+  // status: a paused client still IS an e-commerce brand, and a departed one
+  // still has whatever note explained it.
+  it('survives a change of status, unlike the departure columns', () => {
+    const payload = updatePayload(
+      draft({ status: 'cancelled', endedOn: '2026-08-01', endReasonCode: 'price', typeCode: 'ecommerce', note: 'a draw' }),
+    )
+
+    expect(payload.type_code).toBe('ecommerce')
+    expect(payload.note).toBe('a draw')
+    expect(payload.end_reason_code).toBe('price')
+  })
+})
+
+describe('the note field', () => {
+  it('is carried on the payload, trimmed, and empty becomes null', () => {
+    // An empty string and null both mean "nothing recorded", and storing both
+    // means two ways to express one fact -- which every reader then has to
+    // handle.
+    expect(updatePayload(draft({ note: '  a draw, not an engagement  ' })).note).toBe(
+      'a draw, not an engagement',
+    )
+    expect(updatePayload(draft({ note: '   ' })).note).toBeNull()
+  })
+
+  it('is kept apart from the departure note', () => {
+    // end_reason_note is about why somebody LEFT. A live client's description
+    // living in the same column would be read as a departure reason.
+    const payload = updatePayload(draft({ note: 'a draw, not an engagement' }))
+
+    expect(payload.note).toBe('a draw, not an engagement')
+    expect(payload.end_reason_note).toBeNull()
   })
 })

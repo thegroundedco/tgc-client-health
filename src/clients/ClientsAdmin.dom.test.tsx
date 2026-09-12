@@ -37,6 +37,8 @@ function client(overrides: Partial<AdminClient> = {}): AdminClient {
     ended_on: null,
     end_reason_code: null,
     end_reason_note: null,
+    note: null,
+    type_code: null,
     updated_at: '2026-08-24T15:42:00.000Z',
     ...overrides,
   }
@@ -782,5 +784,108 @@ describe('the clients admin screen, leaving', () => {
     mount({ clients: [ACME] }, onWritingChange)
 
     expect(onWritingChange).toHaveBeenCalledWith(false)
+  })
+})
+
+// Two fields added 2026-09-12, both asked for on the 2026-09-11 call. They
+// describe what a client IS, and neither is governed by the status -- that is
+// the property these tests exist to hold.
+describe('the client context fields', () => {
+  async function editActive() {
+    mount({
+      clients: [
+        {
+          id: 1,
+          name: 'Acme',
+          owner_id: null,
+          status: 'active',
+          started_on: null,
+          ended_on: null,
+          end_reason_code: null,
+          end_reason_note: null,
+          note: null,
+          type_code: null,
+          updated_at: '2026-08-24T15:42:00.000Z',
+        },
+      ],
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+  }
+
+  it('offers both on the edit form for an ACTIVE client', async () => {
+    // The departure fields appear only for a client who has left. These two do
+    // not: a live client is exactly who you want to describe.
+    await editActive()
+
+    expect(screen.getByLabelText('Type of business')).toBeTruthy()
+    expect(screen.getByLabelText('Note')).toBeTruthy()
+  })
+
+  it('offers "Not recorded" as well as the coded types', async () => {
+    // Empty is "nobody has said yet", which is not Other. Offering only Other
+    // would force a wrong answer to get past the form.
+    await editActive()
+
+    const options = [...screen.getByLabelText('Type of business').querySelectorAll('option')]
+    expect(options.map((option) => option.value)).toEqual(['', 'ecommerce', 'other'])
+    expect(options[0].textContent).toBe('Not recorded')
+  })
+
+  it('explains what the note is for, and what it is not', async () => {
+    // Without it the field reads as a second departure note, which is the one
+    // thing it must not become.
+    await editActive()
+
+    expect(document.body.textContent).toMatch(/unusual billing arrangement/i)
+  })
+
+  it('shows a recorded type and note on the list, without opening the form', () => {
+    // The list is where the owner scans. A note that only exists behind an
+    // Edit button is a note nobody reads.
+    mount({
+      clients: [
+        {
+          id: 1,
+          name: 'Acme',
+          owner_id: null,
+          status: 'active',
+          started_on: null,
+          ended_on: null,
+          end_reason_code: null,
+          end_reason_note: null,
+          note: 'a draw, not an engagement',
+          type_code: 'ecommerce',
+          updated_at: '2026-08-24T15:42:00.000Z',
+        },
+      ],
+    })
+
+    expect(screen.getByTestId('client-type').textContent).toBe('E-commerce')
+    expect(screen.getByTestId('client-note').textContent).toBe('a draw, not an engagement')
+  })
+
+  it('prints nothing for a client nobody has described', () => {
+    // "Not recorded" on every row of a field nobody has filled is thirty lines
+    // of noise, and a line that is always there stops being read.
+    mount({
+      clients: [
+        {
+          id: 1,
+          name: 'Acme',
+          owner_id: null,
+          status: 'active',
+          started_on: null,
+          ended_on: null,
+          end_reason_code: null,
+          end_reason_note: null,
+          note: null,
+          type_code: null,
+          updated_at: '2026-08-24T15:42:00.000Z',
+        },
+      ],
+    })
+
+    expect(screen.queryByTestId('client-type')).toBeNull()
+    expect(screen.queryByTestId('client-note')).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatSavedAt } from '../lib/month'
-import { isChurned, reasonLabel, statusLabel } from './clientForm'
+import { isChurned, reasonLabel, statusLabel, typeLabel } from './clientForm'
 import type { AdminClient } from './clientForm'
 import { AddClientForm } from './AddClientForm'
 import { EditClientForm } from './EditClientForm'
@@ -144,6 +144,24 @@ export function ClientsAdmin({ onWritingChange }: Props) {
                   ? 'No start date — Advocacy is not scored'
                   : `Started ${client.started_on}`}
               </p>
+
+              {/* Shown only when set. "Not recorded" printed on every row for
+                  a field nobody has filled yet would be thirty lines of noise
+                  saying nothing -- the list is where the owner scans, and a
+                  line that is always there stops being read. typeLabel's
+                  "Not recorded" is for the form, where the absence is the
+                  question being asked. */}
+              {client.type_code !== null && (
+                <p className="t-caption" data-testid="client-type">
+                  {typeLabel(client.type_code)}
+                </p>
+              )}
+
+              {client.note !== null && (
+                <p className="t-caption" data-testid="client-note">
+                  {client.note}
+                </p>
+              )}
 
               {isChurned(client.status) && (
                 <p className="t-caption" data-testid="client-ended">

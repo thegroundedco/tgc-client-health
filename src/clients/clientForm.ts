@@ -83,6 +83,38 @@ export function isChurned(status: string): boolean {
   return status === 'cancelled' || status === 'former'
 }
 
+// What kind of business a client is. Coded rather than free text so kinds can
+// be counted and compared -- the owner's boss asked for visibility into
+// patterns, not context per client: "I don't think we need the context in it if
+// we're just looking at the data... it's more about having the visibility into
+// what happened so then we know how to apply the context."
+//
+// DELIBERATELY SHORT, and this is the important part. Exactly one category was
+// named on the 2026-09-11 call -- e-commerce -- and this project has a history
+// worth respecting: six stat lines were once invented for the Overview screen,
+// the owner did not recognise them, and they were retired as never-sourced.
+// Inventing five plausible industries here would be that mistake somewhere far
+// more expensive to undo, because rows get entered against them.
+//
+// The list is meant to GROW the moment he says what the categories are. It is
+// one edit here plus one line in clientForm.test.ts, and there is deliberately
+// no database CHECK constraint on the column so growing it needs no migration.
+export const CLIENT_TYPE_CODES: readonly string[] = ['ecommerce', 'other']
+
+export const CLIENT_TYPE_LABELS: Record<string, string> = {
+  ecommerce: 'E-commerce',
+  other: 'Other',
+}
+
+// Null is NOT 'other'. Nobody has said yet, and a screen showing those two the
+// same way loses the difference between an unanswered question and an answered
+// one. An unrecognised code is handed straight back, like statusLabel: a value
+// this screen does not know was written outside it.
+export function typeLabel(code: string | null): string {
+  if (code === null) return 'Not recorded'
+  return CLIENT_TYPE_LABELS[code] ?? code
+}
+
 // Only the columns this screen reads, and the literal that fetches them, kept
 // side by side -- the src/board/cardSummary.ts pattern. supabase-js infers the
 // row type from the string, so a mistyped column fails `npm run build`; a
@@ -92,7 +124,7 @@ export function isChurned(status: string): boolean {
 // `id` is here because the update needs it. `created_at` is not, because
 // nothing on this screen shows it.
 export const CLIENT_COLUMNS =
-  'id, name, owner_id, status, started_on, ended_on, end_reason_code, end_reason_note, updated_at'
+  'id, name, owner_id, status, started_on, ended_on, end_reason_code, end_reason_note, note, type_code, updated_at'
 
 export type AdminClient = {
   id: number
@@ -111,6 +143,11 @@ export type AdminClient = {
   ended_on: string | null
   end_reason_code: string | null
   end_reason_note: string | null
+  // What the client IS, and what kind of business they are. Kept apart from
+  // end_reason_note on purpose: that one is about why somebody LEFT, and a live
+  // client's description sharing the column would be read as a departure.
+  note: string | null
+  type_code: string | null
   updated_at: string
 }
 
@@ -125,6 +162,8 @@ export type ClientDraft = {
   endedOn: string
   endReasonCode: string
   endReasonNote: string
+  note: string
+  typeCode: string
 }
 
 export const EMPTY_DRAFT: ClientDraft = {
@@ -135,6 +174,8 @@ export const EMPTY_DRAFT: ClientDraft = {
   endedOn: '',
   endReasonCode: '',
   endReasonNote: '',
+  note: '',
+  typeCode: '',
 }
 
 export function draftFromRow(row: AdminClient): ClientDraft {
@@ -146,6 +187,8 @@ export function draftFromRow(row: AdminClient): ClientDraft {
     endedOn: row.ended_on ?? '',
     endReasonCode: row.end_reason_code ?? '',
     endReasonNote: row.end_reason_note ?? '',
+    note: row.note ?? '',
+    typeCode: row.type_code ?? '',
   }
 }
 
@@ -246,6 +289,13 @@ export function updatePayload(draft: ClientDraft) {
     // Null rather than an empty string, matching how the check-in screen stores
     // an empty note. An empty string is a value; the absence of a note is not.
     end_reason_note: churned && note !== '' ? note : null,
+    // NOT governed by the status, unlike the three above. A paused client still
+    // IS an e-commerce brand, and a departed one still has whatever note
+    // explained what their invoice was. Clearing these on departure would
+    // destroy the context the moment it became historical -- which is exactly
+    // when it is most wanted.
+    note: draft.note.trim() === '' ? null : draft.note.trim(),
+    type_code: draft.typeCode === '' ? null : draft.typeCode,
   }
 }
 

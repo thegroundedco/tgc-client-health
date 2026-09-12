@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   CLIENT_STATUSES,
+  CLIENT_TYPE_CODES,
   END_REASON_CODES,
   END_REASON_LABELS,
   STATUS_HINTS,
@@ -9,6 +10,7 @@ import {
   formProblems,
   isChurned,
   reactivationWarning,
+  typeLabel,
   writeStatusLine,
 } from './clientForm'
 import type { AdminClient, ClientDraft, ClientStatus, WriteState } from './clientForm'
@@ -243,6 +245,53 @@ export function EditClientForm({ client, owners, state, onSave, onCancel, onEdit
           </div>
         </>
       )}
+
+      {/* Both live OUTSIDE the churned block above, deliberately. Those three
+          fields appear only for a client who has left, because they describe a
+          departure. These two describe the client itself -- a paused client is
+          still an e-commerce brand, and a departed one still had whatever
+          arrangement the note explains -- so they are always on the form. */}
+      <div className={styles.field}>
+        <label className="t-caption" htmlFor="edit-client-type">
+          Type of business
+        </label>
+        <select
+          className="field"
+          disabled={saving}
+          id="edit-client-type"
+          onChange={(event) => edit({ ...draft, typeCode: event.target.value })}
+          value={draft.typeCode}
+        >
+          {/* Empty is "nobody has said yet", which is not the same as Other.
+              Offering only Other would force a wrong answer to get past the
+              form. */}
+          <option value="">Not recorded</option>
+          {CLIENT_TYPE_CODES.map((code: string) => (
+            <option key={code} value={code}>
+              {typeLabel(code)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={styles.field}>
+        <label className="t-caption" htmlFor="edit-client-about">
+          Note
+        </label>
+        <p className="t-caption" id="edit-client-about-hint">
+          What this client is, if it is not obvious from the name &mdash; an unusual billing
+          arrangement, or a relationship that is not what it looks like.
+        </p>
+        <textarea
+          aria-describedby="edit-client-about-hint"
+          className="field"
+          disabled={saving}
+          id="edit-client-about"
+          onChange={(event) => edit({ ...draft, note: event.target.value })}
+          rows={2}
+          value={draft.note}
+        />
+      </div>
 
       <div className={styles.actions}>
         <button

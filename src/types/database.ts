@@ -247,9 +247,11 @@ export type Database = {
           ended_on: string | null
           id: number
           name: string
+          note: string | null
           owner_id: string | null
           started_on: string | null
           status: string
+          type_code: string | null
           updated_at: string
         }
         Insert: {
@@ -259,9 +261,11 @@ export type Database = {
           ended_on?: string | null
           id?: never
           name: string
+          note?: string | null
           owner_id?: string | null
           started_on?: string | null
           status?: string
+          type_code?: string | null
           updated_at?: string
         }
         Update: {
@@ -271,9 +275,11 @@ export type Database = {
           ended_on?: string | null
           id?: never
           name?: string
+          note?: string | null
           owner_id?: string | null
           started_on?: string | null
           status?: string
+          type_code?: string | null
           updated_at?: string
         }
         Relationships: [

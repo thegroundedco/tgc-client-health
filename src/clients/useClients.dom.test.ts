@@ -76,6 +76,8 @@ const ACME: AdminClient = {
   ended_on: null,
   end_reason_code: null,
   end_reason_note: null,
+  note: null,
+  type_code: null,
   updated_at: '2026-08-24T15:42:00.000Z',
 }
 
@@ -89,6 +91,8 @@ const DRAFT: ClientDraft = {
   endedOn: '',
   endReasonCode: '',
   endReasonNote: '',
+  note: '',
+  typeCode: '',
 }
 
 // PostgREST's own words for "you asked for one row and got none", and the shape
@@ -170,7 +174,7 @@ describe('the clients hook, updating', () => {
     expect(db.lastFilter).toEqual(['id', GONE.id])
   })
 
-  it('sends all seven columns on the update, whatever the draft holds', async () => {
+  it('sends all nine columns on the update, whatever the draft holds', async () => {
     // The hook-level half of the bidirectional-constraint guarantee.
     // clients_lifecycle_coherent refuses a partial update, so a payload that
     // omitted a lifecycle column would be rejected by Postgres -- and
@@ -182,14 +186,19 @@ describe('the clients hook, updating', () => {
       result.current.saveClient(ACME.id, DRAFT)
     })
 
+    // Nine since 2026-09-12, when note and type_code were added. The rule this
+    // guards is unchanged: every column on every update, so a status change
+    // cannot leave one of the constrained three behind.
     expect(Object.keys(db.lastUpdate as object).sort()).toEqual([
       'end_reason_code',
       'end_reason_note',
       'ended_on',
       'name',
+      'note',
       'owner_id',
       'started_on',
       'status',
+      'type_code',
     ])
   })
 
