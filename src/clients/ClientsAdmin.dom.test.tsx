@@ -55,6 +55,7 @@ function hook(overrides: Partial<UseClients> = {}): UseClients {
       { id: AMY, label: 'Amy Account' },
       { id: BEN, label: 'ben@example.com' },
     ],
+    packages: new Map(),
     reload: vi.fn(),
     addState: { kind: 'idle' },
     editState: { kind: 'idle' },
@@ -63,6 +64,7 @@ function hook(overrides: Partial<UseClients> = {}): UseClients {
     // name the row that state belongs to -- which is the point of the field.
     editStateFor: null,
     addClient: vi.fn(),
+    addStint: vi.fn(),
     saveClient: vi.fn(),
     resetAdd: vi.fn(),
     resetEdit: vi.fn(),
@@ -888,4 +890,104 @@ describe('the client context fields', () => {
     expect(screen.queryByTestId('client-type')).toBeNull()
     expect(screen.queryByTestId('client-note')).toBeNull()
   })
+
+})
+
+// Foundation -> Grow -> Scale, asked for by the owner's boss on the 2026-09-11
+// call: "almost being able to see which brands are moving up the ladder with
+// us... do they stay with us longer?"
+describe('the package ladder', () => {
+  const CLIENT = {
+    id: 1,
+    name: 'Acme',
+    owner_id: null,
+    status: 'active',
+    started_on: null,
+    ended_on: null,
+    end_reason_code: null,
+    end_reason_note: null,
+    note: null,
+    type_code: null,
+    updated_at: '2026-08-24T15:42:00.000Z',
+  }
+
+  function stint(id: number, package_code: string, started_on: string, note: string | null = null) {
+    return { id, client_id: 1, package_code, started_on, note }
+  }
+
+  function withHistory(stints: ReturnType<typeof stint>[], overrides = {}) {
+    return mount({ clients: [CLIENT], packages: new Map([[1, stints]]), ...overrides })
+  }
+
+  it('shows the current package on the list, without opening the form', () => {
+    withHistory([stint(1, 'foundation', '2026-01-01'), stint(2, 'grow', '2026-06-01')])
+
+    expect(screen.getByTestId('client-package').textContent).toBe('Grow')
+  })
+
+  it('prints nothing for a client with no history', () => {
+    // "No package recorded" on every row would be thirty lines saying nothing,
+    // and a line that is always there stops being read.
+    mount({ clients: [CLIENT] })
+
+    expect(screen.queryByTestId('client-package')).toBeNull()
+  })
+
+  it('shows the whole journey on the form, oldest first', async () => {
+    withHistory([stint(2, 'grow', '2026-06-01'), stint(1, 'foundation', '2026-01-01')])
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    const history = screen.getByRole('list', { name: 'Package history' })
+    expect([...history.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      'Foundation from 2026-01-01',
+      'Grow from 2026-06-01',
+    ])
+  })
+
+  it('records a move, and hands it the client it belongs to', async () => {
+    const addStint = vi.fn()
+    withHistory([stint(1, 'foundation', '2026-01-01')], { addStint })
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    await userEvent.selectOptions(screen.getByLabelText('Move to'), 'grow')
+    await userEvent.type(screen.getByLabelText('On'), '2026-06-01')
+    await userEvent.type(screen.getByLabelText('Why (optional)'), 'website finished')
+    await userEvent.click(screen.getByRole('button', { name: 'Record package' }))
+
+    expect(addStint).toHaveBeenCalledWith(1, {
+      packageCode: 'grow',
+      startedOn: '2026-06-01',
+      note: 'website finished',
+    })
+  })
+
+  it('refuses a move to the package they are already on, and says why', async () => {
+    // Not a database error -- it is a step in the journey that goes nowhere.
+    withHistory([stint(1, 'grow', '2026-01-01')])
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+
+    await userEvent.selectOptions(screen.getByLabelText('Move to'), 'grow')
+    await userEvent.type(screen.getByLabelText('On'), '2026-06-01')
+
+    expect(screen.getByTestId('edit-client-package-problem').textContent).toMatch(
+      /already on Grow/i,
+    )
+    expect(screen.getByRole('button', { name: 'Record package' })).toHaveProperty('disabled', true)
+  })
+
+  it('offers the three tiers and nothing else', () => {
+    withHistory([])
+
+    // The form is closed, so open it and read the select.
+    return userEvent.click(screen.getByRole('button', { name: 'Edit Acme' })).then(() => {
+      const options = [...screen.getByLabelText('Move to').querySelectorAll('option')]
+      expect(options.map((option) => option.value)).toEqual([
+        '',
+        'foundation',
+        'grow',
+        'scale',
+      ])
+    })
+  })
+
 })

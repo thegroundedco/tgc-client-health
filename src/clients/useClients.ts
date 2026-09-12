@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
+import { PACKAGE_COLUMNS } from './clientPackages'
+import type { PackageStint, StintDraft } from './clientPackages'
 import {
   CLIENT_COLUMNS,
   CONCURRENT_SAVE_TEXT,
@@ -25,6 +27,11 @@ export type UseClients = {
   loadError: string | null
   clients: AdminClient[]
   owners: OwnerOption[]
+  // Every client's package history, keyed by client. Read here rather than by
+  // the form so one query serves the whole list -- the roster is tens of rows
+  // and the histories are shorter still, and a per-row read would be one
+  // request per Edit click.
+  packages: Map<number, PackageStint[]>
   // Two independent write states, because the two forms are on screen at the
   // same time and a confirmation for one must never appear beside the other.
   addState: WriteState
@@ -36,6 +43,10 @@ export type UseClients = {
   editStateFor: number | null
   reload: () => void
   addClient: (draft: ClientDraft) => void
+  // Append-only: a stint is a fact about a date, and the screen offers no way
+  // to unsay one. It rides on editState, because the form it belongs to is the
+  // per-row edit form and two confirmations for one row would fight.
+  addStint: (clientId: number, draft: StintDraft) => void
   saveClient: (id: number, draft: ClientDraft) => void
   resetAdd: () => void
   resetEdit: () => void
@@ -46,6 +57,7 @@ export function useClients(): UseClients {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [clients, setClients] = useState<AdminClient[]>([])
   const [owners, setOwners] = useState<OwnerOption[]>([])
+  const [packages, setPackages] = useState<Map<number, PackageStint[]>>(new Map())
   const [addState, setAddState] = useState<WriteState>({ kind: 'idle' })
   const [editState, setEditState] = useState<WriteState>({ kind: 'idle' })
   const [editStateFor, setEditStateFor] = useState<number | null>(null)
@@ -91,6 +103,30 @@ export function useClients(): UseClients {
         setStatus('error')
         return
       }
+
+      // The package histories. Its own query rather than an embedded select:
+      // client_packages has its own RLS policy gated on manage_clients, and an
+      // embed would make a failure there look like a failure to read clients.
+      const packageResult = await supabase
+        .from('client_packages')
+        .select(PACKAGE_COLUMNS)
+        .order('started_on')
+
+      if (isCancelled()) return
+
+      if (packageResult.error) {
+        setLoadError(describeError(packageResult.error))
+        setStatus('error')
+        return
+      }
+
+      const byClient = new Map<number, PackageStint[]>()
+      for (const stint of packageResult.data ?? []) {
+        const found = byClient.get(stint.client_id) ?? []
+        found.push(stint)
+        byClient.set(stint.client_id, found)
+      }
+      setPackages(byClient)
 
       // The owner picker. Readable at all only because Slice 2 step 3 added
       // profiles_select_active_users -- under profiles_select_own this returns
@@ -140,6 +176,47 @@ export function useClients(): UseClients {
       cancelled = true
     }
   }, [load])
+
+  const addStint = useCallback((clientId: number, draft: StintDraft) => {
+    if (editInFlight.current) return
+    editInFlight.current = true
+    setEditStateFor(clientId)
+    setEditState({ kind: 'saving' })
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('client_packages')
+          .insert({
+            client_id: clientId,
+            package_code: draft.packageCode,
+            started_on: draft.startedOn,
+            note: draft.note.trim() === '' ? null : draft.note.trim(),
+          })
+          // The inserted row back, not a re-read: the list has to show the new
+          // stint immediately, and a second query would leave a window where
+          // the screen says saved and shows the old history.
+          .select(PACKAGE_COLUMNS)
+          .single()
+
+        if (error) {
+          setEditState({ kind: 'failed', message: describeError(error) })
+          return
+        }
+
+        setPackages((current) => {
+          const next = new Map(current)
+          next.set(clientId, [...(next.get(clientId) ?? []), data])
+          return next
+        })
+        setEditState({ kind: 'saved', at: new Date().toISOString(), what: 'Package recorded' })
+      } catch (thrown) {
+        setEditState({ kind: 'failed', message: describeError(thrown) })
+      } finally {
+        editInFlight.current = false
+      }
+    })()
+  }, [])
 
   const addClient = useCallback((draft: ClientDraft) => {
     if (addInFlight.current) return
@@ -259,11 +336,13 @@ export function useClients(): UseClients {
     loadError,
     clients,
     owners,
+    packages,
     addState,
     editState,
     editStateFor,
     reload: () => void load(),
     addClient,
+    addStint,
     saveClient,
     resetAdd,
     resetEdit,

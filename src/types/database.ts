@@ -239,6 +239,44 @@ export type Database = {
           },
         ]
       }
+      client_packages: {
+        Row: {
+          client_id: number
+          created_at: string
+          id: number
+          note: string | null
+          package_code: string
+          started_on: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: number
+          created_at?: string
+          id?: never
+          note?: string | null
+          package_code: string
+          started_on: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: number
+          created_at?: string
+          id?: never
+          note?: string | null
+          package_code?: string
+          started_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_packages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           created_at: string

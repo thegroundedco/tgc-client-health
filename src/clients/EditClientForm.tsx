@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
 import {
+  EMPTY_STINT,
+  PACKAGE_CODES,
+  currentStint,
+  packageLabel,
+  sortStints,
+  stintProblems,
+} from './clientPackages'
+import type { PackageStint, StintDraft } from './clientPackages'
+import {
   CLIENT_STATUSES,
   CLIENT_TYPE_CODES,
   END_REASON_CODES,
@@ -20,10 +29,12 @@ import styles from './ClientsAdmin.module.css'
 type Props = {
   client: AdminClient
   owners: readonly OwnerOption[]
+  stints: readonly PackageStint[]
   state: WriteState
   onSave: (id: number, draft: ClientDraft) => void
   onCancel: () => void
   onEdited: () => void
+  onRecordPackage: (clientId: number, draft: StintDraft) => void
 }
 
 const TONE_CLASS = {
@@ -37,7 +48,19 @@ const TONE_CLASS = {
 // clientForm.ts -- rule 1 is formProblems, rule 2 is reactivationWarning plus
 // updatePayload, rule 3 is STATUS_HINTS. Spec §9: "The rules are not ternaries
 // in JSX."
-export function EditClientForm({ client, owners, state, onSave, onCancel, onEdited }: Props) {
+export function EditClientForm({
+  client,
+  owners,
+  state,
+  stints,
+  onSave,
+  onCancel,
+  onEdited,
+  onRecordPackage,
+}: Props) {
+  const [stint, setStint] = useState<StintDraft>(EMPTY_STINT)
+  const stintFaults = stintProblems(stint, stints)
+  const onNow = currentStint(stints)
   // Correct today because of the per-row mount, not this key: this component
   // renders only inside the `editing?.id === client.id` branch of one <li>, so
   // opening a different row unmounts this instance and mounts a fresh one no
@@ -245,6 +268,92 @@ export function EditClientForm({ client, owners, state, onSave, onCancel, onEdit
           </div>
         </>
       )}
+
+      {/* The package history and the way to add to it. Append-only: a stint is
+          a fact about a date, and the screen offers no way to unsay one -- the
+          table has no delete policy for the same reason revenue does not.
+
+          Outside the churned block, like the two fields below it: a client's
+          journey up the ladder is most interesting once they have left, which
+          is exactly when a departure-gated field would hide it. */}
+      <div className={styles.field}>
+        <p className="t-caption">Package</p>
+        <p className="t-body" data-testid="edit-client-package-now">
+          {packageLabel(onNow?.package_code ?? null)}
+        </p>
+
+        {stints.length > 0 && (
+          <ul aria-label="Package history" className={styles.list} role="list">
+            {sortStints(stints).map((entry) => (
+              <li className="t-caption" key={entry.id}>
+                {packageLabel(entry.package_code)} from {entry.started_on}
+                {entry.note === null ? '' : ` — ${entry.note}`}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <label className="t-caption" htmlFor="edit-client-package">
+          Move to
+        </label>
+        <select
+          className="field"
+          disabled={saving}
+          id="edit-client-package"
+          onChange={(event) => setStint({ ...stint, packageCode: event.target.value })}
+          value={stint.packageCode}
+        >
+          <option value="">Choose a package</option>
+          {PACKAGE_CODES.map((code: string) => (
+            <option key={code} value={code}>
+              {packageLabel(code)}
+            </option>
+          ))}
+        </select>
+
+        <label className="t-caption" htmlFor="edit-client-package-date">
+          On
+        </label>
+        <input
+          className="field"
+          disabled={saving}
+          id="edit-client-package-date"
+          onChange={(event) => setStint({ ...stint, startedOn: event.target.value })}
+          type="date"
+          value={stint.startedOn}
+        />
+
+        <label className="t-caption" htmlFor="edit-client-package-note">
+          Why (optional)
+        </label>
+        <input
+          className="field"
+          disabled={saving}
+          id="edit-client-package-note"
+          onChange={(event) => setStint({ ...stint, note: event.target.value })}
+          value={stint.note}
+        />
+
+        {/* The faults are shown rather than the button merely disabled: a
+            disabled button with no reason is a dead end. */}
+        {stint.packageCode !== '' && stint.startedOn !== '' && stintFaults.length > 0 && (
+          <p className="alert" data-testid="edit-client-package-problem" role="alert">
+            {stintFaults.map((fault) => fault.text).join(' ')}
+          </p>
+        )}
+
+        <button
+          className="button button--quiet"
+          disabled={saving || stintFaults.length > 0}
+          onClick={() => {
+            onRecordPackage(client.id, stint)
+            setStint(EMPTY_STINT)
+          }}
+          type="button"
+        >
+          Record package
+        </button>
+      </div>
 
       {/* Both live OUTSIDE the churned block above, deliberately. Those three
           fields appear only for a client who has left, because they describe a

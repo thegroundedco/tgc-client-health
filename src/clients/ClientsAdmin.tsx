@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatSavedAt } from '../lib/month'
 import { isChurned, reasonLabel, statusLabel, typeLabel } from './clientForm'
+import { currentStint, packageLabel } from './clientPackages'
 import type { AdminClient } from './clientForm'
 import { AddClientForm } from './AddClientForm'
 import { EditClientForm } from './EditClientForm'
@@ -151,6 +152,16 @@ export function ClientsAdmin({ onWritingChange }: Props) {
                   line that is always there stops being read. typeLabel's
                   "Not recorded" is for the form, where the absence is the
                   question being asked. */}
+              {/* The package a client is on now, from the latest stint that has
+                  started. Shown only when recorded, like the type above: "No
+                  package recorded" on every row of a history nobody has entered
+                  yet would be thirty lines saying nothing. */}
+              {currentStint(admin.packages.get(client.id) ?? []) !== null && (
+                <p className="t-caption" data-testid="client-package">
+                  {packageLabel(currentStint(admin.packages.get(client.id) ?? [])!.package_code)}
+                </p>
+              )}
+
               {client.type_code !== null && (
                 <p className="t-caption" data-testid="client-type">
                   {typeLabel(client.type_code)}
@@ -195,8 +206,10 @@ export function ClientsAdmin({ onWritingChange }: Props) {
                     admin.resetEdit()
                   }}
                   onEdited={admin.resetEdit}
+                  onRecordPackage={admin.addStint}
                   onSave={admin.saveClient}
                   owners={admin.owners}
+                  stints={admin.packages.get(client.id) ?? []}
                   // Only when the state belongs to THIS row. There is one
                   // editState for the whole screen and one form per row, so
                   // passing it unconditionally put Acme's "Changes saved
