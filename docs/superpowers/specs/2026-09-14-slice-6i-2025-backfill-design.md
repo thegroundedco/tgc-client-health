@@ -22,46 +22,65 @@ retention rate; twenty-one can. The consequences, in order of how much they matt
 - **Tenure stops being a floor for the ten clients who span both years.** Most of the roster was
   imported with `started_on` set to its first 2026 invoice month, which is why the retainer vs
   project section carries a disclosure saying its tenure half cannot be trusted.
-- **Churn becomes visible for the first time at scale.** Of 32 TGC clients in 2025, ten continue
-  into 2026. The other twenty-two left, and the tool has no record that they ever existed.
+- **Churn becomes visible for the first time at scale.** Of 40 TGC clients in 2025, eleven
+  continue into 2026. The other twenty-nine left, and the tool has no record that they ever
+  existed.
 
 That last number is the honest headline of this slice. Retention currently computes on a roster
 that silently excludes almost every client the agency has lost.
 
 ---
 
-## 2. The source, and the hole in it
+## 2. The source, and how it was finally got out
 
-`TGC_Invoices_Pivot_2025_2026` (Drive, owned by **[owner]**) carries a `2025 Data` tab in exactly
-the shape `planCells` already reads — `Month, Month #, Entity, Client (as entered), Client,
-Invoice #, Invoice Amount, Amount Paid, Outstanding`. A dry run over it returned **zero problems**,
-109 client-months and 32 clients, with every month's TGC total tying to the sheet's own subtotal
-row exactly.
+**Resolved 2026-09-14: the complete year is in hand and verified.**
 
-The figures themselves, the extracted CSV and the reconciliation live in
-`~/Downloads/tgc-import-2026/`, **not here** — this repository is public. That folder's `RESUME.md`
-is the index.
+`TGC_Invoices_Pivot_2025_2026` carries a `2025 Data` tab in the shape `planCells` already reads,
+but **truncated at July** — August as a subtotal row only, September to December absent. The
+truncation is the **Drive connector, not the workbook**: reading the 2025 tab from the original
+invoices workbook stops at the identical row. Copying the tab to a fresh spreadsheet does not help
+either; doing so reproduced the same 150 rows.
 
-**The tab is truncated at July.** The sheet's own notes record it: August arrived as subtotal rows
-only, no line items, and September through December did not arrive at all, because the Drive
-connector truncates long tabs — 2025 is the longest tab in the file. A little under half a year is
-missing. The fix is for **[owner]** to copy the 2025 tab to a new spreadsheet and send that link.
+What worked was bypassing the connector entirely: **File → Download → CSV of the 2025 tab**, which
+carries all twelve months.
 
-### 2.1 This slice does not import a partial year
+### 2.1 That tab needs its own reader
 
-A partial import would not *lie* — the app is already careful here. `monthlyTotals` marks every
-month `entered: true | false` (`chartMath.ts:113`), Billing renders an unentered month as a kept
-slot reading "not entered" (`Billing.tsx:179`), and `monthRows` refuses a month-over-month
-comparison that would span one (`chartMath.ts:239`). Five honest gaps, not five fabricated zeros.
+The original's shape is **not** the Data tab's. There is no Entity column: a month opens with a
+`MONTH | ALL` row and entity comes from `TGC` / `ADAPTED` marker rows inside it. Three quirks in
+the real file, each of which silently corrupts the result if missed:
 
-It would nonetheless be the wrong thing to write, for a reason the display cannot fix: **end dates
-inferred from a truncated ledger are wrong and unfalsifiable.** Twenty-two clients would be created
-with `ended_on` set to their last invoice month. A client who actually ran to November 2025 reads
-as ending in July, the owner is handed that date to confirm, and nothing in the sheet reveals the
-error. `client_month_revenue` has no delete policy by design, so a wrong row is permanent.
+- **January has no TGC marker at all.** Its TGC section is the implicit first one, so entity resets
+  to TGC at every month boundary rather than to null. Reset it to null and January's whole TGC
+  month — the largest single omission available — disappears.
+- **June's marker sits one column right**, in the invoice column. Only the marker moves; June's
+  line items are aligned like every other month's.
+- **Several line items carry the literal word "Adapted" as their invoice number.** A marker is
+  therefore identified by an **empty client column**, not by the word alone. Keyed off the word,
+  those clients' rows are read as section headers, their money vanishes, and the section total then
+  reports as mismatching itself — a failure that looks like bad source data and is not.
 
-**Gate: no write of any kind until the full 2025 tab is in hand.** Everything below is built and
-proven against Jan–Jul, which is sound as a rehearsal and unsound as a result.
+### 2.2 Verification, before any of it was believed
+
+- Every month × entity ties to the sheet's own subtotal rows.
+- The only difference from the sheet's stated YTD is exactly the documented January Adapted
+  duplicate. Adapted is out of scope for the import; the discrepancy is disclosed, not corrected.
+- **The parser reproduces the previously verified Jan–Jul extract exactly** — same row count, same
+  total, differing only in two invoice-number typos the derived workbook had silently cleaned, in a
+  field the reader does not use. That extract is kept as a standing cross-check rather than
+  deleted.
+- Through `planCells`: **zero problems, 199 client-months, 40 clients, January to December.**
+
+### 2.3 Waiting for the whole year was the right call, and here is the measurement
+
+Against the truncated sheet, of the clients that would have been created with a proposed end date,
+**seven would have been dated too early and six were invisible entirely**, having first invoiced in
+August or later. A little under half. August to December alone carries revenue no version of this
+project had seen. Those end dates would have gone into a table with no delete policy, and nothing
+in the truncated data could have revealed the error.
+
+The figures, the extract and the reconciliation live in `~/Downloads/tgc-import-2026/`, **not
+here** — this repository is public. That folder's `RESUME.md` is the index.
 
 ---
 
@@ -170,9 +189,9 @@ report says so on its face rather than letting a better floor pass as a fact.
 
 ---
 
-## 6. The twenty-two, and their end dates
+## 6. The twenty-nine, and their end dates
 
-Twenty-two clients appear in 2025 and not in 2026, against ten that span both years. The roster
+Twenty-nine clients appear in 2025 and not in 2026, against eleven that span both years. The roster
 itself is a departure list, so it lives with the other import decisions in
 `~/Downloads/tgc-import-2026/` and not in this file. It will grow when August–December arrive.
 
@@ -235,7 +254,7 @@ To re-check once the data is in, not to redesign in advance:
   already gone; a grep for a stale window is cheap insurance.
 - **Twenty-one months of bars** is the widest the chart has ever drawn. Axis labels and bar widths
   want looking at rendered, not asserted.
-- **The board and the matrix** read the same roster and will gain twenty-two departed clients. The
+- **The board and the matrix** read the same roster and will gain twenty-nine departed clients. The
   archived toggle exists; whether the default view is still usable at that size is a question for
   the owner's eyes.
 
@@ -268,7 +287,10 @@ To re-check once the data is in, not to redesign in advance:
 
 ## 11. Open, and the owner's to answer
 
-1. **The full 2025 tab.** Everything is gated on it.
+1. ~~The full 2025 tab.~~ **Delivered and verified 2026-09-14** (§2).
 2. **Green Coffee Company** — the same company as GCC, and therefore Juan Valdez, or separate?
-3. **The twenty-two end dates**, once proposed from complete data.
+3. **The twenty-nine end dates**, proposed from complete data. Four of them last invoiced in
+   December 2025 and so look active at the year boundary while having no 2026 revenue at all —
+   those are the ones worth your eye first, because "left in December" and "nobody has typed
+   January" are the two readings the classification rule exists to separate.
 4. **The reclassification diff**, once it exists. It may be empty; it is not safe to assume so.
