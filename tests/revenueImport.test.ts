@@ -315,7 +315,18 @@ describe('planImport — what it would overwrite', () => {
       existing: [{ client_id: 1, period: '2026-06-01' }],
     })
 
-    expect(plan.overwrites).toEqual([{ clientName: 'Acme', period: '2026-06-01' }])
+    // Slice 6i: an overwrite now carries the values it moves between. This
+    // caller supplies the old two-field `existing` shape, so the prior values
+    // are not KNOWN to be zero -- they were simply not supplied, and `from:
+    // null` says exactly that rather than asserting a figure nobody checked.
+    expect(plan.overwrites).toEqual([
+      {
+        clientName: 'Acme',
+        period: '2026-06-01',
+        from: null,
+        to: { retainerCents: 400_000, projectCents: 0 },
+      },
+    ])
   })
 
   it('reports nothing to overwrite when the table is empty', () => {
@@ -460,5 +471,70 @@ describe('reportOf — what the owner reads before approving', () => {
     )
 
     expect(report).toMatch(/1 .*blank|blank.*: 1/i)
+  })
+})
+
+describe('planImport — what an overwrite would actually change', () => {
+  it('reports the values a reclassified row moves between, not just its name', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-07-01', '0', '4,000')],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-07-01', retainer_cents: 400_000, project_cents: 0 }],
+    })
+    expect(plan.overwrites).toEqual([
+      {
+        clientName: 'Acme',
+        period: '2026-07-01',
+        from: { retainerCents: 400_000, projectCents: 0 },
+        to: { retainerCents: 0, projectCents: 400_000 },
+      },
+    ])
+    expect(plan.unchangedOverwrites).toBe(0)
+  })
+
+  it('counts a rewrite that changes nothing rather than listing it', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-07-01', '4,000', '0')],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-07-01', retainer_cents: 400_000, project_cents: 0 }],
+    })
+    expect(plan.overwrites).toEqual([])
+    expect(plan.unchangedOverwrites).toBe(1)
+  })
+
+  it('still flags a rewrite when the caller supplied no prior values', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-07-01', '4,000', '0')],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-07-01' }],
+    })
+    expect(plan.overwrites).toEqual([
+      { clientName: 'Acme', period: '2026-07-01', from: null, to: { retainerCents: 400_000, projectCents: 0 } },
+    ])
+  })
+})
+
+describe('reportOf — the diff on the page', () => {
+  it('names the columns that move and the amounts they move between', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-07-01', '0', '4,000')],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-07-01', retainer_cents: 400_000, project_cents: 0 }],
+    })
+    const report = reportOf(plan)
+    expect(report).toContain('Existing rows that would be OVERWRITTEN, and what changes (1)')
+    expect(report).toContain('retainer $4,000 -> $0')
+    expect(report).toContain('project $0 -> $4,000')
+  })
+
+  it('does not print a CHANGE section when every rewrite is identical', () => {
+    const plan = planImport({
+      cells: [cell('Acme', '2026-07-01', '4,000', '0')],
+      roster: ROSTER,
+      existing: [{ client_id: 1, period: '2026-07-01', retainer_cents: 400_000, project_cents: 0 }],
+    })
+    const report = reportOf(plan)
+    expect(report).not.toContain('would be OVERWRITTEN')
+    expect(report).toContain('Existing rows rewritten with identical values: 1')
   })
 })
