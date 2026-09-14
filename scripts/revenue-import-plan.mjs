@@ -44,7 +44,8 @@ function monthOf(day) {
 
 /**
  * @param {{ cells: Cell[], roster: Client[],
- *            existing?: { client_id: number, period: string }[] }} input
+ *            existing?: { client_id: number, period: string,
+ *                          retainer_cents?: number, project_cents?: number }[] }} input
  */
 export function planImport({ cells, roster, existing = [] }) {
   /** @type {string[]} */
@@ -189,18 +190,46 @@ export function planImport({ cells, roster, existing = [] }) {
     .map(([period, cents]) => ({ period, cents }))
     .sort((left, right) => left.period.localeCompare(right.period))
 
-  // Client-months that ALREADY have a row and would be rewritten. The import
-  // upserts on purpose -- it has to survive being re-run after the sheet is
-  // corrected -- so the protection is not refusal, it is that the owner sees
-  // this count before running it. Silently overwriting a month somebody typed
-  // into the entry screen is the failure this exists to make visible.
-  const already = new Set(existing.map((row) => `${row.client_id}|${row.period}`))
-  const overwrites = planned
-    .filter((write) => write.clientId !== null && already.has(`${write.clientId}|${write.period}`))
-    .map((write) => ({ clientName: write.clientName, period: write.period }))
+  // Client-months that ALREADY have a row. The import upserts on purpose -- it
+  // has to survive being re-run after the sheet is corrected -- so the
+  // protection is not refusal, it is that the owner sees what changes before
+  // running it. Silently overwriting a month somebody typed into the entry
+  // screen is the failure this exists to make visible.
+  //
+  // VALUES, not names. Slice 6i recomputes the retainer/project rule across two
+  // years at once, which can move money between the two columns of a row already
+  // in production. A list of client-months cannot show that; "retainer $5,000 ->
+  // $0, project $0 -> $5,000" can. A rewrite that changes nothing is COUNTED
+  // rather than listed, so that a re-run's hundreds of no-op upserts cannot bury
+  // the one row that really moves.
+  const already = new Map(existing.map((row) => [`${row.client_id}|${row.period}`, row]))
+  const overwrites = []
+  let unchangedOverwrites = 0
+  for (const write of planned) {
+    if (write.clientId === null) continue
+    const prior = already.get(`${write.clientId}|${write.period}`)
+    if (prior === undefined) continue
+
+    const to = { retainerCents: write.retainerCents, projectCents: write.projectCents }
+    // A caller may pass the old two-field shape. Then the prior values are not
+    // unknown-because-zero, they are simply not supplied, and printing
+    // "$0 -> $0" would assert something nobody checked.
+    if (prior.retainer_cents === undefined || prior.project_cents === undefined) {
+      overwrites.push({ clientName: write.clientName, period: write.period, from: null, to })
+      continue
+    }
+
+    const from = { retainerCents: prior.retainer_cents, projectCents: prior.project_cents }
+    if (from.retainerCents === to.retainerCents && from.projectCents === to.projectCents) {
+      unchangedOverwrites += 1
+      continue
+    }
+    overwrites.push({ clientName: write.clientName, period: write.period, from, to })
+  }
 
   return {
     overwrites,
+    unchangedOverwrites,
     writes: problems.length > 0 ? [] : planned,
     newClients: [...newClients.values()].sort((left, right) => left.localeCompare(right)),
     skippedBlank,
@@ -341,8 +370,30 @@ export function reportOf(plan) {
   }
 
   if (plan.overwrites.length > 0) {
-    lines.push('', `Existing rows that would be OVERWRITTEN (${plan.overwrites.length}):`)
-    for (const row of plan.overwrites) lines.push(`  - ${row.clientName} ${row.period}`)
+    lines.push('', `Existing rows that would be OVERWRITTEN, and what changes (${plan.overwrites.length}):`)
+    for (const row of plan.overwrites) {
+      if (row.from === null) {
+        lines.push(`  - ${row.clientName} ${row.period}  (prior values not supplied)`)
+        continue
+      }
+      // Only the column that moves is printed. A line restating the half that
+      // did not change is noise in the one list the owner has to read closely.
+      const parts = []
+      if (row.from.retainerCents !== row.to.retainerCents) {
+        parts.push(`retainer ${formatMoney(row.from.retainerCents)} -> ${formatMoney(row.to.retainerCents)}`)
+      }
+      if (row.from.projectCents !== row.to.projectCents) {
+        parts.push(`project ${formatMoney(row.from.projectCents)} -> ${formatMoney(row.to.projectCents)}`)
+      }
+      lines.push(`  - ${row.clientName} ${row.period}  ${parts.join('   ')}`)
+    }
+  }
+
+  // Counted, never listed. A re-run upserts every row it already wrote, and
+  // hundreds of identical lines are exactly where the one row that really moves
+  // would go unnoticed.
+  if (plan.unchangedOverwrites > 0) {
+    lines.push('', `Existing rows rewritten with identical values: ${plan.unchangedOverwrites}`)
   }
 
   if (plan.outsideLifecycle.length > 0) {
