@@ -9,7 +9,7 @@ import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
 
-type Props = { onWritingChange?: (writing: boolean) => void }
+type Props = { editClientId?: number; onWritingChange?: (writing: boolean) => void }
 
 // Spec §7: one screen, a list and a form, no modal. The list shows every client
 // regardless of status, because this is the screen where a former client has to
@@ -25,13 +25,19 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
     ?? 'Owner is not an active account'
 }
 
-export function ClientsAdmin({ onWritingChange }: Props) {
+export function ClientsAdmin({ editClientId, onWritingChange }: Props) {
   const admin = useClients()
 
   // Which row's form is open, by id rather than by row object: the hook replaces
   // the row object after a save (that is how the list shows the new name), and a
   // held object would then be the pre-save copy.
-  const [editingId, setEditingId] = useState<number | null>(null)
+  //
+  // An INITIAL value, not a new mechanism: the screen has always held
+  // editingId, and arriving from a check-in simply says which one to start on.
+  // If the id names a client this screen does not have -- archived since, or a
+  // stale request -- `editing` resolves to null below and the ordinary list
+  // renders. The id is a request, not a promise.
+  const [editingId, setEditingId] = useState<number | null>(editClientId ?? null)
   const editing = admin.clients.find((client) => client.id === editingId) ?? null
 
   // True while either write is in flight, for the same reason both forms disable

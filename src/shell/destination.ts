@@ -19,7 +19,17 @@ export type Destination =
   | { kind: 'overview' }
   | { kind: 'clients' }
   | { kind: 'revenue' }
-  | { kind: 'admin'; section: AdminSection }
+  // editClientId is OPTIONAL AND ONLY MEANINGFUL WHEN section is 'clients'.
+  // That is precisely the looseness this union was written to avoid -- its
+  // comment above asks for each impossible combination to be a compile error.
+  // It is the price of opening a client's edit form from their check-in, and
+  // the alternatives are recorded in the slice 6l spec section 5: a separate
+  // destination kind means two routes to one screen and a menu bar that has to
+  // know one of them is not a menu item.
+  //
+  // An id here is a REQUEST, NOT A PROMISE. ClientsAdmin opens that client if
+  // it has them and renders its ordinary list if it does not.
+  | { kind: 'admin'; section: AdminSection; editClientId?: number }
 
 export type DestinationKind = Destination['kind']
 

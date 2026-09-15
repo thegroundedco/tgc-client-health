@@ -107,13 +107,26 @@ export function Shell({
       case 'overview':
         return <Overview />
       case 'clients':
-        return <Board key={clientsVisit} profile={profile} />
+        return (
+          <Board
+            key={clientsVisit}
+            // Only the shell knows what a destination is. The board has not
+            // navigated since slice 6a -- "Navigation left this file" -- and
+            // this keeps that true: it forwards an id and learns nothing about
+            // routing.
+            onEditClient={(clientId) =>
+              setDestination({ kind: 'admin', section: 'clients', editClientId: clientId })
+            }
+            profile={profile}
+          />
+        )
       case 'revenue':
         return <Revenue />
       case 'admin':
         return (
           <Admin
             currentUserId={profile.id}
+            editClientId={destination.editClientId}
             onSection={(section: AdminSection) =>
               setDestination({ kind: 'admin', section })
             }

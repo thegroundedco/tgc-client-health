@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
@@ -78,10 +78,25 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
   }
 }
 
-function renderAs(role: Profile['role'], overrides: Partial<UseCheckin> = {}) {
+// The third parameter carries CheckIn's own optional props (currently just
+// onEditClient) rather than widening `overrides`, which is UseCheckin's shape
+// and has nothing to do with what CheckIn itself accepts. Defaulted to `{}` so
+// every call site above this line, written before onEditClient existed, keeps
+// working untouched.
+function renderAs(
+  role: Profile['role'],
+  overrides: Partial<UseCheckin> = {},
+  props: Partial<{ onEditClient: () => void }> = {},
+) {
   hookState.current = mockCheckin(overrides)
   return render(
-    <CheckIn client={CLIENT} period={PERIOD} profile={profile(role)} onBack={() => {}} />,
+    <CheckIn
+      client={CLIENT}
+      period={PERIOD}
+      profile={profile(role)}
+      onBack={() => {}}
+      {...props}
+    />,
   )
 }
 
@@ -145,6 +160,27 @@ describe('CheckIn, an account_manager (holds edit_scores)', () => {
   it('does not render the read-only notice', () => {
     renderAs('account_manager')
     expect(screen.queryByText(/you can view this client.s scores, but/i)).toBeNull()
+  })
+})
+
+// The owner: "when I click into a card, I'd love for there to be an option to
+// hit edit client and it takes you into the client roster's edit panel." Same
+// capability the board checks before offering Add client -- reused rather than
+// a second rule about who may edit.
+describe('CheckIn, the Edit client button', () => {
+  it('offers Edit client to someone who can manage clients', () => {
+    const onEditClient = vi.fn()
+    renderAs('account_manager', {}, { onEditClient })
+
+    fireEvent.click(screen.getByRole('button', { name: /edit client/i }))
+    expect(onEditClient).toHaveBeenCalled()
+  })
+
+  it('offers it to nobody else', () => {
+    // Capability, never a role string: `can` is the only check in this app.
+    renderAs('viewer', {}, { onEditClient: vi.fn() })
+
+    expect(screen.queryByRole('button', { name: /edit client/i })).toBeNull()
   })
 })
 

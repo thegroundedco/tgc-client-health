@@ -18,6 +18,9 @@ type Props = {
   period: string
   profile: Profile
   onBack: () => void
+  // Optional because the check-in screen is reachable in tests, and by
+  // Board.tsx's own callers, without it.
+  onEditClient?: () => void
 }
 
 // The class each saveStatus tone renders as. Kept beside the component that
@@ -63,7 +66,7 @@ function ScaleLegend() {
   )
 }
 
-export function CheckIn({ client, period, profile, onBack }: Props) {
+export function CheckIn({ client, period, profile, onBack, onEditClient }: Props) {
   const checkin = useCheckin(client, period, profile)
   const {
     status,
@@ -131,6 +134,15 @@ export function CheckIn({ client, period, profile, onBack }: Props) {
       <button className="button button--quiet" type="button" onClick={onBack}>
         Board
       </button>
+      {onEditClient !== undefined && can(profile.role, 'manage_clients') && (
+        // The owner: "when I click into a card, I'd love for there to be an
+        // option to hit edit client and it takes you into the client roster's
+        // edit panel". Same capability the board checks before offering Add
+        // client -- reused rather than a second rule about who may edit.
+        <button className="button button--quiet" onClick={onEditClient} type="button">
+          Edit client
+        </button>
+      )}
     </nav>
   )
 

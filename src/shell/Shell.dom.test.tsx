@@ -19,10 +19,11 @@ import type { UseBoard } from '../board/useBoard'
 // rendered the same placeholder as every other test and passed with navigation
 // entirely broken. The two tests below swap in the REAL Board, with useBoard
 // mocked, so a failed read and an empty roster are genuinely on screen.
-let boardImpl: (props: { profile: Profile }) => ReactNode = () => <CountingBoard />
+type BoardProps = { profile: Profile; onEditClient: (clientId: number) => void }
+let boardImpl: (props: BoardProps) => ReactNode = () => <CountingBoard />
 
 vi.mock('../board/Board', () => ({
-  Board: (props: { profile: Profile }) => boardImpl(props),
+  Board: (props: BoardProps) => boardImpl(props),
 }))
 vi.mock('../board/useBoard', () => ({ useBoard: vi.fn() }))
 // Needed only by the real-Board tests: Board renders CheckIn, CheckIn uses

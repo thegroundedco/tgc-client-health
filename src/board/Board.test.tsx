@@ -51,6 +51,12 @@ import { useBoard } from './useBoard'
 
 const ME = 'profile-1'
 
+// This file is about what the board reads and renders, never about where
+// pressing Edit client leads -- that wiring is Shell.tsx's job and is proved
+// in Shell.dom.test.tsx. A no-op here keeps every existing fixture compiling
+// against the new required prop without claiming to test navigation.
+const NOOP_EDIT_CLIENT = () => {}
+
 const PROFILE: Profile = {
   id: ME,
   email: 'amy@example.com',
@@ -105,7 +111,7 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
 
 const given = (state: Partial<UseBoard> = {}) => {
   vi.mocked(useBoard).mockReturnValue(board(state))
-  return render(<Board profile={PROFILE} />)
+  return render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 }
 
 const clientList = () => screen.queryByRole('list', { name: /clients/i })
@@ -312,21 +318,21 @@ describe('the show-archived toggle', () => {
 
   it('shows only the active roster by default', () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(cardNames()).toEqual(['Acme'])
   })
 
   it('offers a toggle naming how many are hidden', () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Show 2 archived' })).toBeTruthy()
   })
 
   it('reveals them, active roster first, and offers to hide them again', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
 
@@ -336,7 +342,7 @@ describe('the show-archived toggle', () => {
 
   it('hides them again', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
     await userEvent.click(screen.getByRole('button', { name: 'Hide 2 archived' }))
@@ -348,7 +354,7 @@ describe('the show-archived toggle', () => {
     // A control that reveals nothing is worse than no control: it implies
     // there is something hidden.
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
   })
@@ -358,7 +364,7 @@ describe('the show-archived toggle', () => {
     // that three check-ins are owed this month, two of them for a paused
     // client and a client who has left.
     vi.mocked(useBoard).mockReturnValue({ ...MIXED, submitted: 1 })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('status').textContent).toBe(
       `All 1 check-ins submitted for ${formatPeriod(defaultPeriod())}`,
@@ -383,7 +389,7 @@ describe('the show-archived toggle', () => {
       activeTotal: 0,
       submitted: 0,
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByText('No active clients')).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 archived' }))
@@ -401,7 +407,7 @@ describe('the show-archived toggle', () => {
       activeTotal: 0,
       submitted: 0,
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByText('No active clients')).toBeTruthy()
     expect(screen.getByText('Add one to see it here.')).toBeTruthy()
@@ -410,7 +416,7 @@ describe('the show-archived toggle', () => {
 
   it('marks the toggle expanded or collapsed for a screen reader', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const toggle = screen.getByRole('button', { name: 'Show 2 archived' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -435,7 +441,7 @@ describe('the show-archived toggle', () => {
       status: 'error',
       loadError: 'the connection failed',
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -546,7 +552,7 @@ describe('the Cards | Matrix toggle', () => {
 describe('adding a client from the Clients tab', () => {
   it('offers the button to an account manager, who can manage clients', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Add client' })).toBeTruthy()
   })
@@ -556,14 +562,14 @@ describe('adding a client from the Clients tab', () => {
   // hidden because a control that always fails is worse than no control.
   it('does not draw it for a viewer', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={{ ...PROFILE, role: 'viewer' }} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={{ ...PROFILE, role: 'viewer' }} />)
 
     expect(screen.queryByRole('button', { name: 'Add client' })).toBeNull()
   })
 
   it('reveals the form when pressed', async () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
     expect(screen.getByLabelText(/name/i)).toBeTruthy()
@@ -577,7 +583,7 @@ describe('adding a client from the Clients tab', () => {
   it('reloads the board when the panel is closed, so an added client appears', async () => {
     const reload = vi.fn()
     vi.mocked(useBoard).mockReturnValue({ ...READY, reload })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
     await userEvent.click(screen.getByRole('button', { name: 'Done' }))
@@ -608,7 +614,7 @@ describe('adding a client from the Clients tab', () => {
 describe('the add-client button as the primary action', () => {
   it('is the filled button, not a quiet one', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const add = screen.getByRole('button', { name: 'Add client' })
     expect(add.className).toContain('button')
@@ -620,7 +626,7 @@ describe('the add-client button as the primary action', () => {
   // test can see.
   it('sits in the period bar, in the wrapper that right-aligns it', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const bar = document.querySelector(`.${styles.periodBar}`)
     expect(bar).not.toBeNull()
@@ -636,7 +642,7 @@ describe('the add-client button as the primary action', () => {
   // moves out of the row entirely and the button alone stays in it.
   it('opens the panel below the period bar, not inside it', async () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
 

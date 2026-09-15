@@ -12,7 +12,7 @@ import type { BoardClient } from './useBoard'
 import { archivedCount, toggleLabel, visibleClients } from './boardScope'
 import styles from './Board.module.css'
 
-type Props = { profile: Profile }
+type Props = { profile: Profile; onEditClient: (clientId: number) => void }
 
 // The board reads and navigates. It no longer writes anything at all: `Score all
 // 3s` is gone, and the only write in the application is the check-in screen's
@@ -21,7 +21,7 @@ type Props = { profile: Profile }
 // done nothing, which is the second half of the finding this slice exists to
 // fix. The first half was that a save gave no feedback; each card's footer is
 // now that feedback, and it survives a reload, which a toast would not.
-export function Board({ profile }: Props) {
+export function Board({ profile, onEditClient }: Props) {
   // One period for the whole board, and for the check-in it opens. The two must
   // never disagree: a card summarising one month while its check-in edits
   // another is the kind of quiet mismatch that makes a person stop trusting the
@@ -110,6 +110,7 @@ export function Board({ profile }: Props) {
           // save that did nothing.
           board.reload()
         }}
+        onEditClient={() => onEditClient(selected.id)}
         period={period}
         profile={profile}
       />

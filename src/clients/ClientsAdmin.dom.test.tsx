@@ -72,9 +72,13 @@ function hook(overrides: Partial<UseClients> = {}): UseClients {
   }
 }
 
-function mount(overrides: Partial<UseClients> = {}, onWritingChange = vi.fn()) {
+function mount(
+  overrides: Partial<UseClients> = {},
+  onWritingChange = vi.fn(),
+  editClientId?: number,
+) {
   vi.mocked(useClients).mockReturnValue(hook(overrides))
-  render(<ClientsAdmin onWritingChange={onWritingChange} />)
+  render(<ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} />)
 }
 
 describe('the clients admin screen, reading', () => {
@@ -755,6 +759,26 @@ describe('the clients admin screen, editing', () => {
 
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /remove/i })).toBeNull()
+  })
+})
+
+describe('the clients admin screen, arriving with an editClientId', () => {
+  // Arriving from a check-in with "Edit client". ClientsAdmin already held an
+  // editingId; this gives it an initial value rather than a new mechanism.
+  it('opens the named client for editing on arrival', () => {
+    mount({ clients: [client({ id: 1, name: 'Acme' })] }, undefined, 1)
+
+    expect(screen.getByLabelText('Client name')).toHaveProperty('value', 'Acme')
+  })
+
+  // A stale request -- the client was archived between the board and here. The
+  // screen must not look broken: no error, no empty state, and no form open on
+  // a client that is not there.
+  it('renders its ordinary list when the id names nobody', () => {
+    mount({ clients: [client({ id: 1, name: 'Acme' })] }, undefined, 9999)
+
+    expect(screen.queryByLabelText('Client name')).toBeNull()
+    expect(screen.getByText('Acme')).toBeTruthy()
   })
 })
 

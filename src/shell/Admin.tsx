@@ -31,12 +31,14 @@ export function Admin({
   onSection,
   onWritingChange,
   currentUserId,
+  editClientId,
 }: {
   section: AdminSection
   role: string
   onSection: (next: AdminSection) => void
   onWritingChange?: (writing: boolean) => void
   currentUserId: string
+  editClientId?: number
 }) {
   const sections = adminSections(role)
   // 'Revenue entry', not 'Revenue': the menu bar already has a button named
@@ -69,7 +71,7 @@ export function Admin({
       case 'people':
         return <UsersAdmin currentUserId={currentUserId} onWritingChange={onWritingChange} />
       case 'clients':
-        return <ClientsAdmin onWritingChange={onWritingChange} />
+        return <ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} />
       case 'revenue':
         return <RevenueAdmin onWritingChange={onWritingChange} />
       default: {
