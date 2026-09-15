@@ -7,7 +7,7 @@ import { Admin } from './Admin'
 import { MenuBar } from './MenuBar'
 import { Overview } from './Overview'
 import { Revenue } from './Revenue'
-import { LANDING, openDestination } from './destination'
+import { LANDING, adminDestination, openDestination } from './destination'
 import type { AdminSection, Destination, DestinationKind } from './destination'
 import styles from './Shell.module.css'
 
@@ -126,10 +126,16 @@ export function Shell({
         return (
           <Admin
             currentUserId={profile.id}
-            editClientId={destination.editClientId}
-            onSection={(section: AdminSection) =>
-              setDestination({ kind: 'admin', section })
-            }
+            // Narrowed, not reached for. The admin destination is two variants
+            // now (see destination.ts) and only the clients one carries an id,
+            // so this cannot ask for one on a section that has no use for it.
+            editClientId={destination.section === 'clients' ? destination.editClientId : undefined}
+            // adminDestination, not a literal: `section` here is a widened
+            // AdminSection, and that constructor is the one place this app
+            // builds an admin destination from a non-literal section -- so a
+            // future edit that tries to carry an id through here has to go
+            // through its narrowing rather than around it.
+            onSection={(section: AdminSection) => setDestination(adminDestination(section))}
             onWritingChange={setBusy}
             role={profile.role}
             section={destination.section}

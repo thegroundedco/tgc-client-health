@@ -19,17 +19,44 @@ export type Destination =
   | { kind: 'overview' }
   | { kind: 'clients' }
   | { kind: 'revenue' }
-  // editClientId is OPTIONAL AND ONLY MEANINGFUL WHEN section is 'clients'.
-  // That is precisely the looseness this union was written to avoid -- its
-  // comment above asks for each impossible combination to be a compile error.
-  // It is the price of opening a client's edit form from their check-in, and
-  // the alternatives are recorded in the slice 6l spec section 5: a separate
+  // SPLIT, so that the promise made above -- each impossible combination is a
+  // compile error -- stays true of the admin arm too.
+  //
+  // editClientId is only meaningful when the section is 'clients'; it is the
+  // price of opening a client's edit form from their check-in, and the
+  // alternatives are recorded in the slice 6l spec section 5 (a separate
   // destination kind means two routes to one screen and a menu bar that has to
-  // know one of them is not a menu item.
+  // know one of them is not a menu item). It arrived as
+  // `{ kind: 'admin'; section: AdminSection; editClientId?: number }`, which
+  // made `{ kind: 'admin', section: 'people', editClientId: 7 }` compile -- an
+  // id attached to a screen that cannot read it, which is exactly the
+  // sixteen-states-nobody-checks problem the comment above exists to refuse.
+  //
+  // Two arms instead. The id can only be written beside the one section it
+  // means something for, and `Exclude` rather than a hand-listed 'people' |
+  // 'revenue' so a FOURTH AdminSection joins the id-less arm automatically
+  // rather than being silently unrepresentable.
+  //
+  // WHAT THIS ACTUALLY GUARANTEES, precisely, because a comment that overstates
+  // a type is worse than none:
+  //   - `{ kind: 'admin', section: 'people', editClientId: 7 }` no longer
+  //     compiles. Writing an id beside a named section that cannot use it is
+  //     the excess-property error it should always have been.
+  //   - READING one back requires narrowing on `section === 'clients'` first,
+  //     so no screen can reach for an id the destination may not carry. Shell
+  //     does exactly that before handing it to Admin.
+  //   - The one hole left: an object literal whose `section` is a WIDENED
+  //     AdminSection and which also carries an editClientId still slips past
+  //     the excess-property check. `adminDestination` below exists for that
+  //     case and is the only way anything in this app builds an admin
+  //     destination from a non-literal section -- it narrows, so an id handed
+  //     in beside a non-clients section is DROPPED rather than attached to a
+  //     screen that will never read it.
   //
   // An id here is a REQUEST, NOT A PROMISE. ClientsAdmin opens that client if
   // it has them and renders its ordinary list if it does not.
-  | { kind: 'admin'; section: AdminSection; editClientId?: number }
+  | { kind: 'admin'; section: 'clients'; editClientId?: number }
+  | { kind: 'admin'; section: Exclude<AdminSection, 'clients'> }
 
 export type DestinationKind = Destination['kind']
 
@@ -78,6 +105,22 @@ export function adminSections(role: string): readonly AdminSection[] {
   return sections
 }
 
+// An admin destination from a section value that is not a literal -- the menu
+// bar's section switcher and openDestination both hold a plain AdminSection,
+// which is assignable to neither arm of the split union on its own.
+//
+// The narrowing here is the whole of it: `section === 'clients'` is what lets
+// the compiler place the id, and it is why an editClientId handed in alongside
+// any other section CANNOT be carried rather than being quietly attached to a
+// screen that will not read it. That refusal is the guarantee the union's
+// comment makes, enforced in the one function that builds these.
+export function adminDestination(
+  section: AdminSection,
+  editClientId?: number,
+): Destination {
+  return section === 'clients' ? { kind: 'admin', section, editClientId } : { kind: 'admin', section }
+}
+
 export function canSeeAdmin(role: string): boolean {
   return adminSections(role).length > 0
 }
@@ -117,7 +160,7 @@ export function openDestination(
     case 'admin': {
       // The FIRST section this person can see, never a hardcoded one.
       const [first] = adminSections(role)
-      return first ? { kind: 'admin', section: first } : null
+      return first ? adminDestination(first) : null
     }
   }
 }
