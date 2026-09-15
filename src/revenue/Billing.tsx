@@ -447,6 +447,7 @@ export function Billing({
           is vertical, and the rects' 2px corner radius is the only thing that
           stretches. */}
       <div className={styles.plot}>
+        <div className={styles.chartFrame}>
         {/* aria-hidden: read aloud, "$0 $25k $50k" between the chart's
             description and the table is noise. The table carries the numbers. */}
         {ceiling > 0 && (
@@ -666,6 +667,7 @@ export function Billing({
             </div>
           )
         })}
+        </div>
       </div>
       </div>
 

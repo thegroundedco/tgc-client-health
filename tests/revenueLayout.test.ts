@@ -191,34 +191,36 @@ describe('the revenue sections', () => {
   })
 })
 
-describe('the share overlay sits on the chart, not on the plot', () => {
-  // THIS SHIPPED WRONG ONCE AND NO DOM TEST COULD HAVE CAUGHT IT. jsdom does no
+describe('the share overlay sits exactly on the chart', () => {
+  // THIS SHIPPED WRONG AND NO DOM TEST COULD HAVE CAUGHT IT. jsdom does no
   // layout, so a rendered assertion cannot tell a label inside its segment from
-  // one floating above the bar. The owner caught it by looking at a screenshot:
-  // every project percentage on a short segment was drawn outside the bar.
+  // one floating above the bar. The owner caught it in a screenshot inside a
+  // minute: every project percentage on a short segment drew outside the bar.
   //
-  // The cause is that .plot is TALLER than the svg it contains, by .chart's own
-  // margin at each end. An overlay pinned to .plot draws every figure that far
-  // too high -- absorbed invisibly by a tall retainer segment, and fatal to a
-  // short project one. The two values must therefore agree, and this is the
-  // only place that can say so.
-  it('insets the overlay by exactly the margin the chart carries', () => {
-    const chart = sectionRule('.chart')
-    const shares = sectionRule('.shares')
-    const margin = /margin-block:\s*([^;]+);/.exec(chart)?.[1]?.trim()
-    const inset = /inset-block:\s*([^;]+);/.exec(shares)?.[1]?.trim()
-
-    expect(margin).toBeTruthy()
-    expect(inset).toBe(margin)
+  // The first fix offset the overlay by the chart's margin, which was wrong
+  // again -- an svg margin inside a parent with no block padding COLLAPSES
+  // THROUGH that parent, so the offset needed depended on a subtlety nobody
+  // should have to reason about to place a label.
+  //
+  // The arrangement that removes the question: a frame carries the margin, the
+  // svg inside it carries none, so the frame's box IS the chart's box and the
+  // overlay pins to it with inset: 0. These tests hold that arrangement in
+  // place, because any drift between the three rules puts the figures back
+  // outside the bars.
+  it('pins the overlay to the frame with no offset arithmetic', () => {
+    expect(/inset:\s*0\s*;/.test(sectionRule('.shares'))).toBe(true)
+    expect(sectionRule('.shares')).not.toContain('inset-block:')
+    expect(sectionRule('.shares')).not.toContain('inset-inline:')
   })
 
-  it('insets the overlay inline by the same room the plot leaves for the y axis', () => {
-    const plot = sectionRule('.plot')
-    const shares = sectionRule('.shares')
-    const padding = /padding-inline-start:\s*([^;]+);/.exec(plot)?.[1]?.trim()
-    const inset = /inset-inline:\s*([^;]+);/.exec(shares)?.[1]?.trim()
+  it('keeps the margin on the frame and off the chart', () => {
+    // If the svg regains a block margin, the frame is taller than the chart
+    // and every figure drifts -- the original bug, wearing a different hat.
+    expect(sectionRule('.chartFrame')).toMatch(/margin-block:\s*\S/)
+    expect(sectionRule('.chart')).not.toContain('margin-block')
+  })
 
-    expect(padding).toBeTruthy()
-    expect(inset).toBe(`${padding} 0`)
+  it('makes the frame a positioning context, or the overlay escapes to the plot', () => {
+    expect(sectionRule('.chartFrame')).toContain('position: relative')
   })
 })

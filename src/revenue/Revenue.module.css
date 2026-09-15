@@ -109,7 +109,11 @@
 .chart {
   inline-size: 100%;
   block-size: 200px;
-  margin-block: var(--space-3);
+  /* The margin lives on .chartFrame, NOT here. An svg with a block margin
+     inside a parent with no block padding lets that margin COLLAPSE THROUGH
+     the parent, which makes "where does the chart start" a question with two
+     defensible answers -- and an overlay has to know exactly. */
+  display: block;
   /* Bars are focusable for the keyboard tooltip, and a focus ring on an SVG
      child needs somewhere to draw: without this the ring is clipped by the
      viewport edge on the first and last month. */
@@ -729,19 +733,24 @@
   font-weight: 600;
 }
 
-/* The per-month shares, laid over the chart.
-   THE BLOCK INSET MUST MATCH .chart's OWN MARGIN, not zero. .plot is the
-   positioning context but it is TALLER than the svg by that margin at each
-   end, so an overlay pinned to .plot draws every label 12px high -- which a
-   tall retainer segment absorbs invisibly and a short project segment does
-   not, putting its figure outside the bar entirely. That is exactly how this
-   shipped the first time.
-   The inline inset matches .plot's own 3.5rem y-axis padding for the same
-   reason: the svg starts where that padding ends. */
+/* A box that IS the chart's box, so the overlay can pin to it with inset: 0
+   and no arithmetic.
+   The first attempt at this overlay pinned to .plot and offset by hand, which
+   was wrong twice over: .plot is taller than the svg, AND the svg's margin
+   collapses through it, so the correction needed depended on a margin-collapse
+   subtlety nobody should have to reason about to place a label. The frame
+   removes the question -- it carries the margin, the svg inside it carries
+   none, so frame box == chart box exactly. */
+.chartFrame {
+  position: relative;
+  margin-block: var(--space-3);
+}
+
+/* The per-month shares, laid over the chart. inset: 0 against .chartFrame,
+   which is exactly the svg's box. */
 .shares {
   position: absolute;
-  inset-block: var(--space-3);
-  inset-inline: 3.5rem 0;
+  inset: 0;
   pointer-events: none;
 }
 
