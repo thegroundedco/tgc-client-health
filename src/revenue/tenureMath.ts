@@ -210,3 +210,50 @@ export function summarise(rows: readonly CurrentRow[]): TenureSummary {
     longestDays: measured[measured.length - 1],
   }
 }
+
+/**
+ * How far back the churn section looks.
+ *
+ * The owner's ruling, 2026-09-15: "anything that is older than three months, we
+ * can hide from the churn section." It became worth doing when the 2025
+ * backfill created twenty-nine departed clients in one go -- "who has left"
+ * and "everyone who ever left" are different questions, and only the first is
+ * the one this section was built to answer.
+ */
+export const CHURN_WINDOW_MONTHS = 3
+
+/**
+ * Departures inside the window, anchored to `asOf`.
+ *
+ * ANCHORED TO TODAY, NOT TO THE DATA, and that is a deliberate inconsistency
+ * with every chart on this page. The charts anchor to the latest entered month
+ * because a calendar-anchored "last three months" would include months nobody
+ * has typed. A departure is not like that: it is a real-world event, and "who
+ * left recently" means recently in life, not recently in the spreadsheet.
+ *
+ * MONTH granularity, because a lifecycle boundary is a month everywhere else in
+ * this file -- and because a day-accurate cutoff would have to clamp 31 May
+ * minus three months onto a February that has no 31st.
+ *
+ * A churned client with NO end date is KEPT. They cannot be placed inside or
+ * outside the window, and dropping them would remove a real departure from the
+ * churn measure on the strength of missing data.
+ */
+export function recentDepartures(
+  rows: readonly DepartedRow[],
+  asOf: string,
+  months: number = CHURN_WINDOW_MONTHS,
+): DepartedRow[] {
+  // String arithmetic on the year and month numbers, never a parsed Date: a
+  // bare YYYY-MM-DD is UTC midnight, whose local month in January is the one
+  // before. The trap this file documents at length.
+  const year = Number(asOf.slice(0, 4))
+  const month = Number(asOf.slice(5, 7))
+  const total = year * 12 + (month - 1) - (months - 1)
+  const cutoff = `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-01`
+
+  return rows.filter((row) => {
+    if (row.client.ended_on === null) return true
+    return `${row.client.ended_on.slice(0, 7)}-01` >= cutoff
+  })
+}

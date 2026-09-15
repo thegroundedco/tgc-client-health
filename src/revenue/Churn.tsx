@@ -1,5 +1,5 @@
 import { reasonLabel } from '../clients/clientForm'
-import { formatDay, formatTenure } from './tenureMath'
+import { CHURN_WINDOW_MONTHS, formatDay, formatTenure, recentDepartures } from './tenureMath'
 import type { DepartedRow } from './tenureMath'
 import styles from './Revenue.module.css'
 
@@ -27,14 +27,20 @@ import styles from './Revenue.module.css'
 // therefore states the count and calls it too few, which stays FACTUALLY true
 // as the count grows even if it becomes editorially stale -- a strictly better
 // failure than the one it replaces. Do not invent a threshold constant here.
-export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
-  const departures = rows.length
+export function Churn({ asOf, rows }: { asOf: string; rows: readonly DepartedRow[] }) {
+  // The section windows its own rows rather than being handed them filtered,
+  // and that is the point: it needs BOTH numbers. Handed only the recent ones
+  // it could not tell "nobody has ever left" from "nobody has left lately",
+  // and its empty state asserts the first.
+  const recent = recentDepartures(rows, asOf)
+  const hidden = rows.length - recent.length
+  const departures = recent.length
 
   // started_on, NOT `days`. `days` is null for a missing start date AND for a
   // missing end date -- the list beside this renders 'unknown' for the second
   // case -- so a count taken from `days` would report a client who has a
   // perfectly good start date as lacking one.
-  const noStartDate = rows.filter((row) => row.client.started_on === null).length
+  const noStartDate = recent.filter((row) => row.client.started_on === null).length
 
   const rateClause =
     departures === 1
@@ -54,17 +60,30 @@ export function Churn({ rows }: { rows: readonly DepartedRow[] }) {
     <section className={styles.section}>
       <h3 className="t-subhead">Churn</h3>
 
-      {rows.length === 0 ? (
+      {recent.length === 0 ? (
         // An explicit empty state rather than a blank region, which reads as a
         // failed load.
-        <p className="t-body prose">
-          No churn yet: nobody has left. When a client is marked cancelled or former on the Admin
-          screen, they appear here with the reason recorded at the time.
-        </p>
+        //
+        // TWO DIFFERENT EMPTIES. "Nobody has ever left" and "nobody has left
+        // lately" are different facts, and the window introduced in slice 6k
+        // made the second one possible for the first time. Printing the first
+        // sentence when twenty-nine departures sit just outside the window
+        // would be the page stating something untrue.
+        hidden > 0 ? (
+          <p className="t-body prose">
+            Nobody has left in the last {CHURN_WINDOW_MONTHS} months. {hidden} earlier{' '}
+            {hidden === 1 ? 'departure is' : 'departures are'} not shown here.
+          </p>
+        ) : (
+          <p className="t-body prose">
+            No churn yet: nobody has left. When a client is marked cancelled or former on the Admin
+            screen, they appear here with the reason recorded at the time.
+          </p>
+        )
       ) : (
         <>
           <ul aria-label="Departures" className={styles.list} role="list">
-            {rows.map((row) => (
+            {recent.map((row) => (
               <li className={styles.row} key={row.client.id}>
                 <span className={styles.who}>
                   <span className="t-body">{row.client.name}</span>

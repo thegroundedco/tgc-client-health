@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  CHURN_WINDOW_MONTHS,
   currentRows,
   daysBetween,
   departedRows,
+  recentDepartures,
   formatDay,
   formatTenure,
   summarise,
@@ -312,5 +314,53 @@ describe('summarise', () => {
     expect(summarise([]).longestDays).toBe(null)
     expect(summarise(rowsFor(null, null)).medianDays).toBe(null)
     expect(summarise(rowsFor(null, null)).total).toBe(2)
+  })
+})
+
+describe('recentDepartures — churn shows who left lately, not everyone who ever left', () => {
+  // The owner, 2026-09-15: "anything that is older than three months, we can
+  // hide from the churn section. If they churned within the last three months,
+  // let's go ahead and show them."
+  //
+  // This became worth doing when the 2025 backfill created twenty-nine departed
+  // clients at once. A list of every departure the agency has ever had answers
+  // a different question from the one this section asks.
+  const at = (name: string, ended_on: string) => ({
+    client: client({ id: 1, name, status: 'former', started_on: null, ended_on, end_reason_code: 'other' }),
+    days: null,
+  })
+
+  it('keeps a departure in the anchor month', () => {
+    const rows = recentDepartures([at('Now', '2026-09-30')], '2026-09-15')
+    expect(rows.map((r) => r.client.name)).toEqual(['Now'])
+  })
+
+  it('keeps a departure two months back, and drops one three months back', () => {
+    const rows = recentDepartures(
+      [at('July', '2026-07-01'), at('June', '2026-06-30')],
+      '2026-09-15',
+    )
+    // MONTH granularity, deliberately: this codebase treats a lifecycle
+    // boundary as a month everywhere else ("a client who left on the 25th
+    // billed most of that month"), and a day-accurate cutoff would have to
+    // clamp 31 May minus three months onto a February that has no 31st.
+    expect(rows.map((r) => r.client.name)).toEqual(['July'])
+  })
+
+  it('drops a departure a year old', () => {
+    expect(recentDepartures([at('Ancient', '2025-09-30')], '2026-09-15')).toEqual([])
+  })
+
+  it('keeps a client whose end date is unknown rather than silently dropping them', () => {
+    // A churned client with no end date cannot be placed in or out of the
+    // window. Dropping them would remove a real departure from the churn
+    // measure on the strength of missing data -- the failure this project
+    // keeps refusing. They are shown, and Churn.tsx already renders "unknown".
+    const noDate = { client: client({ id: 9, name: 'Undated', status: 'former', started_on: null, ended_on: null, end_reason_code: 'other' }), days: null }
+    expect(recentDepartures([noDate], '2026-09-15').map((r) => r.client.name)).toEqual(['Undated'])
+  })
+
+  it('the window is three months', () => {
+    expect(CHURN_WINDOW_MONTHS).toBe(3)
   })
 })
