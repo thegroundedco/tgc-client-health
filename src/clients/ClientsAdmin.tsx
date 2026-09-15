@@ -9,7 +9,7 @@ import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
 
-type Props = { onWritingChange?: (writing: boolean) => void }
+type Props = { editClientId?: number; onWritingChange?: (writing: boolean) => void }
 
 // Spec §7: one screen, a list and a form, no modal. The list shows every client
 // regardless of status, because this is the screen where a former client has to
@@ -25,13 +25,31 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
     ?? 'Owner is not an active account'
 }
 
-export function ClientsAdmin({ onWritingChange }: Props) {
+export function ClientsAdmin({ editClientId, onWritingChange }: Props) {
   const admin = useClients()
 
   // Which row's form is open, by id rather than by row object: the hook replaces
   // the row object after a save (that is how the list shows the new name), and a
   // held object would then be the pre-save copy.
-  const [editingId, setEditingId] = useState<number | null>(null)
+  //
+  // An INITIAL value, not a new mechanism: the screen has always held
+  // editingId, and arriving from a check-in simply says which one to start on.
+  // If the id names a client this screen does not have -- archived since, or a
+  // stale request -- `editing` resolves to null below and the ordinary list
+  // renders. The id is a request, not a promise.
+  //
+  // IT IS READ ONCE, ON MOUNT, AND THIS DEPENDS ON THE SHELL UNMOUNTING Admin
+  // BETWEEN VISITS. That is true today: Shell.tsx renders <Admin> from a switch
+  // on destination.kind with no key holding it alive, so leaving the admin
+  // destination unmounts this component and arriving again mounts a fresh one
+  // that reads the new id. Key `Admin`, hoist it above the switch, or keep it
+  // mounted behind a hidden style, and this stops: useState ignores its initial
+  // argument on every render after the first, so the SECOND press of Edit client
+  // would navigate correctly and open nothing -- a button that silently does
+  // nothing, with no error to explain it. Whoever changes how Admin is mounted
+  // owns this line, and the fix then is an effect on editClientId, not a key
+  // here.
+  const [editingId, setEditingId] = useState<number | null>(editClientId ?? null)
   const editing = admin.clients.find((client) => client.id === editingId) ?? null
 
   // True while either write is in flight, for the same reason both forms disable

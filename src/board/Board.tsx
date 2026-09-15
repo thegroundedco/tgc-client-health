@@ -9,10 +9,11 @@ import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
 import type { BoardClient } from './useBoard'
+import { useClientRates } from './useClientRates'
 import { archivedCount, toggleLabel, visibleClients } from './boardScope'
 import styles from './Board.module.css'
 
-type Props = { profile: Profile }
+type Props = { profile: Profile; onEditClient: (clientId: number) => void }
 
 // The board reads and navigates. It no longer writes anything at all: `Score all
 // 3s` is gone, and the only write in the application is the check-in screen's
@@ -21,7 +22,7 @@ type Props = { profile: Profile }
 // done nothing, which is the second half of the finding this slice exists to
 // fix. The first half was that a save gave no feedback; each card's footer is
 // now that feedback, and it survives a reload, which a toast would not.
-export function Board({ profile }: Props) {
+export function Board({ profile, onEditClient }: Props) {
   // One period for the whole board, and for the check-in it opens. The two must
   // never disagree: a card summarising one month while its check-in edits
   // another is the kind of quiet mismatch that makes a person stop trusting the
@@ -59,11 +60,26 @@ export function Board({ profile }: Props) {
 
   const board = useBoard(period)
 
-  // Gated on manage_clients, like the admin screen this form also lives on.
-  // Defined above the early returns and included in the empty-roster branch as
-  // well as the populated one: a board with no clients is exactly when somebody
-  // needs to add one.
-  const canAddClient = can(profile.role, 'manage_clients')
+  // ONE capability, asked once, for both of this screen's admin affordances.
+  //
+  // Add client: gated on manage_clients, like the admin screen that form also
+  // lives on. Read above the early returns and used in the empty-roster branch
+  // as well as the populated one, because a board with no clients is exactly
+  // when somebody needs to add one.
+  //
+  // The rates read: gated at the READ, not the render. can() is the only
+  // capability check in this app, and this is the SAME capability -- the owner's
+  // ask ("if I have admin access") landed on manage_clients rather than
+  // view_revenue, because this is what a client is worth on the roster you
+  // manage, not the monthly revenue screen. A viewer who cannot manage clients
+  // issues no query at all; hiding a figure already fetched would not be a
+  // permission check, and useClientRates.dom.test.ts proves the hook honours it.
+  //
+  // Held under ONE name rather than two. It was `canAddClient` and
+  // `canSeeRates`, two names for one identical expression -- which reads as two
+  // rules that happen to agree today and invites somebody to change one of them.
+  const canManageClients = can(profile.role, 'manage_clients')
+  const { rates, status: ratesStatus } = useClientRates(canManageClients)
 
   // Split into a button and a panel on 2026-09-02, and the split is the point.
   // The button belongs in the period bar, at its end; the PANEL does not belong
@@ -72,7 +88,7 @@ export function Board({ profile }: Props) {
   // and the view toggles up against the card's heading. Held as one value, both
   // were forced into the same place.
   const addClientButton =
-    canAddClient && !adding ? (
+    canManageClients && !adding ? (
       // The filled .button rather than .button--quiet, the treatment "Try again"
       // already wears. Owner asked for a colour that reads as actionable, and
       // every hue in this brand is spoken for -- teal healthy, amber watch, red
@@ -85,7 +101,7 @@ export function Board({ profile }: Props) {
     ) : null
 
   const addClientPanel =
-    canAddClient && adding ? (
+    canManageClients && adding ? (
       <AddClientPanel
         onClose={() => {
           setAdding(false)
@@ -110,6 +126,7 @@ export function Board({ profile }: Props) {
           // save that did nothing.
           board.reload()
         }}
+        onEditClient={() => onEditClient(selected.id)}
         period={period}
         profile={profile}
       />
@@ -142,32 +159,34 @@ export function Board({ profile }: Props) {
     </button>
   ) : null
 
-  // Two buttons rather than one that says what it will become: a single
-  // "Matrix" button gives no indication that the current view is the cards, and
-  // aria-pressed on a pair says which of the two is showing without a person
-  // having to work it out from the label.
+  // ONE button, showing the view you are not on. The owner asked for this
+  // directly: "I'd like this to just be one button... when you're on cards, it
+  // shows matrix, and when you're on the matrix, the button changes to cards."
+  //
+  // This replaces a PAIR of buttons whose own comment argued against exactly
+  // this change -- that a lone "Matrix" gives no indication which view you are
+  // currently on, where aria-pressed on a pair does. That objection was about
+  // screen readers rather than taste, so it is kept rather than discarded: the
+  // VISIBLE word is the destination the owner wanted, and the ACCESSIBLE NAME
+  // is the action. A sighted reader gets one clean control; a screen-reader
+  // user hears "Switch to matrix view" instead of a bare noun.
+  //
+  // No aria-pressed. A control whose action changes on every press has no
+  // pressed state to report, and announcing one would be a lie on one of the
+  // two views.
   //
   // Deliberately not in the empty-roster branch below. A view switch that
   // reveals a second empty screen is a control with nothing to control.
+  const nextView = view === 'cards' ? 'matrix' : 'cards'
   const viewToggle = (
-    <div aria-label="View" className={styles.viewToggle} role="group">
-      <button
-        aria-pressed={view === 'cards'}
-        className="button button--quiet"
-        onClick={() => setView('cards')}
-        type="button"
-      >
-        Cards
-      </button>
-      <button
-        aria-pressed={view === 'matrix'}
-        className="button button--quiet"
-        onClick={() => setView('matrix')}
-        type="button"
-      >
-        Matrix
-      </button>
-    </div>
+    <button
+      aria-label={`Switch to ${nextView} view`}
+      className="button button--quiet"
+      onClick={() => setView(nextView)}
+      type="button"
+    >
+      {nextView === 'matrix' ? 'Matrix' : 'Cards'}
+    </button>
   )
 
   // Error before loading: a failed read must never fall through to a screen
@@ -266,6 +285,31 @@ export function Board({ profile }: Props) {
         {addClientButton && <div className={styles.addBar}>{addClientButton}</div>}
       </div>
 
+      {/* A FAILED REVENUE READ MUST NOT LOOK LIKE AN UNENTERED MONTH.
+          "A broken tool must never look like an empty one" is the defect this
+          branch already answers twice over -- and on this screen an absent
+          figure is not nothing, it is a STATEMENT: rateMath refuses to show a
+          zero precisely so that "no figure" means "nobody has entered revenue
+          for this client". If the read fails the hook returns an empty map, and
+          every card then makes that statement about every client, falsely.
+
+          So the hook's status is rendered rather than discarded. A quiet caption
+          rather than the whole-screen error the board gives a failed CHECK-IN
+          read: the check-ins ARE this screen, while revenue is one line on each
+          card, so taking the board away would cost more than it saves. The rest
+          of the board is still true.
+
+          Only for a viewer who asked for the read at all -- for everybody else
+          the hook is disabled and never reports anything -- and only on the
+          populated board: the empty-roster branch above draws no cards, so there
+          is no missing figure there to misread. */}
+      {canManageClients && ratesStatus === 'error' && (
+        <p className="t-caption" data-testid="rates-error" role="status">
+          Revenue could not be read, so no client is showing a rate. A missing
+          figure here is this failure, not a month nobody entered.
+        </p>
+      )}
+
       {addClientPanel}
 
       {view === 'matrix' ? (
@@ -293,6 +337,7 @@ export function Board({ profile }: Props) {
               client={client}
               key={client.id}
               onOpen={() => setSelected(client)}
+              rate={rates.get(client.id)}
               score={board.scores.get(client.id) ?? null}
               viewerId={profile.id}
             />

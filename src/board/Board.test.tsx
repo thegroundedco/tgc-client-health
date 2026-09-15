@@ -31,6 +31,15 @@ import styles from './Board.module.css'
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
 
+// Mocked alongside useBoard, for the same reason: the board's revenue read
+// needs a seam so a test can assert what argument it was called with, without
+// this file's mocked supabase throwing. A default implementation is supplied
+// so every test that does not care about revenue still renders a board with
+// no rates rather than an undefined destructure.
+vi.mock('./useClientRates', () => ({
+  useClientRates: vi.fn(() => ({ status: 'ready' as const, rates: new Map() })),
+}))
+
 // Board now renders AddClientPanel when the Add client button is pressed, and
 // AddClientPanel calls useClients, which imports supabase at module scope. That
 // import is mocked above as `{}`, so an unmocked useClients would call
@@ -48,8 +57,17 @@ vi.mock('../clients/useClients', () => ({
 
 import { Board } from './Board'
 import { useBoard } from './useBoard'
+import { useClientRates } from './useClientRates'
+import type { ClientRate } from './rateMath'
+import type { Role } from '../lib/capabilities'
 
 const ME = 'profile-1'
+
+// This file is about what the board reads and renders, never about where
+// pressing Edit client leads -- that wiring is Shell.tsx's job and is proved
+// in Shell.dom.test.tsx. A no-op here keeps every existing fixture compiling
+// against the new required prop without claiming to test navigation.
+const NOOP_EDIT_CLIENT = () => {}
 
 const PROFILE: Profile = {
   id: ME,
@@ -105,7 +123,15 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
 
 const given = (state: Partial<UseBoard> = {}) => {
   vi.mocked(useBoard).mockReturnValue(board(state))
-  return render(<Board profile={PROFILE} />)
+  return render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
+}
+
+// A variant that takes a role, for the two rate-gate cases below -- added
+// beside `given` rather than folded into it, because `given`'s signature is
+// depended on by eighteen existing call sites that all want PROFILE's role.
+const givenAs = (role: Role, state: Partial<UseBoard> = {}) => {
+  vi.mocked(useBoard).mockReturnValue(board(state))
+  return render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={{ ...PROFILE, role }} />)
 }
 
 const clientList = () => screen.queryByRole('list', { name: /clients/i })
@@ -125,9 +151,17 @@ const READY = {
   reload: vi.fn(),
 }
 
+// The rate map's default is restored here, not just cleared. Two tests below
+// override useClientRates' return value -- one to put a figure on a card, one
+// to fail the read -- and every other test in this file renders a board that
+// would destructure `undefined` if that override survived into it.
+const NO_RATES = () => ({ status: 'ready' as const, rates: new Map<number, ClientRate>() })
+
 afterEach(() => {
   document.body.innerHTML = ''
   vi.mocked(useBoard).mockReset()
+  vi.mocked(useClientRates).mockReset()
+  vi.mocked(useClientRates).mockImplementation(NO_RATES)
 })
 
 describe('the loaded client grid', () => {
@@ -312,21 +346,21 @@ describe('the show-archived toggle', () => {
 
   it('shows only the active roster by default', () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(cardNames()).toEqual(['Acme'])
   })
 
   it('offers a toggle naming how many are hidden', () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Show 2 archived' })).toBeTruthy()
   })
 
   it('reveals them, active roster first, and offers to hide them again', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
 
@@ -336,7 +370,7 @@ describe('the show-archived toggle', () => {
 
   it('hides them again', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 2 archived' }))
     await userEvent.click(screen.getByRole('button', { name: 'Hide 2 archived' }))
@@ -348,7 +382,7 @@ describe('the show-archived toggle', () => {
     // A control that reveals nothing is worse than no control: it implies
     // there is something hidden.
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
   })
@@ -358,7 +392,7 @@ describe('the show-archived toggle', () => {
     // that three check-ins are owed this month, two of them for a paused
     // client and a client who has left.
     vi.mocked(useBoard).mockReturnValue({ ...MIXED, submitted: 1 })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('status').textContent).toBe(
       `All 1 check-ins submitted for ${formatPeriod(defaultPeriod())}`,
@@ -383,7 +417,7 @@ describe('the show-archived toggle', () => {
       activeTotal: 0,
       submitted: 0,
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByText('No active clients')).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 archived' }))
@@ -401,7 +435,7 @@ describe('the show-archived toggle', () => {
       activeTotal: 0,
       submitted: 0,
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByText('No active clients')).toBeTruthy()
     expect(screen.getByText('Add one to see it here.')).toBeTruthy()
@@ -410,7 +444,7 @@ describe('the show-archived toggle', () => {
 
   it('marks the toggle expanded or collapsed for a screen reader', async () => {
     vi.mocked(useBoard).mockReturnValue(MIXED)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const toggle = screen.getByRole('button', { name: 'Show 2 archived' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
@@ -435,7 +469,7 @@ describe('the show-archived toggle', () => {
       status: 'error',
       loadError: 'the connection failed',
     })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -443,26 +477,46 @@ describe('the show-archived toggle', () => {
 })
 
 describe('the Cards | Matrix toggle', () => {
-  const cardsButton = () => screen.getByRole('button', { name: 'Cards' })
-  const matrixButton = () => screen.getByRole('button', { name: 'Matrix' })
+  // Slice 6l. One button showing the view you are NOT on, at the owner's
+  // request. The visible word is the destination; the accessible name is the
+  // action, which is what keeps the screen-reader half of the old two-button
+  // arrangement -- a lone noun never says which view you are currently on.
+  const viewButton = () => screen.getByRole('button', { name: /switch to (matrix|cards) view/i })
+
+  it('offers the matrix while showing the cards', () => {
+    given(READY)
+    expect(viewButton().textContent).toBe('Matrix')
+    expect(viewButton().getAttribute('aria-label')).toBe('Switch to matrix view')
+  })
+
+  it('offers the cards once the matrix is showing', async () => {
+    given(READY)
+    await userEvent.click(viewButton())
+    expect(viewButton().textContent).toBe('Cards')
+    expect(viewButton().getAttribute('aria-label')).toBe('Switch to cards view')
+  })
+
+  it('carries no aria-pressed, because it is not a toggle', () => {
+    // A control whose action changes on every press has no pressed state to
+    // report. aria-pressed here would announce a lie on one of the two views.
+    given(READY)
+    expect(viewButton().hasAttribute('aria-pressed')).toBe(false)
+  })
 
   it('opens on the cards, which is where the monthly work is done', () => {
     given()
     expect(clientList()).toBeTruthy()
     expect(screen.queryByTestId('matrix-table')).toBeNull()
-    expect(cardsButton().getAttribute('aria-pressed')).toBe('true')
-    expect(matrixButton().getAttribute('aria-pressed')).toBe('false')
   })
 
   it('swaps the cards for the table, and back', () => {
     given()
 
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
     expect(screen.getByTestId('matrix-table')).toBeTruthy()
     expect(clientList()).toBeNull()
-    expect(matrixButton().getAttribute('aria-pressed')).toBe('true')
 
-    fireEvent.click(cardsButton())
+    fireEvent.click(viewButton())
     expect(clientList()).toBeTruthy()
     expect(screen.queryByTestId('matrix-table')).toBeNull()
   })
@@ -471,7 +525,7 @@ describe('the Cards | Matrix toggle', () => {
     // The whole reason this is a view of the board rather than a screen of its
     // own: one period, and nowhere for a second one to drift.
     given()
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
 
     const select = screen.getByRole('combobox', { name: 'Month' }) as HTMLSelectElement
     const target = periodOptions()[4]
@@ -492,7 +546,7 @@ describe('the Cards | Matrix toggle', () => {
       ],
       activeTotal: 1,
     })
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
 
     expect(screen.getAllByTestId('matrix-row')).toHaveLength(1)
     // The name alone: the client cell also carries the band word, so reading the
@@ -511,7 +565,7 @@ describe('the Cards | Matrix toggle', () => {
     // asserts it, and for the same reason: the board is unmounted once the
     // check-in opens, so the month can only be coming from the check-in screen.
     given()
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
     const shown = previousPeriod(defaultPeriod())
     fireEvent.change(screen.getByRole('combobox', { name: 'Month' }), {
       target: { value: shown },
@@ -526,7 +580,7 @@ describe('the Cards | Matrix toggle', () => {
 describe('adding a client from the Clients tab', () => {
   it('offers the button to an account manager, who can manage clients', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(screen.getByRole('button', { name: 'Add client' })).toBeTruthy()
   })
@@ -536,14 +590,14 @@ describe('adding a client from the Clients tab', () => {
   // hidden because a control that always fails is worse than no control.
   it('does not draw it for a viewer', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={{ ...PROFILE, role: 'viewer' }} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={{ ...PROFILE, role: 'viewer' }} />)
 
     expect(screen.queryByRole('button', { name: 'Add client' })).toBeNull()
   })
 
   it('reveals the form when pressed', async () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
     expect(screen.getByLabelText(/name/i)).toBeTruthy()
@@ -557,7 +611,7 @@ describe('adding a client from the Clients tab', () => {
   it('reloads the board when the panel is closed, so an added client appears', async () => {
     const reload = vi.fn()
     vi.mocked(useBoard).mockReturnValue({ ...READY, reload })
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
     await userEvent.click(screen.getByRole('button', { name: 'Done' }))
@@ -588,7 +642,7 @@ describe('adding a client from the Clients tab', () => {
 describe('the add-client button as the primary action', () => {
   it('is the filled button, not a quiet one', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const add = screen.getByRole('button', { name: 'Add client' })
     expect(add.className).toContain('button')
@@ -600,7 +654,7 @@ describe('the add-client button as the primary action', () => {
   // test can see.
   it('sits in the period bar, in the wrapper that right-aligns it', () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     const bar = document.querySelector(`.${styles.periodBar}`)
     expect(bar).not.toBeNull()
@@ -616,7 +670,7 @@ describe('the add-client button as the primary action', () => {
   // moves out of the row entirely and the button alone stays in it.
   it('opens the panel below the period bar, not inside it', async () => {
     vi.mocked(useBoard).mockReturnValue(READY)
-    render(<Board profile={PROFILE} />)
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
 
@@ -624,5 +678,117 @@ describe('the add-client button as the primary action', () => {
     const nameField = screen.getByLabelText(/name/i)
     expect(bar).not.toBeNull()
     expect(bar?.contains(nameField)).toBe(false)
+  })
+})
+
+// The read is gated, not just the display. Hiding a figure that was already
+// fetched is not a permission check -- the query must never be issued for a
+// viewer who cannot see revenue. This file mocks useBoard, not the Supabase
+// client, so the assertion is on the hook's own argument: useClientRates is
+// called with `false` or `true` depending on manage_clients, and a rendered
+// figure is never proof the query didn't happen (a leftover default rate map
+// from a previous render would still be absent, which is why the assertion
+// below is on the call, not on the screen).
+describe('gating the revenue read', () => {
+  it('issues no revenue read for a viewer who may not see rates', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('viewer')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(false)
+  })
+
+  it('does read them for an account manager, who may', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('account_manager')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(true)
+  })
+
+  it('does read them for an admin, who may', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('admin')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(true)
+  })
+})
+
+// FINAL-REVIEW FINDING 2: the headline feature's wiring had no test at all.
+//
+// This file mocked useClientRates to an empty Map in every test and never once
+// overrode it, so `rate={rates.get(client.id)}` in Board.tsx was a surviving
+// mutant: deleting the prop, or passing `undefined`, left the whole suite green
+// while no card could ever show a figure. The gate tests above are not this --
+// they prove what argument the board PASSES the hook, never what it does with
+// what comes back.
+//
+// So the mocked hook returns a populated map here, and the assertion is that
+// the figure lands on the RIGHT card. Scoped `within` the matching list item,
+// because a rate rendered on every card, or on the wrong one, would satisfy a
+// page-wide getByTestId.
+describe('the rate on a client card', () => {
+  const RETAINER: ClientRate = { cents: 400_000, kind: 'retainer' }
+
+  // Colorfil is CLIENTS[1] -- deliberately not the first card, so a board that
+  // ignored the id and handed every card the first rate it found would fail.
+  const cardFor = (name: string) =>
+    screen.getAllByRole('listitem').find((item) => within(item).queryByText(name) !== null)!
+
+  it('renders the figure on the card of the client it belongs to', () => {
+    vi.mocked(useClientRates).mockReturnValue({ status: 'ready', rates: new Map([[2, RETAINER]]) })
+    given()
+
+    const rate = within(cardFor('Colorfil')).getByTestId('client-card-rate')
+    expect(rate.textContent).toContain('$4,000')
+    expect(rate.textContent).toContain('a month')
+  })
+
+  it('leaves every other card without one -- a missing row is never a zero', () => {
+    vi.mocked(useClientRates).mockReturnValue({ status: 'ready', rates: new Map([[2, RETAINER]]) })
+    given()
+
+    expect(within(cardFor('Babaloo')).queryByTestId('client-card-rate')).toBeNull()
+    expect(within(cardFor('Sno-Go')).queryByTestId('client-card-rate')).toBeNull()
+    // Not a zero anywhere on the board, for the two clients with no row.
+    expect(screen.getAllByTestId('client-card-rate')).toHaveLength(1)
+  })
+})
+
+// FINAL-REVIEW FINDING 3: a failed revenue read looked exactly like "nobody has
+// entered revenue".
+//
+// Board destructured only `rates` and threw `status` away. On an error the hook
+// returns an empty map, so every card fell silent -- and on this screen silence
+// is a STATEMENT, because rateMath refuses to render a zero precisely so that a
+// missing figure means "nobody entered one". "A broken tool must never look like
+// an empty one" is quoted twice in this branch; this is that defect.
+describe('when the revenue read fails', () => {
+  const failed = { status: 'error' as const, rates: new Map<number, ClientRate>() }
+
+  it('says so, rather than letting every card read as an unentered month', () => {
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    given()
+
+    const caption = screen.getByTestId('rates-error')
+    expect(caption.textContent).toMatch(/revenue could not be read/i)
+  })
+
+  it('keeps the rest of the board, which is still true', () => {
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    given()
+
+    // Not the whole-screen error a failed CHECK-IN read gets: the check-ins are
+    // this screen, and revenue is one line per card.
+    expect(clientList()).toBeTruthy()
+    expect(screen.getAllByRole('listitem')).toHaveLength(CLIENTS.length)
+  })
+
+  it('says nothing to a viewer, whose read was never issued', () => {
+    // The hook is disabled for them and reports no error, so the caption must
+    // not appear -- but assert it against the error status anyway, so this
+    // cannot pass merely because the fixture happened to be 'ready'.
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    givenAs('viewer')
+
+    expect(screen.queryByTestId('rates-error')).toBeNull()
   })
 })

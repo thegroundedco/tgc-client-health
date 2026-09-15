@@ -19,10 +19,11 @@ import type { UseBoard } from '../board/useBoard'
 // rendered the same placeholder as every other test and passed with navigation
 // entirely broken. The two tests below swap in the REAL Board, with useBoard
 // mocked, so a failed read and an empty roster are genuinely on screen.
-let boardImpl: (props: { profile: Profile }) => ReactNode = () => <CountingBoard />
+type BoardProps = { profile: Profile; onEditClient: (clientId: number) => void }
+let boardImpl: (props: BoardProps) => ReactNode = () => <CountingBoard />
 
 vi.mock('../board/Board', () => ({
-  Board: (props: { profile: Profile }) => boardImpl(props),
+  Board: (props: BoardProps) => boardImpl(props),
 }))
 vi.mock('../board/useBoard', () => ({ useBoard: vi.fn() }))
 // Needed only by the real-Board tests: Board renders CheckIn, CheckIn uses
@@ -30,6 +31,15 @@ vi.mock('../board/useBoard', () => ({ useBoard: vi.fn() }))
 // scope when no VITE_ config is present. Board.test.tsx carries the same line
 // for the same reason.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
+// Needed for the same reason as the supabase mock above: the real-Board tests
+// reach past this file's Board stub via importActual, and Board now calls
+// useClientRates, whose default profile here is admin -- so without this the
+// hook would run for real against the stubbed `{}` client and throw
+// `supabase.from is not a function` as an unhandled rejection from inside the
+// effect.
+vi.mock('../board/useClientRates', () => ({
+  useClientRates: vi.fn(() => ({ status: 'ready' as const, rates: new Map() })),
+}))
 vi.mock('../clients/ClientsAdmin', () => ({ ClientsAdmin: () => <p>client roster</p> }))
 // UsersAdmin stands in for any destination that can have a write in flight. The
 // real screen reports its `writing` value from an effect; this one reports it on

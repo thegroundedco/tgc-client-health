@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adminDestination,
   adminSections,
   canSeeAdmin,
   canSeeDestination,
@@ -7,6 +8,7 @@ import {
   LANDING,
   openDestination,
 } from './destination'
+import type { Destination } from './destination'
 
 describe('the destination list', () => {
   // Note what this cannot catch, and where that is covered instead. This pins
@@ -160,5 +162,45 @@ describe('the revenue gates', () => {
     // the revenue screens by a lookup that missed.
     expect(canSeeDestination('revenue', 'sales')).toBe(false)
     expect(adminSections('sales')).toEqual([])
+  })
+})
+
+// FINAL-REVIEW FINDING 5: the union's own comment promises each impossible
+// combination is a compile error, and the admin arm had stopped keeping that
+// promise -- `{ kind: 'admin', section: 'people', editClientId: 7 }` compiled,
+// attaching a client id to a screen that cannot read one.
+describe('the admin destination, and the id only one section can carry', () => {
+  // A TYPE-LEVEL assertion, and it fails the BUILD rather than this run --
+  // which is the only place it could live, because the thing being refused is
+  // a value that must never exist. @ts-expect-error is itself the assertion:
+  // if the arms are ever merged back into one, the error disappears, the
+  // directive becomes unused, and `tsc -b` fails on THIS line. `npm run build`
+  // is therefore part of what covers this describe.
+  it('refuses an id beside a section that cannot use one', () => {
+    // @ts-expect-error -- editClientId belongs to the 'clients' arm alone.
+    const impossible: Destination = { kind: 'admin', section: 'people', editClientId: 7 }
+    expect(impossible.kind).toBe('admin')
+  })
+
+  // The runtime half, for the hole the excess-property check cannot see: a
+  // WIDENED AdminSection carrying an id. adminDestination narrows, so the id is
+  // dropped rather than smuggled onto a screen that will never read it.
+  it('carries the id when the section is clients', () => {
+    expect(adminDestination('clients', 7)).toEqual({
+      kind: 'admin',
+      section: 'clients',
+      editClientId: 7,
+    })
+  })
+
+  it('DROPS an id handed in beside any other section', () => {
+    const section: 'people' | 'clients' = 'people'
+    expect(adminDestination(section, 7)).toStrictEqual({ kind: 'admin', section: 'people' })
+    expect(adminDestination('revenue', 7)).toStrictEqual({ kind: 'admin', section: 'revenue' })
+  })
+
+  it('builds a plain destination when no id is offered', () => {
+    expect(adminDestination('clients')).toEqual({ kind: 'admin', section: 'clients' })
+    expect(adminDestination('people')).toStrictEqual({ kind: 'admin', section: 'people' })
   })
 })
