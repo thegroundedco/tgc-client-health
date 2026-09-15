@@ -1103,6 +1103,27 @@ describe('Billing — the share of each month, written into the bar', () => {
     expect(screen.queryByText('1%')).toBeNull()
   })
 
+  it('keeps the scale outside the overlay frame, where it can still reach the gutter', () => {
+    // A REGRESSION I SHIPPED. The frame that carries the chart's box was
+    // opened one line too early and swallowed the y axis. That axis is
+    // absolutely positioned against .plot's inline padding, so re-anchoring it
+    // to the frame printed "$75k $50k $25k $0" straight across the first bar.
+    //
+    // Ancestry is the one part of this jsdom CAN check -- it does no layout, so
+    // it cannot see the overlap itself, but it can see the containment that
+    // causes it.
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    const { container } = render(
+      <Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />,
+    )
+
+    const axis = container.querySelector('[data-testid="billing-y-axis"]')
+    const shares = container.querySelector('[class*="shares"]')
+    expect(axis).not.toBeNull()
+    expect(shares).not.toBeNull()
+    expect(shares!.parentElement!.contains(axis)).toBe(false)
+  })
+
   it('writes no shares on a month nobody billed', () => {
     // A month with an entered row of zero has no composition. "0%" twice would
     // state a split that does not exist.

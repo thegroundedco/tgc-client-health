@@ -447,7 +447,6 @@ export function Billing({
           is vertical, and the rects' 2px corner radius is the only thing that
           stretches. */}
       <div className={styles.plot}>
-        <div className={styles.chartFrame}>
         {/* aria-hidden: read aloud, "$0 $25k $50k" between the chart's
             description and the table is noise. The table carries the numbers. */}
         {ceiling > 0 && (
@@ -465,6 +464,11 @@ export function Billing({
           </span>
         )}
 
+        {/* The frame wraps the svg and its overlay ONLY. It must not contain the
+            y axis: that is absolutely positioned against .plot's inline
+            padding, and a frame around it re-anchors it to the frame's edge,
+            printing the scale on top of the first bar. */}
+        <div className={styles.chartFrame}>
       <svg
         aria-label={summary}
         className={styles.chart}
