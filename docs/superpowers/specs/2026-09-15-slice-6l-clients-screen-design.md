@@ -53,10 +53,20 @@ sixteen states nobody checks. Carrying a client id across a page change widens i
 the union was written to avoid, and it is the cost of the feature; §5 records what was considered
 instead.
 
-**Flow:** the card's open panel gains an **Edit client** button, visible only to a viewer with
-`manage_clients` — the same capability check the board already makes for **Add client**, reused
-rather than reinvented. Pressing it navigates to the clients admin section with that id, and
-`ClientsAdmin` opens that client's existing edit form on arrival.
+**Flow.** Clicking a card does not open a panel — it replaces the board with that client's
+**check-in screen**, which is where the owner means by "click into a card and it opens up their
+card". The **Edit client** button therefore belongs on the check-in screen, beside its existing
+Back button, visible only to a viewer with `manage_clients` — the same capability check the board
+already makes for **Add client**, reused rather than reinvented.
+
+Pressing it navigates to the clients admin section with that id, and `ClientsAdmin` opens that
+client's existing edit form on arrival.
+
+**The board does not navigate today, and that is deliberate** — "Navigation left this file in Slice
+6a", because the menu bar in the shell is always drawn. So the callback is threaded from the shell
+rather than the board reaching for a router: `Shell` hands `Board` an `onEditClient`, `Board` hands
+it to `CheckIn`, and only `Shell` knows what a destination is. Three components learn one prop
+each; none of them learns routing.
 
 **`ClientsAdmin` already holds `editingId` state.** It gains an initial value, not a new mechanism.
 The form itself, its validation and its save path are untouched.
