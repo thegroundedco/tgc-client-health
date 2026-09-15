@@ -27,16 +27,28 @@ export function useClientRates(enabled: boolean): {
     async (isCancelled: () => boolean) => {
       if (!enabled) return
       setStatus('loading')
-      const { data, error } = await supabase
-        .from('client_month_revenue')
-        .select('client_id, period, retainer_cents, project_cents')
-      if (isCancelled()) return
-      if (error) {
+
+      // Matching useRevenue's shape: a REJECTED promise (a network failure, not
+      // a resolved `{ data, error }`) must not escape this effect as an
+      // unhandled rejection. Board.test.tsx and Shell.dom.test.tsx both mock the
+      // client, which hid this until a real network fault would have hit it in
+      // production -- the same failure mode `try/catch` exists to catch in
+      // useRevenue.ts.
+      try {
+        const { data, error } = await supabase
+          .from('client_month_revenue')
+          .select('client_id, period, retainer_cents, project_cents')
+        if (isCancelled()) return
+        if (error) {
+          setStatus('error')
+          return
+        }
+        setRates(currentRates((data ?? []) as RateRow[]))
+        setStatus('ready')
+      } catch {
+        if (isCancelled()) return
         setStatus('error')
-        return
       }
-      setRates(currentRates((data ?? []) as RateRow[]))
-      setStatus('ready')
     },
     [enabled],
   )

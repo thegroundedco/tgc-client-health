@@ -55,4 +55,13 @@ describe('currentRates — what a client is worth per month, now', () => {
     const rates = currentRates([row(7, '2026-09-01', 500_000, 200_000)])
     expect(rates.get(7)).toEqual({ cents: 500_000, kind: 'retainer' })
   })
+
+  it('gives no rate when the latest month is zero, even though an earlier month was not', () => {
+    // The stale-as-current bug: filtering zero rows out BEFORE choosing
+    // "latest" would let July win by default and show $4,000 as this client's
+    // rate months after they dropped to $0 -- a wrong figure in the flattering
+    // direction, on a card whose whole job is saying what they are worth now.
+    const rates = currentRates([row(8, '2026-07-01', 400_000), row(8, '2026-09-01', 0, 0)])
+    expect(rates.get(8)).toBeUndefined()
+  })
 })
