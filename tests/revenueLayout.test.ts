@@ -190,3 +190,35 @@ describe('the revenue sections', () => {
     expect(sectionRule('.retentionTick')).toContain('text-anchor: end')
   })
 })
+
+describe('the share overlay sits on the chart, not on the plot', () => {
+  // THIS SHIPPED WRONG ONCE AND NO DOM TEST COULD HAVE CAUGHT IT. jsdom does no
+  // layout, so a rendered assertion cannot tell a label inside its segment from
+  // one floating above the bar. The owner caught it by looking at a screenshot:
+  // every project percentage on a short segment was drawn outside the bar.
+  //
+  // The cause is that .plot is TALLER than the svg it contains, by .chart's own
+  // margin at each end. An overlay pinned to .plot draws every figure that far
+  // too high -- absorbed invisibly by a tall retainer segment, and fatal to a
+  // short project one. The two values must therefore agree, and this is the
+  // only place that can say so.
+  it('insets the overlay by exactly the margin the chart carries', () => {
+    const chart = sectionRule('.chart')
+    const shares = sectionRule('.shares')
+    const margin = /margin-block:\s*([^;]+);/.exec(chart)?.[1]?.trim()
+    const inset = /inset-block:\s*([^;]+);/.exec(shares)?.[1]?.trim()
+
+    expect(margin).toBeTruthy()
+    expect(inset).toBe(margin)
+  })
+
+  it('insets the overlay inline by the same room the plot leaves for the y axis', () => {
+    const plot = sectionRule('.plot')
+    const shares = sectionRule('.shares')
+    const padding = /padding-inline-start:\s*([^;]+);/.exec(plot)?.[1]?.trim()
+    const inset = /inset-inline:\s*([^;]+);/.exec(shares)?.[1]?.trim()
+
+    expect(padding).toBeTruthy()
+    expect(inset).toBe(`${padding} 0`)
+  })
+})

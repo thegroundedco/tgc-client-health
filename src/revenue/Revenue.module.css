@@ -729,13 +729,18 @@
   font-weight: 600;
 }
 
-/* The per-month shares, laid over the chart. Absolute within .plot, inset to
-   match the svg's own box -- .plot pads 3.5rem at the inline start for the y
-   axis, and the svg fills what is left, so the overlay must start where the
-   svg does or every label drifts right. */
+/* The per-month shares, laid over the chart.
+   THE BLOCK INSET MUST MATCH .chart's OWN MARGIN, not zero. .plot is the
+   positioning context but it is TALLER than the svg by that margin at each
+   end, so an overlay pinned to .plot draws every label 12px high -- which a
+   tall retainer segment absorbs invisibly and a short project segment does
+   not, putting its figure outside the bar entirely. That is exactly how this
+   shipped the first time.
+   The inline inset matches .plot's own 3.5rem y-axis padding for the same
+   reason: the svg starts where that padding ends. */
 .shares {
   position: absolute;
-  inset-block: 0;
+  inset-block: var(--space-3);
   inset-inline: 3.5rem 0;
   pointer-events: none;
 }
