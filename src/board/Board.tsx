@@ -9,6 +9,7 @@ import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
 import { useBoard } from './useBoard'
 import type { BoardClient } from './useBoard'
+import { useClientRates } from './useClientRates'
 import { archivedCount, toggleLabel, visibleClients } from './boardScope'
 import styles from './Board.module.css'
 
@@ -64,6 +65,16 @@ export function Board({ profile, onEditClient }: Props) {
   // well as the populated one: a board with no clients is exactly when somebody
   // needs to add one.
   const canAddClient = can(profile.role, 'manage_clients')
+
+  // Gated at the READ. can() is the only capability check in this app, and the
+  // board already asks it for Add client -- the same capability, because the
+  // owner's ask ("if I have admin access") landed on manage_clients rather than
+  // view_revenue: this is what a client is worth on the roster you manage, not
+  // the monthly revenue screen. A viewer who cannot manage clients issues no
+  // query at all; hiding a figure already fetched would not be a permission
+  // check.
+  const canSeeRates = can(profile.role, 'manage_clients')
+  const { rates } = useClientRates(canSeeRates)
 
   // Split into a button and a panel on 2026-09-02, and the split is the point.
   // The button belongs in the period bar, at its end; the PANEL does not belong
@@ -296,6 +307,7 @@ export function Board({ profile, onEditClient }: Props) {
               client={client}
               key={client.id}
               onOpen={() => setSelected(client)}
+              rate={rates.get(client.id)}
               score={board.scores.get(client.id) ?? null}
               viewerId={profile.id}
             />

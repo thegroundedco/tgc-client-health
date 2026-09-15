@@ -4,9 +4,11 @@ import { bandClassName } from '../styles/bandClass'
 import { BUCKET_SCORE_KEY, cardFooter } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
+import type { ClientRate } from './rateMath'
 import styles from './ClientCard.module.css'
 import { isChurned, statusLabel } from '../clients/clientForm'
 import { isOpenable, notOpenableReason } from './boardScope'
+import { formatMoney } from '../revenue/money'
 
 type Props = {
   client: BoardClient
@@ -14,9 +16,10 @@ type Props = {
   score: BoardScore | null
   viewerId: string
   onOpen: () => void
+  rate?: ClientRate
 }
 
-export function ClientCard({ client, checkin, score, viewerId, onOpen }: Props) {
+export function ClientCard({ client, checkin, score, viewerId, onOpen, rate }: Props) {
   // From the view, never recomputed here. The overall cannot be a generated
   // column (spec §6), so the view is the one place it exists -- and `npm run
   // verify:scoring-view` is what proves that expression is right. A second
@@ -80,6 +83,19 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen }: Props) 
         </span>
         <span className="t-caption numeric">/ {MAX_SCORE}</span>
       </p>
+
+      {/* Revenue, for a viewer who may see it -- gated at the READ in Board.tsx,
+          not here: `rate` simply arrives undefined for anyone else, and a
+          missing row is never a zero. A project client's card names their
+          latest fee as project work and derives nothing further; that
+          derivation is fee over duration, which belongs to the lifetime-value
+          slice, not this one. */}
+      {rate !== undefined && (
+        <p className="t-caption" data-testid="client-card-rate">
+          {formatMoney(rate.cents)}
+          {rate.kind === 'retainer' ? ' a month' : ' project work'}
+        </p>
+      )}
 
       {/* One bar per bucket, in rubric order -- the reader compares the same
           position across eleven cards, so the order cannot come from the row's

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ClientCard } from './ClientCard'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
+import type { ClientRate } from './rateMath'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -23,6 +24,7 @@ type RenderOptions = {
   score?: BoardScore | null
   viewerId?: string
   onOpen?: () => void
+  rate?: ClientRate
 }
 
 function renderCard(overrides: RenderOptions = {}) {
@@ -32,9 +34,17 @@ function renderCard(overrides: RenderOptions = {}) {
     score = null,
     viewerId = ME,
     onOpen = () => {},
+    rate,
   } = overrides
   return render(
-    <ClientCard checkin={checkin} client={client} onOpen={onOpen} score={score} viewerId={viewerId} />,
+    <ClientCard
+      checkin={checkin}
+      client={client}
+      onOpen={onOpen}
+      rate={rate}
+      score={score}
+      viewerId={viewerId}
+    />,
   )
 }
 
@@ -326,6 +336,25 @@ describe('a client card', () => {
       score: { client_id: 7, overall_score: 3.5, advocacy_applies: true },
     })
     expect(screen.getByText('Watch')).not.toBeNull()
+  })
+})
+
+describe('what a client is worth per month, on the card', () => {
+  it('shows a retainer client their monthly rate', () => {
+    renderCard({ rate: { cents: 500_000, kind: 'retainer' } })
+    expect(screen.getByTestId('client-card-rate').textContent).toMatch(/\$5,000 a month/)
+  })
+
+  it('names project work rather than calling it a monthly rate', () => {
+    renderCard({ rate: { cents: 900_000, kind: 'project' } })
+    expect(screen.getByTestId('client-card-rate').textContent).toMatch(/project work/)
+    expect(screen.getByTestId('client-card-rate').textContent).not.toMatch(/a month/)
+  })
+
+  it('shows nothing at all when there is no rate', () => {
+    // Not $0. A missing row is not a zero anywhere in this codebase.
+    renderCard({})
+    expect(screen.queryByTestId('client-card-rate')).toBeNull()
   })
 })
 

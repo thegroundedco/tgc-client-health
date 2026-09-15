@@ -31,6 +31,15 @@ import styles from './Board.module.css'
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
 
+// Mocked alongside useBoard, for the same reason: the board's revenue read
+// needs a seam so a test can assert what argument it was called with, without
+// this file's mocked supabase throwing. A default implementation is supplied
+// so every test that does not care about revenue still renders a board with
+// no rates rather than an undefined destructure.
+vi.mock('./useClientRates', () => ({
+  useClientRates: vi.fn(() => ({ status: 'ready' as const, rates: new Map() })),
+}))
+
 // Board now renders AddClientPanel when the Add client button is pressed, and
 // AddClientPanel calls useClients, which imports supabase at module scope. That
 // import is mocked above as `{}`, so an unmocked useClients would call
@@ -48,6 +57,8 @@ vi.mock('../clients/useClients', () => ({
 
 import { Board } from './Board'
 import { useBoard } from './useBoard'
+import { useClientRates } from './useClientRates'
+import type { Role } from '../lib/capabilities'
 
 const ME = 'profile-1'
 
@@ -112,6 +123,14 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
 const given = (state: Partial<UseBoard> = {}) => {
   vi.mocked(useBoard).mockReturnValue(board(state))
   return render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
+}
+
+// A variant that takes a role, for the two rate-gate cases below -- added
+// beside `given` rather than folded into it, because `given`'s signature is
+// depended on by eighteen existing call sites that all want PROFILE's role.
+const givenAs = (role: Role, state: Partial<UseBoard> = {}) => {
+  vi.mocked(useBoard).mockReturnValue(board(state))
+  return render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={{ ...PROFILE, role }} />)
 }
 
 const clientList = () => screen.queryByRole('list', { name: /clients/i })
@@ -650,5 +669,36 @@ describe('the add-client button as the primary action', () => {
     const nameField = screen.getByLabelText(/name/i)
     expect(bar).not.toBeNull()
     expect(bar?.contains(nameField)).toBe(false)
+  })
+})
+
+// The read is gated, not just the display. Hiding a figure that was already
+// fetched is not a permission check -- the query must never be issued for a
+// viewer who cannot see revenue. This file mocks useBoard, not the Supabase
+// client, so the assertion is on the hook's own argument: useClientRates is
+// called with `false` or `true` depending on manage_clients, and a rendered
+// figure is never proof the query didn't happen (a leftover default rate map
+// from a previous render would still be absent, which is why the assertion
+// below is on the call, not on the screen).
+describe('gating the revenue read', () => {
+  it('issues no revenue read for a viewer who may not see rates', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('viewer')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(false)
+  })
+
+  it('does read them for an account manager, who may', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('account_manager')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(true)
+  })
+
+  it('does read them for an admin, who may', () => {
+    vi.mocked(useClientRates).mockClear()
+    givenAs('admin')
+
+    expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(true)
   })
 })
