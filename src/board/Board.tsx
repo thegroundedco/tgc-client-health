@@ -60,21 +60,26 @@ export function Board({ profile, onEditClient }: Props) {
 
   const board = useBoard(period)
 
-  // Gated on manage_clients, like the admin screen this form also lives on.
-  // Defined above the early returns and included in the empty-roster branch as
-  // well as the populated one: a board with no clients is exactly when somebody
-  // needs to add one.
-  const canAddClient = can(profile.role, 'manage_clients')
-
-  // Gated at the READ. can() is the only capability check in this app, and the
-  // board already asks it for Add client -- the same capability, because the
-  // owner's ask ("if I have admin access") landed on manage_clients rather than
-  // view_revenue: this is what a client is worth on the roster you manage, not
-  // the monthly revenue screen. A viewer who cannot manage clients issues no
-  // query at all; hiding a figure already fetched would not be a permission
-  // check.
-  const canSeeRates = can(profile.role, 'manage_clients')
-  const { rates } = useClientRates(canSeeRates)
+  // ONE capability, asked once, for both of this screen's admin affordances.
+  //
+  // Add client: gated on manage_clients, like the admin screen that form also
+  // lives on. Read above the early returns and used in the empty-roster branch
+  // as well as the populated one, because a board with no clients is exactly
+  // when somebody needs to add one.
+  //
+  // The rates read: gated at the READ, not the render. can() is the only
+  // capability check in this app, and this is the SAME capability -- the owner's
+  // ask ("if I have admin access") landed on manage_clients rather than
+  // view_revenue, because this is what a client is worth on the roster you
+  // manage, not the monthly revenue screen. A viewer who cannot manage clients
+  // issues no query at all; hiding a figure already fetched would not be a
+  // permission check, and useClientRates.dom.test.ts proves the hook honours it.
+  //
+  // Held under ONE name rather than two. It was `canAddClient` and
+  // `canSeeRates`, two names for one identical expression -- which reads as two
+  // rules that happen to agree today and invites somebody to change one of them.
+  const canManageClients = can(profile.role, 'manage_clients')
+  const { rates, status: ratesStatus } = useClientRates(canManageClients)
 
   // Split into a button and a panel on 2026-09-02, and the split is the point.
   // The button belongs in the period bar, at its end; the PANEL does not belong
@@ -83,7 +88,7 @@ export function Board({ profile, onEditClient }: Props) {
   // and the view toggles up against the card's heading. Held as one value, both
   // were forced into the same place.
   const addClientButton =
-    canAddClient && !adding ? (
+    canManageClients && !adding ? (
       // The filled .button rather than .button--quiet, the treatment "Try again"
       // already wears. Owner asked for a colour that reads as actionable, and
       // every hue in this brand is spoken for -- teal healthy, amber watch, red
@@ -96,7 +101,7 @@ export function Board({ profile, onEditClient }: Props) {
     ) : null
 
   const addClientPanel =
-    canAddClient && adding ? (
+    canManageClients && adding ? (
       <AddClientPanel
         onClose={() => {
           setAdding(false)
@@ -279,6 +284,31 @@ export function Board({ profile, onEditClient }: Props) {
         {viewToggle}
         {addClientButton && <div className={styles.addBar}>{addClientButton}</div>}
       </div>
+
+      {/* A FAILED REVENUE READ MUST NOT LOOK LIKE AN UNENTERED MONTH.
+          "A broken tool must never look like an empty one" is the defect this
+          branch already answers twice over -- and on this screen an absent
+          figure is not nothing, it is a STATEMENT: rateMath refuses to show a
+          zero precisely so that "no figure" means "nobody has entered revenue
+          for this client". If the read fails the hook returns an empty map, and
+          every card then makes that statement about every client, falsely.
+
+          So the hook's status is rendered rather than discarded. A quiet caption
+          rather than the whole-screen error the board gives a failed CHECK-IN
+          read: the check-ins ARE this screen, while revenue is one line on each
+          card, so taking the board away would cost more than it saves. The rest
+          of the board is still true.
+
+          Only for a viewer who asked for the read at all -- for everybody else
+          the hook is disabled and never reports anything -- and only on the
+          populated board: the empty-roster branch above draws no cards, so there
+          is no missing figure there to misread. */}
+      {canManageClients && ratesStatus === 'error' && (
+        <p className="t-caption" data-testid="rates-error" role="status">
+          Revenue could not be read, so no client is showing a rate. A missing
+          figure here is this failure, not a month nobody entered.
+        </p>
+      )}
 
       {addClientPanel}
 

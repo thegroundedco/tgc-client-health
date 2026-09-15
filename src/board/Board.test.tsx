@@ -58,6 +58,7 @@ vi.mock('../clients/useClients', () => ({
 import { Board } from './Board'
 import { useBoard } from './useBoard'
 import { useClientRates } from './useClientRates'
+import type { ClientRate } from './rateMath'
 import type { Role } from '../lib/capabilities'
 
 const ME = 'profile-1'
@@ -150,9 +151,17 @@ const READY = {
   reload: vi.fn(),
 }
 
+// The rate map's default is restored here, not just cleared. Two tests below
+// override useClientRates' return value -- one to put a figure on a card, one
+// to fail the read -- and every other test in this file renders a board that
+// would destructure `undefined` if that override survived into it.
+const NO_RATES = () => ({ status: 'ready' as const, rates: new Map<number, ClientRate>() })
+
 afterEach(() => {
   document.body.innerHTML = ''
   vi.mocked(useBoard).mockReset()
+  vi.mocked(useClientRates).mockReset()
+  vi.mocked(useClientRates).mockImplementation(NO_RATES)
 })
 
 describe('the loaded client grid', () => {
@@ -700,5 +709,86 @@ describe('gating the revenue read', () => {
     givenAs('admin')
 
     expect(vi.mocked(useClientRates)).toHaveBeenCalledWith(true)
+  })
+})
+
+// FINAL-REVIEW FINDING 2: the headline feature's wiring had no test at all.
+//
+// This file mocked useClientRates to an empty Map in every test and never once
+// overrode it, so `rate={rates.get(client.id)}` in Board.tsx was a surviving
+// mutant: deleting the prop, or passing `undefined`, left the whole suite green
+// while no card could ever show a figure. The gate tests above are not this --
+// they prove what argument the board PASSES the hook, never what it does with
+// what comes back.
+//
+// So the mocked hook returns a populated map here, and the assertion is that
+// the figure lands on the RIGHT card. Scoped `within` the matching list item,
+// because a rate rendered on every card, or on the wrong one, would satisfy a
+// page-wide getByTestId.
+describe('the rate on a client card', () => {
+  const RETAINER: ClientRate = { cents: 400_000, kind: 'retainer' }
+
+  // Colorfil is CLIENTS[1] -- deliberately not the first card, so a board that
+  // ignored the id and handed every card the first rate it found would fail.
+  const cardFor = (name: string) =>
+    screen.getAllByRole('listitem').find((item) => within(item).queryByText(name) !== null)!
+
+  it('renders the figure on the card of the client it belongs to', () => {
+    vi.mocked(useClientRates).mockReturnValue({ status: 'ready', rates: new Map([[2, RETAINER]]) })
+    given()
+
+    const rate = within(cardFor('Colorfil')).getByTestId('client-card-rate')
+    expect(rate.textContent).toContain('$4,000')
+    expect(rate.textContent).toContain('a month')
+  })
+
+  it('leaves every other card without one -- a missing row is never a zero', () => {
+    vi.mocked(useClientRates).mockReturnValue({ status: 'ready', rates: new Map([[2, RETAINER]]) })
+    given()
+
+    expect(within(cardFor('Babaloo')).queryByTestId('client-card-rate')).toBeNull()
+    expect(within(cardFor('Sno-Go')).queryByTestId('client-card-rate')).toBeNull()
+    // Not a zero anywhere on the board, for the two clients with no row.
+    expect(screen.getAllByTestId('client-card-rate')).toHaveLength(1)
+  })
+})
+
+// FINAL-REVIEW FINDING 3: a failed revenue read looked exactly like "nobody has
+// entered revenue".
+//
+// Board destructured only `rates` and threw `status` away. On an error the hook
+// returns an empty map, so every card fell silent -- and on this screen silence
+// is a STATEMENT, because rateMath refuses to render a zero precisely so that a
+// missing figure means "nobody entered one". "A broken tool must never look like
+// an empty one" is quoted twice in this branch; this is that defect.
+describe('when the revenue read fails', () => {
+  const failed = { status: 'error' as const, rates: new Map<number, ClientRate>() }
+
+  it('says so, rather than letting every card read as an unentered month', () => {
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    given()
+
+    const caption = screen.getByTestId('rates-error')
+    expect(caption.textContent).toMatch(/revenue could not be read/i)
+  })
+
+  it('keeps the rest of the board, which is still true', () => {
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    given()
+
+    // Not the whole-screen error a failed CHECK-IN read gets: the check-ins are
+    // this screen, and revenue is one line per card.
+    expect(clientList()).toBeTruthy()
+    expect(screen.getAllByRole('listitem')).toHaveLength(CLIENTS.length)
+  })
+
+  it('says nothing to a viewer, whose read was never issued', () => {
+    // The hook is disabled for them and reports no error, so the caption must
+    // not appear -- but assert it against the error status anyway, so this
+    // cannot pass merely because the fixture happened to be 'ready'.
+    vi.mocked(useClientRates).mockReturnValue(failed)
+    givenAs('viewer')
+
+    expect(screen.queryByTestId('rates-error')).toBeNull()
   })
 })

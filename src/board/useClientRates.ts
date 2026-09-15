@@ -38,6 +38,26 @@ export function useClientRates(enabled: boolean): {
         const { data, error } = await supabase
           .from('client_month_revenue')
           .select('client_id, period, retainer_cents, project_cents')
+          // THE ORDER IS LOAD-BEARING, NOT COSMETIC. Nothing here sorts rows --
+          // currentRates compares period strings and does not care what order it
+          // is handed them. This exists for the CAP: PostgREST returns at most
+          // db-max-rows (1000 on Supabase's default), and past that limit it
+          // simply stops, dropping whatever the server had not reached. Without
+          // an ORDER BY, "whatever it had not reached" is unspecified, so a
+          // client's September row can be the one dropped while their July row
+          // survives -- and July then wins "latest" and is shown as the current
+          // rate. That is exactly the stale-rate-as-current misstatement
+          // rateMath.ts and the fix commit above it exist to refuse, and it
+          // would happen in production only, where the table is large enough.
+          //
+          // Newest first, so truncation drops the OLDEST months. An old month
+          // that never arrives makes a client's rate ABSENT at worst, never
+          // WRONG -- and absent is a thing this card is allowed to say.
+          //
+          // 58 clients and a pending 13-month backfill is ~750 rows and grows
+          // every month, so this is a cap the roster will reach, not a
+          // theoretical one.
+          .order('period', { ascending: false })
         if (isCancelled()) return
         if (error) {
           setStatus('error')
