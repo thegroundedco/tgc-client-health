@@ -443,26 +443,46 @@ describe('the show-archived toggle', () => {
 })
 
 describe('the Cards | Matrix toggle', () => {
-  const cardsButton = () => screen.getByRole('button', { name: 'Cards' })
-  const matrixButton = () => screen.getByRole('button', { name: 'Matrix' })
+  // Slice 6l. One button showing the view you are NOT on, at the owner's
+  // request. The visible word is the destination; the accessible name is the
+  // action, which is what keeps the screen-reader half of the old two-button
+  // arrangement -- a lone noun never says which view you are currently on.
+  const viewButton = () => screen.getByRole('button', { name: /switch to (matrix|cards) view/i })
+
+  it('offers the matrix while showing the cards', () => {
+    given(READY)
+    expect(viewButton().textContent).toBe('Matrix')
+    expect(viewButton().getAttribute('aria-label')).toBe('Switch to matrix view')
+  })
+
+  it('offers the cards once the matrix is showing', async () => {
+    given(READY)
+    await userEvent.click(viewButton())
+    expect(viewButton().textContent).toBe('Cards')
+    expect(viewButton().getAttribute('aria-label')).toBe('Switch to cards view')
+  })
+
+  it('carries no aria-pressed, because it is not a toggle', () => {
+    // A control whose action changes on every press has no pressed state to
+    // report. aria-pressed here would announce a lie on one of the two views.
+    given(READY)
+    expect(viewButton().hasAttribute('aria-pressed')).toBe(false)
+  })
 
   it('opens on the cards, which is where the monthly work is done', () => {
     given()
     expect(clientList()).toBeTruthy()
     expect(screen.queryByTestId('matrix-table')).toBeNull()
-    expect(cardsButton().getAttribute('aria-pressed')).toBe('true')
-    expect(matrixButton().getAttribute('aria-pressed')).toBe('false')
   })
 
   it('swaps the cards for the table, and back', () => {
     given()
 
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
     expect(screen.getByTestId('matrix-table')).toBeTruthy()
     expect(clientList()).toBeNull()
-    expect(matrixButton().getAttribute('aria-pressed')).toBe('true')
 
-    fireEvent.click(cardsButton())
+    fireEvent.click(viewButton())
     expect(clientList()).toBeTruthy()
     expect(screen.queryByTestId('matrix-table')).toBeNull()
   })
@@ -471,7 +491,7 @@ describe('the Cards | Matrix toggle', () => {
     // The whole reason this is a view of the board rather than a screen of its
     // own: one period, and nowhere for a second one to drift.
     given()
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
 
     const select = screen.getByRole('combobox', { name: 'Month' }) as HTMLSelectElement
     const target = periodOptions()[4]
@@ -492,7 +512,7 @@ describe('the Cards | Matrix toggle', () => {
       ],
       activeTotal: 1,
     })
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
 
     expect(screen.getAllByTestId('matrix-row')).toHaveLength(1)
     // The name alone: the client cell also carries the band word, so reading the
@@ -511,7 +531,7 @@ describe('the Cards | Matrix toggle', () => {
     // asserts it, and for the same reason: the board is unmounted once the
     // check-in opens, so the month can only be coming from the check-in screen.
     given()
-    fireEvent.click(matrixButton())
+    fireEvent.click(viewButton())
     const shown = previousPeriod(defaultPeriod())
     fireEvent.change(screen.getByRole('combobox', { name: 'Month' }), {
       target: { value: shown },

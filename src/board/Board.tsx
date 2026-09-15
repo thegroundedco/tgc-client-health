@@ -142,32 +142,34 @@ export function Board({ profile }: Props) {
     </button>
   ) : null
 
-  // Two buttons rather than one that says what it will become: a single
-  // "Matrix" button gives no indication that the current view is the cards, and
-  // aria-pressed on a pair says which of the two is showing without a person
-  // having to work it out from the label.
+  // ONE button, showing the view you are not on. The owner asked for this
+  // directly: "I'd like this to just be one button... when you're on cards, it
+  // shows matrix, and when you're on the matrix, the button changes to cards."
+  //
+  // This replaces a PAIR of buttons whose own comment argued against exactly
+  // this change -- that a lone "Matrix" gives no indication which view you are
+  // currently on, where aria-pressed on a pair does. That objection was about
+  // screen readers rather than taste, so it is kept rather than discarded: the
+  // VISIBLE word is the destination the owner wanted, and the ACCESSIBLE NAME
+  // is the action. A sighted reader gets one clean control; a screen-reader
+  // user hears "Switch to matrix view" instead of a bare noun.
+  //
+  // No aria-pressed. A control whose action changes on every press has no
+  // pressed state to report, and announcing one would be a lie on one of the
+  // two views.
   //
   // Deliberately not in the empty-roster branch below. A view switch that
   // reveals a second empty screen is a control with nothing to control.
+  const nextView = view === 'cards' ? 'matrix' : 'cards'
   const viewToggle = (
-    <div aria-label="View" className={styles.viewToggle} role="group">
-      <button
-        aria-pressed={view === 'cards'}
-        className="button button--quiet"
-        onClick={() => setView('cards')}
-        type="button"
-      >
-        Cards
-      </button>
-      <button
-        aria-pressed={view === 'matrix'}
-        className="button button--quiet"
-        onClick={() => setView('matrix')}
-        type="button"
-      >
-        Matrix
-      </button>
-    </div>
+    <button
+      aria-label={`Switch to ${nextView} view`}
+      className="button button--quiet"
+      onClick={() => setView(nextView)}
+      type="button"
+    >
+      {nextView === 'matrix' ? 'Matrix' : 'Cards'}
+    </button>
   )
 
   // Error before loading: a failed read must never fall through to a screen
