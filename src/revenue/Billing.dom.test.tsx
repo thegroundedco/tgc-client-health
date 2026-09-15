@@ -1079,3 +1079,77 @@ describe('Billing', () => {
     expect(markup).not.toMatch(/#[0-9a-fA-F]{6}/)
   })
 })
+
+describe('Billing — the share of each month, written into the bar', () => {
+  // The owner, looking at September with real data: "I'd love for there to be a
+  // percentage of what each item took up that month... retainer took up 60%,
+  // roughly, and project took up 40%."
+  it('writes both shares onto a month that has both kinds', () => {
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.getByText('60%')).toBeTruthy()
+    expect(screen.getByText('40%')).toBeTruthy()
+  })
+
+  it('leaves the figure off a sliver too short to hold it', () => {
+    // 1% of the month. The label would overflow its own segment and appear to
+    // be labelling the colour above it, which misreads worse than a bar with
+    // no figure on it.
+    const rows = [row(1, '2026-09-01', 990000, 10000)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.getByText('99%')).toBeTruthy()
+    expect(screen.queryByText('1%')).toBeNull()
+  })
+
+  it('keeps the scale outside the overlay frame, where it can still reach the gutter', () => {
+    // A REGRESSION I SHIPPED. The frame that carries the chart's box was
+    // opened one line too early and swallowed the y axis. That axis is
+    // absolutely positioned against .plot's inline padding, so re-anchoring it
+    // to the frame printed "$75k $50k $25k $0" straight across the first bar.
+    //
+    // Ancestry is the one part of this jsdom CAN check -- it does no layout, so
+    // it cannot see the overlap itself, but it can see the containment that
+    // causes it.
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    const { container } = render(
+      <Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />,
+    )
+
+    const axis = container.querySelector('[data-testid="billing-y-axis"]')
+    const shares = container.querySelector('[class*="shares"]')
+    expect(axis).not.toBeNull()
+    expect(shares).not.toBeNull()
+    expect(shares!.parentElement!.contains(axis)).toBe(false)
+  })
+
+  it('positions the figures by percentage, as the scale beside them already does', () => {
+    // PIXELS WERE USED FIRST AND EVERY FIGURE DREW HIGH. The reasoning was that
+    // the svg is a fixed 200px so viewBox units and pixels coincide -- they do
+    // not reliably, and three rounds of screenshots were spent on it. The y
+    // axis in this same component has always positioned by percentage and has
+    // always been right.
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    const { container } = render(
+      <Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />,
+    )
+
+    const figures = [...container.querySelectorAll('[class*="shareOn"]')]
+    expect(figures.length).toBe(2)
+    for (const figure of figures) {
+      const top = (figure as HTMLElement).style.insetBlockStart
+      expect(top).toMatch(/%$/)
+      expect(top).not.toMatch(/px$/)
+    }
+  })
+
+  it('writes no shares on a month nobody billed', () => {
+    // A month with an entered row of zero has no composition. "0%" twice would
+    // state a split that does not exist.
+    const rows = [row(1, '2026-09-01', 0, 0)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.queryByText('0%')).toBeNull()
+  })
+})

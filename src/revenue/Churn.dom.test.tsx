@@ -9,6 +9,12 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
+// Slice 6k: Churn windows to the last three months, anchored here rather than
+// to the data -- a departure is a real-world event. Every fixture below leaves
+// on 2026-08-25, which this anchor keeps inside the window, so these tests go
+// on asserting what they were written to assert.
+const ASOF = '2026-09-15'
+
 function row(
   name: string,
   days: number | null,
@@ -29,7 +35,7 @@ function row(
 
 describe('Churn', () => {
   it('shows who left, when, why and for how long they had been with you', () => {
-    render(<Churn rows={[row('Delta', 396)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396)]} />)
 
     const item = screen.getByRole('list', { name: 'Departures' }).querySelector('li')
     const text = item?.textContent ?? ''
@@ -50,6 +56,7 @@ describe('Churn', () => {
   it('shows the note beside the coded reason', () => {
     render(
       <Churn
+        asOf={ASOF}
         rows={[row('Delta', 396, { end_reason_note: 'Budget moved to paid media.' })]}
       />,
     )
@@ -58,7 +65,7 @@ describe('Churn', () => {
   })
 
   it('says nothing where no note was written', () => {
-    render(<Churn rows={[row('Delta', 396, { end_reason_note: null })]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396, { end_reason_note: null })]} />)
 
     expect(screen.queryByTestId('churn-note')).toBe(null)
   })
@@ -66,7 +73,7 @@ describe('Churn', () => {
   // The only churn event in production is exactly this: no start date, so its
   // tenure-at-churn cannot be known. Never zero, never blank.
   it('reads unknown when the departed client had no start date', () => {
-    render(<Churn rows={[row('Delta', null)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', null)]} />)
 
     const item = screen.getByRole('list', { name: 'Departures' }).querySelector('li')
     expect(item?.textContent).toContain('unknown')
@@ -77,7 +84,7 @@ describe('Churn', () => {
   // must not be added while one event is all there is: a rate computed on one
   // departure is 9.1%, a number that reads as a fact and means nothing.
   it('renders no percentage anywhere', () => {
-    render(<Churn rows={[row('Delta', 396), row('Echo', 200)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396), row('Echo', 200)]} />)
 
     expect(document.body.textContent).not.toMatch(/\d\s*%/)
   })
@@ -93,7 +100,7 @@ describe('Churn', () => {
   // own rows, so static prose cannot satisfy them.
 
   it('counts the departures it is not computing a rate from', () => {
-    render(<Churn rows={[row('Delta', 396), row('Echo', null)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396), row('Echo', null)]} />)
 
     const text = document.body.textContent ?? ''
     // Two, from the rows. Static prose claiming one departure fails here, which
@@ -102,7 +109,7 @@ describe('Churn', () => {
   })
 
   it('counts how many of the departed have no recorded start date', () => {
-    render(<Churn rows={[row('Delta', 396), row('Echo', null)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396), row('Echo', null)]} />)
 
     const text = document.body.textContent ?? ''
     expect(text).toContain('1 of them has no recorded start date')
@@ -113,7 +120,7 @@ describe('Churn', () => {
     // evaporates, the clause has to disappear. It also stops the caption
     // claiming a breakdown is impossible when it has become possible, which is
     // a decision for the owner rather than something to assert either way.
-    render(<Churn rows={[row('Delta', 396), row('Echo', 200)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', 396), row('Echo', 200)]} />)
 
     const text = document.body.textContent ?? ''
     expect(text).not.toContain('no recorded start date')
@@ -121,7 +128,7 @@ describe('Churn', () => {
   })
 
   it('reads as a singular departure when there is only one', () => {
-    render(<Churn rows={[row('Delta', null)]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', null)]} />)
 
     const text = document.body.textContent ?? ''
     expect(text).toContain('1 departure is too few')
@@ -134,7 +141,7 @@ describe('Churn', () => {
     // date when it has one. The row below started on a known day and has no
     // recorded end, which is why the list beside it renders 'unknown' for the
     // date. Only started_on may drive the start-date clause.
-    render(<Churn rows={[row('Delta', null, { started_on: '2025-01-01', ended_on: null })]} />)
+    render(<Churn asOf={ASOF} rows={[row('Delta', null, { started_on: '2025-01-01', ended_on: null })]} />)
 
     const text = document.body.textContent ?? ''
     expect(text).not.toContain('no recorded start date')
@@ -146,9 +153,43 @@ describe('Churn', () => {
   // empties the page would stop saying the word "churn" anywhere, with nothing
   // to notice. The empty state has to say it too.
   it('says so when nobody has left, and still names churn', () => {
-    render(<Churn rows={[]} />)
+    render(<Churn asOf={ASOF} rows={[]} />)
 
     expect(screen.getByText(/nobody has left/i)).toBeTruthy()
     expect(document.body.textContent).toMatch(/churn/i)
+  })
+})
+
+describe('Churn — the three-month window', () => {
+  it('hides a departure older than the window and says how many it hid', () => {
+    // The owner, 2026-09-15: "anything that is older than three months, we can
+    // hide from the churn section." This became worth doing when the 2025
+    // backfill created twenty-nine departures at once.
+    render(
+      <Churn
+        asOf={ASOF}
+        rows={[row('Recent', 396), row('Ancient', 200, { ended_on: '2025-03-01' })]}
+      />,
+    )
+
+    expect(screen.getByText('Recent')).toBeTruthy()
+    expect(screen.queryByText('Ancient')).toBeNull()
+  })
+
+  it('does not claim nobody has left when everybody left a while ago', () => {
+    // THE SENTENCE THIS WINDOW COULD HAVE MADE FALSE. The empty state read
+    // "No churn yet: nobody has left", which would be a plain untruth on a
+    // roster holding twenty-nine departures just outside the window.
+    render(<Churn asOf={ASOF} rows={[row('Ancient', 200, { ended_on: '2025-03-01' })]} />)
+
+    expect(screen.queryByText(/nobody has left\./i)).toBeNull()
+    expect(screen.getByText(/Nobody has left in the last/i)).toBeTruthy()
+    expect(screen.getByText(/1 earlier departure is not shown/i)).toBeTruthy()
+  })
+
+  it('still says nobody has ever left when nobody has', () => {
+    render(<Churn asOf={ASOF} rows={[]} />)
+
+    expect(screen.getByText(/No churn yet: nobody has left/i)).toBeTruthy()
   })
 })

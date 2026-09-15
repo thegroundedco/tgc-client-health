@@ -368,3 +368,31 @@ export function comparisonTotals(
   }
   return periods.map((period) => byPeriod.get(monthsBefore(period, offset)) ?? null)
 }
+
+/**
+ * What each kind took of one month, as two whole percentages.
+ *
+ * The owner asked for this looking at September: "I'd love for there to be a
+ * percentage of what each item took up that month."
+ *
+ * ONE FIGURE IS ROUNDED AND THE OTHER IS THE REMAINDER, never both rounded
+ * independently. Concentration learned that the hard way -- its rows were each
+ * rounded on their own and added up to 101 on screen. Two numbers printed side
+ * by side that do not sum to 100 make a reader distrust both.
+ *
+ * The discriminating case is a month split 1:7 -- 12.5% and 87.5%, which round
+ * INDEPENDENTLY to 13 and 88. The test uses it, because a pair chosen at random
+ * usually sums to 100 either way and proves nothing.
+ *
+ * A month with no money returns null rather than two zeroes: a month nobody
+ * billed has no composition, and "0% / 0%" states a split that does not exist.
+ */
+export function sharePair(
+  retainerCents: number,
+  projectCents: number,
+): { retainer: number; project: number } | null {
+  const total = retainerCents + projectCents
+  if (total <= 0) return null
+  const retainer = Math.round((retainerCents / total) * 100)
+  return { retainer, project: 100 - retainer }
+}

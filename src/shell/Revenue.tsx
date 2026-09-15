@@ -132,7 +132,7 @@ export function Revenue() {
       {report.status === 'ready' && (
         <>
           <Tenure rows={currentRows(report.clients, asOf)} />
-          <Churn rows={departedRows(report.clients)} />
+          <Churn asOf={asOf} rows={departedRows(report.clients)} />
         </>
       )}
 

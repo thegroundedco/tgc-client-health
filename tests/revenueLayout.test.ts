@@ -190,3 +190,37 @@ describe('the revenue sections', () => {
     expect(sectionRule('.retentionTick')).toContain('text-anchor: end')
   })
 })
+
+describe('the share overlay sits exactly on the chart', () => {
+  // THIS SHIPPED WRONG AND NO DOM TEST COULD HAVE CAUGHT IT. jsdom does no
+  // layout, so a rendered assertion cannot tell a label inside its segment from
+  // one floating above the bar. The owner caught it in a screenshot inside a
+  // minute: every project percentage on a short segment drew outside the bar.
+  //
+  // The first fix offset the overlay by the chart's margin, which was wrong
+  // again -- an svg margin inside a parent with no block padding COLLAPSES
+  // THROUGH that parent, so the offset needed depended on a subtlety nobody
+  // should have to reason about to place a label.
+  //
+  // The arrangement that removes the question: a frame carries the margin, the
+  // svg inside it carries none, so the frame's box IS the chart's box and the
+  // overlay pins to it with inset: 0. These tests hold that arrangement in
+  // place, because any drift between the three rules puts the figures back
+  // outside the bars.
+  it('pins the overlay to the frame with no offset arithmetic', () => {
+    expect(/inset:\s*0\s*;/.test(sectionRule('.shares'))).toBe(true)
+    expect(sectionRule('.shares')).not.toContain('inset-block:')
+    expect(sectionRule('.shares')).not.toContain('inset-inline:')
+  })
+
+  it('keeps the margin on the frame and off the chart', () => {
+    // If the svg regains a block margin, the frame is taller than the chart
+    // and every figure drifts -- the original bug, wearing a different hat.
+    expect(sectionRule('.chartFrame')).toMatch(/margin-block:\s*\S/)
+    expect(sectionRule('.chart')).not.toContain('margin-block')
+  })
+
+  it('makes the frame a positioning context, or the overlay escapes to the plot', () => {
+    expect(sectionRule('.chartFrame')).toContain('position: relative')
+  })
+})

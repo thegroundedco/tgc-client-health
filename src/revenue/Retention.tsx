@@ -81,7 +81,6 @@ function RetentionReady({
   // folds. The rate, the movement and the BASIS SENTENCE stay visible: slice
   // 6e §3.1 established the sentence is what makes the rate defensible and
   // has to travel with it, so hiding it here would contradict that.
-  const [showMovers, setShowMovers] = useState(false)
   const [showAll, setShowAll] = useState(false)
 
   // Rendered above every branch below, including the refusals: a reader who
@@ -194,6 +193,26 @@ function RetentionReady({
     <>
       {controls}
 
+      {/* WHAT THIS IS, before any figure. The owner read the finished section
+          and could not tell: "there's no clear explanation as to what this is
+          explaining... there needs to be a clear description of what it means
+          and what it is."
+
+          No numeral for the hundred mark, and that is not evasion of
+          revenueLiterals -- it is the rule working. A percentage typed into
+          this markup is what that guard forbids, and the threshold reads
+          better in words anyway.
+
+          The window is SELECTABLE (1, 3, 6, 12 months), so nothing here may
+          say "a year": it would be wrong on three of the four. The caption
+          below names the actual two months. */}
+      <p className="t-body prose" data-testid="retention-explainer">
+        Of the retainer revenue these clients were already paying, how much they are still paying
+        now. It counts retainer work only, and only clients who were here at the start &mdash; new
+        business is not retention. Anything over one hundred means the ones who stayed grew by more
+        than the rest shrank.
+      </p>
+
       <p className="t-caption" data-testid="retention-window">
         {formatPeriod(report.currentPeriod)} against {formatPeriod(report.basePeriod)}
       </p>
@@ -269,19 +288,17 @@ function RetentionReady({
         {retentionBasis(report, formatPeriod)}
       </p>
 
-      {/* The bulk of the section, folded. Closed by default because the two
-          rates and their basis are what the section is FOR; the per-client
-          movement is what you open when you want to know why. */}
-      <button
-        aria-expanded={showMovers}
-        className="button button--quiet"
-        onClick={() => setShowMovers((open) => !open)}
-        type="button"
-      >
-        {showMovers ? 'Hide' : 'Show'} what moved ({report.contributions.length})
-      </button>
+      {/* NO LONGER FOLDED. This was closed by default, on the reasoning that
+          the rates are what the section is for and the movement is what you
+          open when you want to know why. The owner, reading it with real data,
+          disagreed: "I'd also love for the show what moved to be a bit more
+          available and not have to dig for it... this is the driving factors."
 
-      {showMovers && (
+          The staged expander below survives, which is what keeps "available"
+          from becoming "seventeen rows before you reach anything else". The
+          outer toggle is deleted rather than defaulted open: a control whose
+          only state anybody wants is open is not a control. */}
+      {report.contributions.length > 0 && (
         /* role="list" because base.css removes markers globally, and WebKit
            drops a list's semantics when its markers are removed -- so in
            Safari with VoiceOver this would announce as unrelated paragraphs.

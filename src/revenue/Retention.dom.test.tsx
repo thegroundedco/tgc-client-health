@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -99,7 +99,7 @@ describe('Retention', () => {
   it('lists the biggest mover first', () => {
     given()
 
-    fireEvent.click(screen.getByRole('button', { name: /show what moved/i }))
+    // The outer disclosure is gone as of slice 6k -- the movers are visible on load.
 
     const names = screen
       .getAllByTestId('retention-contribution-name')
@@ -153,7 +153,7 @@ describe('Retention', () => {
     // both and tell the reader nothing.
     given()
 
-    fireEvent.click(screen.getByRole('button', { name: /show what moved/i }))
+    // The outer disclosure is gone as of slice 6k -- the movers are visible on load.
 
     const rows = screen
       .getAllByTestId('retention-contribution-name')
@@ -353,7 +353,7 @@ describe('Retention — the controls, slice 6f-2', () => {
       reload: vi.fn(),
     })
     render(<Retention read={vi.mocked(useRetention)()} />)
-    await user.click(screen.getByRole('button', { name: /show what moved/i }))
+    // The outer disclosure is gone as of slice 6k -- the movers are visible on load.
 
     expect(screen.getByText('We Ended It')).toBeTruthy()
 
@@ -386,8 +386,58 @@ describe('Retention — the controls, slice 6f-2', () => {
     render(<Retention read={vi.mocked(useRetention)()} />)
 
     await user.click(screen.getByRole('button', { name: /ignore ended by us/i }))
-    await user.click(screen.getByRole('button', { name: /show what moved/i }))
+    // The outer disclosure is gone as of slice 6k -- the movers are visible on load.
 
     expect(screen.getByText('Left On Price')).toBeTruthy()
+  })
+})
+
+describe('Retention — what it is, and what moved', () => {
+  // The owner, 2026-09-15: "For retention, there's no clear explanation as to
+  // what this is explaining. For somebody to open this and to read it, there
+  // needs to be a clear description of what it means and what it is."
+  it('says what the measure is, before any figure', () => {
+    given()
+
+    const explainer = screen.getByTestId('retention-explainer')
+    expect(explainer.textContent).toMatch(/retainer work only/i)
+    expect(explainer.textContent).toMatch(/new business is not retention/i)
+  })
+
+  it('does not describe the window as a year, because the window is selectable', () => {
+    // 1, 3, 6 and 12 months are all offered. Copy that says "a year ago" is
+    // wrong on three of the four.
+    given()
+
+    expect(screen.getByTestId('retention-explainer').textContent).not.toMatch(/year/i)
+  })
+
+  // The owner: "I'd also love for the show what moved to be a bit more
+  // available and not have to dig for it. It would be nice to show earlier on
+  // to give an idea of, you know, this is the driving factors."
+  it('shows what moved without anyone having to open it', () => {
+    given()
+
+    expect(screen.getAllByTestId('retention-contribution-name').length).toBeGreaterThan(0)
+  })
+
+  it('still stages the rest behind an expander rather than listing everyone', () => {
+    // Six movers, because the default fixture has two and cannot exercise
+    // staging at all -- a version of this test using it passed without
+    // proving anything.
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      id: i + 1, name: `Client ${i + 1}`, status: 'active',
+      started_on: '2020-01-01', ended_on: null, end_reason_code: null,
+    }))
+    const rows = many.flatMap((c) => [
+      { client_id: c.id, period: '2025-09-01', retainer_cents: 400000, project_cents: 0 },
+      { client_id: c.id, period: '2026-09-01', retainer_cents: 100000 * (c.id + 1), project_cents: 0 },
+    ])
+    given({ clients: many, rows })
+
+    // Available is not the same as unabridged: a section opening with every
+    // row buries the rates above it.
+    expect(screen.getByRole('button', { name: /others/i })).toBeTruthy()
+    expect(screen.getAllByTestId('retention-contribution-name').length).toBeLessThan(many.length)
   })
 })
