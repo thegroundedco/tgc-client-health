@@ -47,6 +47,7 @@ const GUARDED_FILES = [
   join(ROOT, 'src', 'revenue', 'Tenure.tsx'),
   join(ROOT, 'src', 'revenue', 'Retention.tsx'),
   join(ROOT, 'src', 'revenue', 'Concentration.tsx'),
+  join(ROOT, 'src', 'revenue', 'RetentionChart.tsx'),
 ]
 
 // Comments stripped before the check reads the file. The rule is about MARKUP:

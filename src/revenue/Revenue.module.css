@@ -670,3 +670,61 @@
 .mixGroup p {
   margin: 0;
 }
+
+/* Retention over time. The two series differ by STROKE STYLE and carry their
+   own end labels -- the primary reader of this page is colourblind, so a
+   colour key would make the chart unreadable for him. Same reason the loss
+   segments above share a colour and differ by texture. */
+.retentionChart svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.retentionNrr {
+  fill: none;
+  stroke: var(--chart-retainer);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.retentionGrr {
+  fill: none;
+  stroke: var(--chart-retainer);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linejoin: round;
+}
+
+.retentionGrid {
+  stroke: var(--rule-hairline);
+  stroke-width: 1;
+}
+
+/* 100% is "kept everything" -- a reference, not a gridline, so it reads
+   differently from the rest of the scale. */
+.retentionKeptAll {
+  stroke: var(--rule-hairline);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.retentionTick,
+.retentionEndLabel {
+  fill: var(--text-secondary);
+  font-size: 0.75rem;
+  dominant-baseline: middle;
+}
+
+/* The scale sits in the LEFT margin, set against the plot edge. It shared the
+   right margin with the series end labels until a tick printed over one of
+   them -- and the end label is the only thing telling a colourblind reader
+   which line is which. */
+.retentionTick {
+  text-anchor: end;
+}
+
+.retentionEndLabel {
+  fill: var(--text-primary);
+  font-weight: 600;
+}
