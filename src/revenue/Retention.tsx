@@ -3,6 +3,7 @@ import { formatPeriod } from '../lib/month'
 import { formatMoney } from './money'
 import { latestPeriod, retention, retentionBasis } from './retentionMath'
 import type { RetentionClient, RetentionReport, RetentionRow } from './retentionMath'
+import { RetentionChart } from './RetentionChart'
 import {
   EXCLUDED_END_REASONS,
   RETENTION_WINDOWS,
@@ -196,6 +197,8 @@ function RetentionReady({
       <p className="t-caption" data-testid="retention-window">
         {formatPeriod(report.currentPeriod)} against {formatPeriod(report.basePeriod)}
       </p>
+
+      <RetentionChart clients={roster} months={months} rows={rows} />
 
       {/* The chosen rate large, the other beside it small. Neither is ever
           hidden: the owner's boss wants net to lead AND gross to stay

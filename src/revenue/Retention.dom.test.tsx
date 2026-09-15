@@ -213,6 +213,19 @@ describe('Retention', () => {
     expect(document.body.textContent).toContain('No retention yet')
     expect(document.body.textContent).toContain('no revenue has been entered')
   })
+
+  it('puts the chart above the headline figure', () => {
+    // The chart leads and the number follows. One anchor on a small cohort
+    // moves sharply on a single invoice; the series is the more honest first
+    // reading, and the headline becomes the detail rather than the claim.
+    const { container } = given()
+    const chart = container.querySelector('[aria-label="Retention over time"]')
+    const headline = container.querySelector('#retention-headline')
+    expect(chart).not.toBeNull()
+    expect(headline).not.toBeNull()
+    // compareDocumentPosition: 4 means `headline` FOLLOWS `chart`.
+    expect(chart!.compareDocumentPosition(headline!) & 4).toBeTruthy()
+  })
 })
 
 // A full thirteen months for both clients, so every window has a base month
