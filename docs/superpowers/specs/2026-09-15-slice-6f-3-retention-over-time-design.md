@@ -134,12 +134,21 @@ through a colour key. The existing treatment of the two loss segments is the pre
 greyscale, and a test asserts the lines differ by stroke style and carry end labels rather than
 asserting colours.
 
-### 4.3 Hover
+### 4.3 Hover is DEFERRED, and the reason is in the sentence that proposed it
 
-A point's anchor, its base month, and both rates. The Billing chart's cursor-following card is the
-established pattern; this reuses its behaviour rather than inventing a second one. Keyboard users
-reach the same content through the existing movers list, which is unchanged — the chart adds no
-information that exists nowhere else.
+The first draft of this section specified a cursor-following card carrying a point's anchor, base
+month and both rates, reusing Billing's. It then noted that **the chart adds no information that
+exists nowhere else** — the headline names the latest point, the caption names both months, and the
+movers list carries the per-client detail.
+
+That sentence is an argument against building it now. The chart's job is the *shape*: whether the
+figure in front of the reader is the pattern or an outlier. A hover card is a convenience on top of
+an answer the page already gives, and Billing's card is a substantial piece of behaviour — cursor
+tracking, segment awareness, theme-aware styling — to reproduce for it.
+
+**Revisit once the chart has been used.** If the first question anyone asks is "what was that
+month?", that is the evidence for building it, and the answer will be better for knowing which
+months people actually point at.
 
 ---
 
