@@ -37,6 +37,18 @@ export function ClientsAdmin({ editClientId, onWritingChange }: Props) {
   // If the id names a client this screen does not have -- archived since, or a
   // stale request -- `editing` resolves to null below and the ordinary list
   // renders. The id is a request, not a promise.
+  //
+  // IT IS READ ONCE, ON MOUNT, AND THIS DEPENDS ON THE SHELL UNMOUNTING Admin
+  // BETWEEN VISITS. That is true today: Shell.tsx renders <Admin> from a switch
+  // on destination.kind with no key holding it alive, so leaving the admin
+  // destination unmounts this component and arriving again mounts a fresh one
+  // that reads the new id. Key `Admin`, hoist it above the switch, or keep it
+  // mounted behind a hidden style, and this stops: useState ignores its initial
+  // argument on every render after the first, so the SECOND press of Edit client
+  // would navigate correctly and open nothing -- a button that silently does
+  // nothing, with no error to explain it. Whoever changes how Admin is mounted
+  // owns this line, and the fix then is an effect on editClientId, not a key
+  // here.
   const [editingId, setEditingId] = useState<number | null>(editClientId ?? null)
   const editing = admin.clients.find((client) => client.id === editingId) ?? null
 

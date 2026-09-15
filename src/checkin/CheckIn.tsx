@@ -18,9 +18,13 @@ type Props = {
   period: string
   profile: Profile
   onBack: () => void
-  // Optional because the check-in screen is reachable in tests, and by
-  // Board.tsx's own callers, without it.
-  onEditClient?: () => void
+  // REQUIRED, not optional. Board is this screen's only caller and always
+  // passes it, so optionality bought nothing and cost the compile error: a
+  // future caller who forgot it would get a check-in screen with the Edit
+  // client button silently missing for every admin, and nothing would say so.
+  // Whether the button is DRAWN is still a capability question, below, and
+  // that is the only question it should be.
+  onEditClient: () => void
 }
 
 // The class each saveStatus tone renders as. Kept beside the component that
@@ -134,7 +138,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       <button className="button button--quiet" type="button" onClick={onBack}>
         Board
       </button>
-      {onEditClient !== undefined && can(profile.role, 'manage_clients') && (
+      {can(profile.role, 'manage_clients') && (
         // The owner: "when I click into a card, I'd love for there to be an
         // option to hit edit client and it takes you into the client roster's
         // edit panel". Same capability the board checks before offering Add

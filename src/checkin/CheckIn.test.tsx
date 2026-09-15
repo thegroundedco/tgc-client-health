@@ -187,7 +187,13 @@ function render(overrides: ScreenOverrides = {}): string {
   const startedOnValue = 'startedOn' in overrides ? startedOn : CLIENT.started_on
   const client = { ...CLIENT, started_on: startedOnValue ?? null }
   return renderToStaticMarkup(
-    <CheckIn client={client} period={period ?? PERIOD} profile={PROFILE} onBack={() => {}} />,
+    <CheckIn
+      client={client}
+      period={period ?? PERIOD}
+      profile={PROFILE}
+      onBack={() => {}}
+      onEditClient={() => {}}
+    />,
   )
 }
 

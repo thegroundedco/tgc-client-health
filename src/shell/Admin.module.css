@@ -1,5 +1,8 @@
-/* The switcher between Admin's two sections. Same shape as Board's .viewToggle,
-   which it is deliberately imitating. */
+/* The switcher between Admin's two sections. It was written imitating Board's
+   .viewToggle, a row of two buttons with the same gap -- and slice 6l deleted
+   that, because the owner asked the board for ONE button naming the view he is
+   not on. So this is now the pattern rather than a copy of one: MenuBar's .bar
+   is the other row of the same shape, and a third should match these two. */
 .sections {
   display: flex;
   gap: var(--space-2);

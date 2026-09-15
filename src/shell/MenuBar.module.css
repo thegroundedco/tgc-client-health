@@ -1,6 +1,8 @@
 /* The four destinations, in the header beside the wordmark. A flex row so they
    read as one control rather than as four unrelated links -- the same reason
-   Board's .viewToggle and ThemeControl's .group each have a rule. */
+   Admin's .sections and ThemeControl's .group each have a rule. (Board's
+   .viewToggle was the third example until slice 6l replaced that pair of
+   buttons with one, which needs no group rule at all.) */
 .bar {
   display: flex;
   flex-wrap: wrap;

@@ -78,11 +78,13 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
   }
 }
 
-// The third parameter carries CheckIn's own optional props (currently just
+// The third parameter carries CheckIn's own props (currently just
 // onEditClient) rather than widening `overrides`, which is UseCheckin's shape
 // and has nothing to do with what CheckIn itself accepts. Defaulted to `{}` so
 // every call site above this line, written before onEditClient existed, keeps
-// working untouched.
+// working untouched -- and the no-op default below is what supplies the prop
+// for them, now that CheckIn requires it. A test that cares what the press does
+// passes its own spy and overrides this.
 function renderAs(
   role: Profile['role'],
   overrides: Partial<UseCheckin> = {},
@@ -95,6 +97,7 @@ function renderAs(
       period={PERIOD}
       profile={profile(role)}
       onBack={() => {}}
+      onEditClient={() => {}}
       {...props}
     />,
   )
@@ -176,6 +179,22 @@ describe('CheckIn, the Edit client button', () => {
     expect(onEditClient).toHaveBeenCalled()
   })
 
+  // FINAL-REVIEW FINDING 6: onEditClient was optional. Board is the only caller
+  // and always passes it, so the optionality bought nothing and cost this: a
+  // future caller who forgot it would get a check-in screen with no Edit client
+  // button for any admin, with a clean build and a green suite.
+  //
+  // A TYPE-LEVEL assertion, so it fails `npm run build` rather than this run:
+  // the expect-error directive below IS the assertion. Make the prop optional
+  // again and that directive becomes unused, and tsc fails on it.
+  it('requires onEditClient of every caller, so a forgotten one cannot compile', () => {
+    const omitted = (
+      // @ts-expect-error -- onEditClient is required; leaving it out is the error.
+      <CheckIn client={CLIENT} period={PERIOD} profile={profile('viewer')} onBack={() => {}} />
+    )
+    expect(omitted.type).toBe(CheckIn)
+  })
+
   it('offers it to nobody else', () => {
     // Capability, never a role string: `can` is the only check in this app.
     renderAs('viewer', {}, { onEditClient: vi.fn() })
@@ -197,6 +216,7 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
         period={PERIOD}
         profile={profile('account_manager')}
         onBack={() => {}}
+        onEditClient={() => {}}
       />,
     )
 
@@ -225,6 +245,7 @@ describe('CheckIn, the question controls per kind', () => {
         period={PERIOD}
         profile={profile('account_manager')}
         onBack={() => {}}
+        onEditClient={() => {}}
       />,
     )
 
@@ -242,6 +263,7 @@ describe('CheckIn, the question controls per kind', () => {
         period={PERIOD}
         profile={profile('account_manager')}
         onBack={() => {}}
+        onEditClient={() => {}}
       />,
     )
 
@@ -268,6 +290,7 @@ describe('CheckIn, the question controls per kind', () => {
         period={PERIOD}
         profile={profile('account_manager')}
         onBack={() => {}}
+        onEditClient={() => {}}
       />,
     )
 
