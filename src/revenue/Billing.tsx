@@ -628,6 +628,13 @@ export function Billing({
       </svg>
 
       {/* The share of each month, written into the bar.
+          BOTH AXES POSITIONED BY PERCENTAGE, and the block axis learned that
+          the hard way. Pixels were used first, on the reasoning that the svg is
+          a fixed 200px so viewBox units and pixels coincide -- they do not
+          reliably, and every figure drew high. The y-axis labels in this same
+          component have always used a percentage of the scale; this now follows
+          the pattern that was already working six lines above it.
+
           HTML OVER THE CHART, NOT <text> INSIDE IT. preserveAspectRatio="none"
           stretches the horizontal axis, which would stretch every glyph -- the
           same reason the month labels below the plot are HTML. Positioned by
@@ -655,7 +662,10 @@ export function Billing({
               {bar.retainerHeight >= MIN_SHARE_HEIGHT && (
                 <span
                   className={styles.shareOnRetainer}
-                  style={{ insetBlockStart: bar.retainerY + bar.retainerHeight / 2, insetInlineStart: `${centre}%` }}
+                  style={{
+                    insetBlockStart: `${((bar.retainerY + bar.retainerHeight / 2) / VIEW.height) * 100}%`,
+                    insetInlineStart: `${centre}%`,
+                  }}
                 >
                   {share.retainer}%
                 </span>
@@ -663,7 +673,10 @@ export function Billing({
               {bar.projectHeight >= MIN_SHARE_HEIGHT && (
                 <span
                   className={styles.shareOnProject}
-                  style={{ insetBlockStart: bar.projectY + bar.projectHeight / 2, insetInlineStart: `${centre}%` }}
+                  style={{
+                    insetBlockStart: `${((bar.projectY + bar.projectHeight / 2) / VIEW.height) * 100}%`,
+                    insetInlineStart: `${centre}%`,
+                  }}
                 >
                   {share.project}%
                 </span>

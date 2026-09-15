@@ -1124,6 +1124,26 @@ describe('Billing — the share of each month, written into the bar', () => {
     expect(shares!.parentElement!.contains(axis)).toBe(false)
   })
 
+  it('positions the figures by percentage, as the scale beside them already does', () => {
+    // PIXELS WERE USED FIRST AND EVERY FIGURE DREW HIGH. The reasoning was that
+    // the svg is a fixed 200px so viewBox units and pixels coincide -- they do
+    // not reliably, and three rounds of screenshots were spent on it. The y
+    // axis in this same component has always positioned by percentage and has
+    // always been right.
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    const { container } = render(
+      <Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />,
+    )
+
+    const figures = [...container.querySelectorAll('[class*="shareOn"]')]
+    expect(figures.length).toBe(2)
+    for (const figure of figures) {
+      const top = (figure as HTMLElement).style.insetBlockStart
+      expect(top).toMatch(/%$/)
+      expect(top).not.toMatch(/px$/)
+    }
+  })
+
   it('writes no shares on a month nobody billed', () => {
     // A month with an entered row of zero has no composition. "0%" twice would
     // state a split that does not exist.
