@@ -9,6 +9,7 @@ import {
   monthlyTotals,
   type MonthTotal,
   type RevenueRow,
+  sharePair,
 } from './chartMath'
 
 function row(client_id: number, period: string, retainer: number, project = 0): RevenueRow {
@@ -613,5 +614,41 @@ describe('barGeometry — the comparison bar', () => {
     ])
 
     expect(bars[0].compareProjectHeight).toBe(0)
+  })
+})
+
+describe('sharePair — what each kind took of the month', () => {
+  // The owner, looking at September: "I'd love for there to be a percentage of
+  // what each item took up that month... retainer took up 60%, roughly, and
+  // project took up 40%."
+  it('splits a month into two whole percentages', () => {
+    expect(sharePair(600_000, 400_000)).toEqual({ retainer: 60, project: 40 })
+  })
+
+  it('ALWAYS sums to 100, even where rounding each alone would not', () => {
+    // Concentration learned this the hard way: independently rounded rows added
+    // up to 101. One figure is rounded and the other is the remainder, so the
+    // pair cannot disagree with itself on screen.
+    // THE DISCRIMINATING CASE, and it has to be chosen deliberately: 1:7 is
+    // 12.5% and 87.5%, which round INDEPENDENTLY to 13 and 88 -- 101 on screen.
+    // A pair picked at random almost always sums to 100 either way, which is
+    // why the first version of this test passed against the very bug it was
+    // written to catch.
+    expect(sharePair(1, 7)).toEqual({ retainer: 13, project: 87 })
+    for (const [r, p] of [[1, 7], [7, 1], [3, 5], [5, 3], [1, 2], [335, 1000]]) {
+      const each = sharePair(r, p)!
+      expect(each.retainer + each.project).toBe(100)
+    }
+  })
+
+  it('gives a month with no money no shares at all, rather than 0% and 0%', () => {
+    // A month nobody billed has no composition. Rendering "0% / 0%" would state
+    // a split that does not exist, and 0/0 is NaN besides.
+    expect(sharePair(0, 0)).toBeNull()
+  })
+
+  it('reads a single-kind month as the whole of it', () => {
+    expect(sharePair(500_000, 0)).toEqual({ retainer: 100, project: 0 })
+    expect(sharePair(0, 500_000)).toEqual({ retainer: 0, project: 100 })
   })
 })

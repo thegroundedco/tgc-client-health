@@ -728,3 +728,33 @@
   fill: var(--text-primary);
   font-weight: 600;
 }
+
+/* The per-month shares, laid over the chart. Absolute within .plot, inset to
+   match the svg's own box -- .plot pads 3.5rem at the inline start for the y
+   axis, and the svg fills what is left, so the overlay must start where the
+   svg does or every label drifts right. */
+.shares {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: 3.5rem 0;
+  pointer-events: none;
+}
+
+.shareOnRetainer,
+.shareOnProject {
+  position: absolute;
+  translate: -50% -50%;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Ink chosen against the fill each sits on, not one colour for both. These are
+   the only two places in the app where text is drawn ON a series colour. */
+.shareOnRetainer {
+  color: var(--text-on-band);
+}
+
+.shareOnProject {
+  color: var(--text-on-band);
+}

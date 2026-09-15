@@ -1079,3 +1079,36 @@ describe('Billing', () => {
     expect(markup).not.toMatch(/#[0-9a-fA-F]{6}/)
   })
 })
+
+describe('Billing — the share of each month, written into the bar', () => {
+  // The owner, looking at September with real data: "I'd love for there to be a
+  // percentage of what each item took up that month... retainer took up 60%,
+  // roughly, and project took up 40%."
+  it('writes both shares onto a month that has both kinds', () => {
+    const rows = [row(1, '2026-09-01', 600000, 400000)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.getByText('60%')).toBeTruthy()
+    expect(screen.getByText('40%')).toBeTruthy()
+  })
+
+  it('leaves the figure off a sliver too short to hold it', () => {
+    // 1% of the month. The label would overflow its own segment and appear to
+    // be labelling the colour above it, which misreads worse than a bar with
+    // no figure on it.
+    const rows = [row(1, '2026-09-01', 990000, 10000)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.getByText('99%')).toBeTruthy()
+    expect(screen.queryByText('1%')).toBeNull()
+  })
+
+  it('writes no shares on a month nobody billed', () => {
+    // A month with an entered row of zero has no composition. "0%" twice would
+    // state a split that does not exist.
+    const rows = [row(1, '2026-09-01', 0, 0)]
+    render(<Billing clients={CLIENTS} compare="none" currentPeriod="2026-09-01" range={spanOf(rows)} rows={rows} />)
+
+    expect(screen.queryByText('0%')).toBeNull()
+  })
+})

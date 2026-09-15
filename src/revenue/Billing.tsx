@@ -8,6 +8,7 @@ import {
   comparisonTotals,
   monthRows,
   monthlyTotals,
+  sharePair,
 } from './chartMath'
 import type { CompareTotal, MonthRow, MonthTotal, RevenueRow } from './chartMath'
 import { MonthPanel } from './MonthPanel'
@@ -33,6 +34,11 @@ import styles from './Revenue.module.css'
 // A viewBox, not pixels: the SVG scales to its container and the numbers below
 // are a coordinate space rather than a size on anybody's screen.
 const VIEW = { width: 600, height: 200, gap: 2 }
+
+// A segment shorter than this cannot hold a percentage inside itself. Below it
+// the figure would overflow its own colour and appear to label the segment
+// above -- which is worse than no figure at all.
+const MIN_SHARE_HEIGHT = 20
 
 // How far the card sits from the cursor, and how much room it needs before it
 // has to flip to the other side. A card drawn off the right edge is invisible
@@ -615,6 +621,52 @@ export function Billing({
           </g>
         ))}
       </svg>
+
+      {/* The share of each month, written into the bar.
+          HTML OVER THE CHART, NOT <text> INSIDE IT. preserveAspectRatio="none"
+          stretches the horizontal axis, which would stretch every glyph -- the
+          same reason the month labels below the plot are HTML. Positioned by
+          PERCENTAGE horizontally (which the stretch maps correctly) and by
+          PIXEL vertically (the block axis is a fixed 200px, so viewBox units
+          and pixels are the same thing there).
+
+          A label is drawn only where its segment is tall enough to hold one.
+          On a month that is 2% project work the figure would otherwise sit
+          outside its own segment, pointing at the wrong colour.
+
+          aria-hidden because the month table below carries the same
+          composition in dollars, exactly, and a screen reader reading
+          percentages interleaved through a chart gets noise rather than the
+          figure it wanted. */}
+      <div aria-hidden="true" className={styles.shares}>
+        {bars.map((bar, index) => {
+          const month = totals[index]
+          if (!bar.entered || month === undefined) return null
+          const share = sharePair(month.retainerCents, month.projectCents)
+          if (share === null) return null
+          const centre = ((bar.x + bar.width / 2) / VIEW.width) * 100
+          return (
+            <div key={bar.period}>
+              {bar.retainerHeight >= MIN_SHARE_HEIGHT && (
+                <span
+                  className={styles.shareOnRetainer}
+                  style={{ insetBlockStart: bar.retainerY + bar.retainerHeight / 2, insetInlineStart: `${centre}%` }}
+                >
+                  {share.retainer}%
+                </span>
+              )}
+              {bar.projectHeight >= MIN_SHARE_HEIGHT && (
+                <span
+                  className={styles.shareOnProject}
+                  style={{ insetBlockStart: bar.projectY + bar.projectHeight / 2, insetInlineStart: `${centre}%` }}
+                >
+                  {share.project}%
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
       </div>
 
       {/* The months, as HTML beneath the svg rather than <text> inside it.
