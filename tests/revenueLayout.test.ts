@@ -163,4 +163,30 @@ describe('the revenue sections', () => {
     expect(SECTIONS).toContain('border-end-start-radius')
     expect(SECTIONS).toContain('border-end-end-radius')
   })
+
+  // THE RETENTION CHART'S TWO LINES, and why the assertion is here rather
+  // than in RetentionChart.dom.test.tsx. jsdom resolves no CSS module: every
+  // className there is an opaque string and getComputedStyle reports nothing,
+  // so the DOM test can say the two lines carry DIFFERENT classes and cannot
+  // say the classes differ in any way a reader could see. Delete the dash
+  // pattern and that test still passes while the chart stops distinguishing
+  // its series.
+  //
+  // THE PRIMARY READER OF THIS PAGE IS COLOURBLIND. The two lines share a
+  // colour token on purpose -- as the loss segments above them do -- so the
+  // stroke style is not decoration, it is the distinction.
+  it('draws GRR dashed and NRR solid, so the two lines differ without colour', () => {
+    expect(sectionRule('.retentionGrr')).toMatch(/stroke-dasharray:\s*\S/)
+    expect(sectionRule('.retentionNrr')).not.toContain('stroke-dasharray')
+    // Both really are drawn, and drawn by these two rules: a pair of unused
+    // selectors would satisfy the lines above while the chart showed nothing.
+    expect(sectionRule('.retentionGrr')).toContain('stroke:')
+    expect(sectionRule('.retentionNrr')).toContain('stroke:')
+  })
+
+  // The scale used to share the right margin with those end labels, and on the
+  // real data a tick printed on top of one of them.
+  it('sets the rate scale against the plot edge rather than under the labels', () => {
+    expect(sectionRule('.retentionTick')).toContain('text-anchor: end')
+  })
 })

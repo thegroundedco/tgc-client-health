@@ -716,6 +716,14 @@
   dominant-baseline: middle;
 }
 
+/* The scale sits in the LEFT margin, set against the plot edge. It shared the
+   right margin with the series end labels until a tick printed over one of
+   them -- and the end label is the only thing telling a colourblind reader
+   which line is which. */
+.retentionTick {
+  text-anchor: end;
+}
+
 .retentionEndLabel {
   fill: var(--text-primary);
   font-weight: 600;
