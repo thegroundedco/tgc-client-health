@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Billing } from '../revenue/Billing'
-import { Mix } from '../revenue/Mix'
 import { RangeControl } from '../revenue/RangeControl'
 import { resolveRange } from '../revenue/rangeMath'
 import type { CompareMode, RangePreset } from '../revenue/rangeMath'
@@ -136,15 +135,6 @@ export function Revenue() {
         </>
       )}
 
-      {/* Last, and outside the range control's reach: it answers a question
-          about relationships rather than about months. */}
-      <Mix
-        asOf={asOf}
-        clients={revenue.clients}
-        loadError={revenue.loadError}
-        rows={revenue.rows}
-        status={revenue.status}
-      />
     </section>
   )
 }

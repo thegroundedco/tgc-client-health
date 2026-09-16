@@ -1,13 +1,20 @@
 import type { RevenueRow } from './chartMath'
 import type { RetentionClient } from './retentionMath'
-import { daysBetween } from './tenureMath'
 
-// Do retainer clients last longer and pay more than project clients?
+// What are clients actually paying, and does that money say retainer or
+// project?
 //
 // Asked by the owner's boss on 2026-09-11: "my belief is the monthly retainer
 // is a stronger play for us, we make more money that way, I have this belief
 // that we probably keep the retainer clients longer... but I might be wrong,
 // and if I'm wrong, that grossly changes what maybe our focus should be."
+//
+// This module answers only the money half of that. Tenure moved out to
+// `Tenure` and `Churn`, which carry it with the caveat it needs: most start
+// dates on file are import floors -- the first invoice month a client was
+// brought in under -- rather than when the relationship actually began, and a
+// module that mixed the two questions could not state that caveat once for
+// both.
 //
 // THE WHOLE POINT IS THAT THE ANSWER MIGHT CONTRADICT HIM, so nothing here may
 // round in favour of the hypothesis. A client whose revenue splits exactly
@@ -22,12 +29,14 @@ export type EngagementKind = 'retainer' | 'project'
 export type ClientEngagement = {
   clientId: number
   name: string
+  /** The client's lifecycle status, carried so the ranking can filter on it. */
+  status: string
   kind: EngagementKind
   retainerCents: number
   projectCents: number
   totalCents: number
-  /** Null when the client has no start date on file. See the note on §unknownStart. */
-  tenureDays: number | null
+  /** Months in which this client billed anything. An entered zero is not one. */
+  monthsBilled: number
 }
 
 export type GroupSummary = {
@@ -35,26 +44,12 @@ export type GroupSummary = {
   totalCents: number
   /** Null for an empty group: zero is a measurement, "none of these" is not. */
   medianTotalCents: number | null
-  medianTenureDays: number | null
-  /** How many of `count` have a start date, and so contribute to the tenure median. */
-  tenureKnown: number
 }
 
 export type MixReport = {
   clients: ClientEngagement[]
   retainer: GroupSummary
   project: GroupSummary
-  /**
-   * Clients with no start date on file, excluded from the tenure medians.
-   *
-   * This is the caveat the report cannot be read without. Most of the roster
-   * arrived through the 2026 import with a start date set to the FIRST INVOICE
-   * MONTH, which is a floor on the relationship rather than its beginning --
-   * and any client with no date at all would otherwise be counted as
-   * zero-length. Stated, not hidden: a tenure comparison the reader cannot
-   * calibrate is worse than none.
-   */
-  unknownStart: number
 }
 
 /**
@@ -73,16 +68,10 @@ export function medianOf(values: readonly number[]): number | null {
 }
 
 function summarise(group: readonly ClientEngagement[]): GroupSummary {
-  const tenures = group
-    .map((entry) => entry.tenureDays)
-    .filter((days): days is number => days !== null)
-
   return {
     count: group.length,
     totalCents: group.reduce((sum, entry) => sum + entry.totalCents, 0),
     medianTotalCents: medianOf(group.map((entry) => entry.totalCents)),
-    medianTenureDays: medianOf(tenures),
-    tenureKnown: tenures.length,
   }
 }
 
@@ -103,18 +92,28 @@ function summarise(group: readonly ClientEngagement[]): GroupSummary {
 export function clientMix(
   clients: readonly RetentionClient[],
   rows: readonly RevenueRow[],
-  asOf: string,
 ): MixReport {
-  const money = new Map<number, { retainerCents: number; projectCents: number }>()
+  const money = new Map<
+    number,
+    { retainerCents: number; projectCents: number; months: Set<string> }
+  >()
   for (const row of rows) {
-    const found = money.get(row.client_id) ?? { retainerCents: 0, projectCents: 0 }
+    const found = money.get(row.client_id) ?? {
+      retainerCents: 0,
+      projectCents: 0,
+      months: new Set<string>(),
+    }
     found.retainerCents += row.retainer_cents
     found.projectCents += row.project_cents
+    // A month counts as BILLED only if money changed hands in it. An entered
+    // zero is a month somebody confirmed was empty, and dividing by it would
+    // report a lower monthly rate for the client whose zeroes were diligently
+    // entered than for the one whose were never typed at all.
+    if (row.retainer_cents + row.project_cents > 0) found.months.add(row.period)
     money.set(row.client_id, found)
   }
 
   const entries: ClientEngagement[] = []
-  let unknownStart = 0
 
   for (const client of clients) {
     const found = money.get(client.id)
@@ -128,19 +127,15 @@ export function clientMix(
       continue
     }
 
-    // Tenure runs to the day they LEFT, not to today, or every departed client
-    // would appear to be still accruing.
-    const end = client.ended_on ?? asOf
-    if (client.started_on === null) unknownStart += 1
-
     entries.push({
       clientId: client.id,
       name: client.name,
+      status: client.status,
       kind: found.retainerCents > found.projectCents ? 'retainer' : 'project',
       retainerCents: found.retainerCents,
       projectCents: found.projectCents,
       totalCents,
-      tenureDays: client.started_on === null ? null : daysBetween(client.started_on, end),
+      monthsBilled: found.months.size,
     })
   }
 
@@ -148,6 +143,5 @@ export function clientMix(
     clients: entries,
     retainer: summarise(entries.filter((entry) => entry.kind === 'retainer')),
     project: summarise(entries.filter((entry) => entry.kind === 'project')),
-    unknownStart,
   }
 }
