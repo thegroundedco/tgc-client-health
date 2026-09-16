@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Billing } from '../revenue/Billing'
-import { Mix } from '../revenue/Mix'
 import { RangeControl } from '../revenue/RangeControl'
 import { resolveRange } from '../revenue/rangeMath'
 import type { CompareMode, RangePreset } from '../revenue/rangeMath'
@@ -8,6 +7,7 @@ import { Churn } from '../revenue/Churn'
 import { Concentration } from '../revenue/Concentration'
 import { Retention } from '../revenue/Retention'
 import { Tenure } from '../revenue/Tenure'
+import { Value } from '../revenue/Value'
 import { defaultPeriod } from '../lib/month'
 import { latestPeriod } from '../revenue/retentionMath'
 import { currentRows, departedRows, todayISO } from '../revenue/tenureMath'
@@ -138,8 +138,7 @@ export function Revenue() {
 
       {/* Last, and outside the range control's reach: it answers a question
           about relationships rather than about months. */}
-      <Mix
-        asOf={asOf}
+      <Value
         clients={revenue.clients}
         loadError={revenue.loadError}
         rows={revenue.rows}

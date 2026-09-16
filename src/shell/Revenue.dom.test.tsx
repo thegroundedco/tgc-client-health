@@ -96,25 +96,26 @@ describe('the Revenue destination', () => {
     // are most exposed to, then how long clients stay and who left. Aggregate to
     // individual.
     //
-    // Asserted as a SEQUENCE rather than as five presence checks, because the
+    // Asserted as a SEQUENCE rather than as six presence checks, because the
     // reorder IS the deliverable -- Retention used to sit at the bottom, below
-    // Churn, and it is the figure the owner reports upward. Five presence
+    // Churn, and it is the figure the owner reports upward. Six presence
     // assertions would pass with the old order intact.
     given()
 
     const headings = screen
       .getAllByRole('heading', { level: 3 })
       .map((node) => node.textContent)
-    // Six as of 2026-09-11. "Retainer vs project" is LAST and outside the
-    // range control's reach: it answers a question about relationships rather
-    // than about the months in view.
+    // Six as of slice C, 2026-09-16. "Retainer vs project" was the sixth and
+    // last section; it went down while its maths was reshaped, and "What each
+    // client is worth" (Task 3) is its replacement, landing in the same
+    // position -- last, and still outside the range control.
     expect(headings).toEqual([
       'Billing',
       'Retention',
       'Concentration',
       'Tenure',
       'Churn',
-      'Retainer vs project',
+      'What each client is worth',
     ])
   })
 
