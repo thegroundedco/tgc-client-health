@@ -41,7 +41,7 @@ describe('the monthly equivalent', () => {
       row(1, '2026-03-01', 0, 1_000_000),
     ]
 
-    const { rows: ranked } = clientValue([client(1, 'Babaloo')], rows)
+    const { rows: ranked } = clientValue([client(1, 'Client Alpha')], rows)
     expect(ranked[0].monthlyEquivalentCents).toBe(1_000_000)
   })
 
@@ -51,13 +51,13 @@ describe('the monthly equivalent', () => {
       row(1, '2026-02-01', 400_000, 0),
     ]
 
-    const { rows: ranked } = clientValue([client(1, 'Colorfil')], rows)
+    const { rows: ranked } = clientValue([client(1, 'Client Bravo')], rows)
     expect(ranked[0].monthlyEquivalentCents).toBe(400_000)
   })
 
   it('is the one month itself for a client billed once', () => {
     const { rows: ranked } = clientValue(
-      [client(1, 'Sno-Go')],
+      [client(1, 'Client Charlie')],
       [row(1, '2026-01-01', 750_000, 0)],
     )
     expect(ranked[0].monthlyEquivalentCents).toBe(750_000)
@@ -68,7 +68,7 @@ describe('the monthly equivalent', () => {
   // is a floor rather than a beginning, which is exactly why lifetime value
   // was chosen over anything tenure-derived.
   it('does not care that a client has no start date', () => {
-    const noStart = { ...client(1, 'Babaloo'), started_on: null }
+    const noStart = { ...client(1, 'Client Alpha'), started_on: null }
     const { rows: ranked } = clientValue([noStart], [row(1, '2026-01-01', 500_000, 0)])
     expect(ranked[0].monthlyEquivalentCents).toBe(500_000)
   })
@@ -76,7 +76,11 @@ describe('the monthly equivalent', () => {
 
 describe('the ranking', () => {
   it('puts the most valuable client first', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil'), client(3, 'Sno-Go')]
+    const clients = [
+      client(1, 'Client Alpha'),
+      client(2, 'Client Bravo'),
+      client(3, 'Client Charlie'),
+    ]
     const rows = [
       row(1, '2026-01-01', 100_000, 0),
       row(2, '2026-01-01', 900_000, 0),
@@ -84,33 +88,37 @@ describe('the ranking', () => {
     ]
 
     const { rows: ranked } = clientValue(clients, rows)
-    expect(ranked.map((entry) => entry.name)).toEqual(['Colorfil', 'Sno-Go', 'Babaloo'])
+    expect(ranked.map((entry) => entry.name)).toEqual([
+      'Client Bravo',
+      'Client Charlie',
+      'Client Alpha',
+    ])
   })
 
   // Deterministic, so the list does not reshuffle between renders on equal money.
   it('breaks a tie on name rather than leaving it to chance', () => {
-    const clients = [client(1, 'Sno-Go'), client(2, 'Babaloo')]
+    const clients = [client(1, 'Client Charlie'), client(2, 'Client Alpha')]
     const rows = [row(1, '2026-01-01', 500_000, 0), row(2, '2026-01-01', 500_000, 0)]
 
     const { rows: ranked } = clientValue(clients, rows)
-    expect(ranked.map((entry) => entry.name)).toEqual(['Babaloo', 'Sno-Go'])
+    expect(ranked.map((entry) => entry.name)).toEqual(['Client Alpha', 'Client Charlie'])
   })
 
   // A client listed at $0 says the agency bills them nothing, rather than that
   // nobody has typed it. The whole codebase keeps this rule.
   it('leaves out a client with nothing entered', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil')]
+    const clients = [client(1, 'Client Alpha'), client(2, 'Client Bravo')]
     const { rows: ranked } = clientValue(clients, [row(1, '2026-01-01', 500_000, 0)])
 
-    expect(ranked.map((entry) => entry.name)).toEqual(['Babaloo'])
+    expect(ranked.map((entry) => entry.name)).toEqual(['Client Alpha'])
   })
 })
 
 describe('who is eligible, and how many are drawn', () => {
   const clients = [
-    client(1, 'Babaloo'),
-    client(2, 'Colorfil', 'churned'),
-    client(3, 'Sno-Go', 'paused'),
+    client(1, 'Client Alpha'),
+    client(2, 'Client Bravo', 'former'),
+    client(3, 'Client Charlie', 'paused'),
   ]
   const rows = [
     row(1, '2026-01-01', 100_000, 0),
@@ -119,16 +127,19 @@ describe('who is eligible, and how many are drawn', () => {
   ]
 
   // The clients board's allowlist, not "has no end date": a paused client is
-  // not active.
+  // not active. The four statuses are the ones clientForm permits -- there is
+  // no 'churned' status on this roster, and a fixture that invents one tests
+  // nothing the database can hold.
   it('counts only an active status as active', () => {
     expect(isActive('active')).toBe(true)
     expect(isActive('paused')).toBe(false)
-    expect(isActive('churned')).toBe(false)
+    expect(isActive('former')).toBe(false)
+    expect(isActive('cancelled')).toBe(false)
   })
 
   it('shows only active clients by default', () => {
     const { rows: ranked } = clientValue(clients, rows)
-    expect(visibleRows(ranked, false, true).map((entry) => entry.name)).toEqual(['Babaloo'])
+    expect(visibleRows(ranked, false, true).map((entry) => entry.name)).toEqual(['Client Alpha'])
   })
 
   // The consequence the spec accepts rather than engineers around: a departed
@@ -136,9 +147,9 @@ describe('who is eligible, and how many are drawn', () => {
   it('ranks departed clients INTO the list, not after it', () => {
     const { rows: ranked } = clientValue(clients, rows)
     expect(visibleRows(ranked, true, true).map((entry) => entry.name)).toEqual([
-      'Colorfil',
-      'Sno-Go',
-      'Babaloo',
+      'Client Bravo',
+      'Client Charlie',
+      'Client Alpha',
     ])
   })
 
@@ -178,28 +189,28 @@ describe('the verdict', () => {
   // "retainer" would pass every other test in this file. The boss's belief is
   // what is being TESTED, so the sentence must be able to contradict him.
   it('says retainer when retainer clients are worth more', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil')]
+    const clients = [client(1, 'Client Alpha'), client(2, 'Client Bravo')]
     const rows = [row(1, '2026-01-01', 900_000, 0), row(2, '2026-01-01', 0, 100_000)]
 
     expect(clientValue(clients, rows).verdict.winner).toBe('retainer')
   })
 
   it('says PROJECT when project clients are worth more', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil')]
+    const clients = [client(1, 'Client Alpha'), client(2, 'Client Bravo')]
     const rows = [row(1, '2026-01-01', 100_000, 0), row(2, '2026-01-01', 0, 900_000)]
 
     expect(clientValue(clients, rows).verdict.winner).toBe('project')
   })
 
   it('declares no winner when the two typical clients are worth the same', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil')]
+    const clients = [client(1, 'Client Alpha'), client(2, 'Client Bravo')]
     const rows = [row(1, '2026-01-01', 500_000, 0), row(2, '2026-01-01', 0, 500_000)]
 
     expect(clientValue(clients, rows).verdict.winner).toBeNull()
   })
 
   it('declares no winner when one kind has nobody in it', () => {
-    const { verdict } = clientValue([client(1, 'Babaloo')], [row(1, '2026-01-01', 500_000, 0)])
+    const { verdict } = clientValue([client(1, 'Client Alpha')], [row(1, '2026-01-01', 500_000, 0)])
 
     expect(verdict.winner).toBeNull()
     expect(verdict.projectMedianCents).toBeNull()
@@ -210,7 +221,7 @@ describe('the verdict', () => {
   // list's filter -- a completed relationship is the only complete lifetime
   // value there is, and departed clients are most of this history.
   it('is drawn from every client ever billed, departed included', () => {
-    const clients = [client(1, 'Babaloo'), client(2, 'Colorfil', 'churned')]
+    const clients = [client(1, 'Client Alpha'), client(2, 'Client Bravo', 'cancelled')]
     const rows = [row(1, '2026-01-01', 100_000, 0), row(2, '2026-01-01', 0, 900_000)]
 
     expect(clientValue(clients, rows).verdict.clientCount).toBe(2)

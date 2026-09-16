@@ -83,7 +83,7 @@ describe('clientMix — which kind of client is this', () => {
 
 describe('clientMix — how many months a client billed', () => {
   it('counts the months a client actually billed in', () => {
-    const clients = [client(1, 'Babaloo')]
+    const clients = [client(1, 'Client Alpha')]
     const rows = [
       row(1, '2026-01-01', 400_000, 0),
       row(1, '2026-02-01', 400_000, 0),
@@ -97,7 +97,7 @@ describe('clientMix — how many months a client billed', () => {
   // report a lower rate for the client whose account manager was diligent about
   // entering zeroes, which is the opposite of what the figure is for.
   it('does not count a month entered as zero', () => {
-    const clients = [client(1, 'Babaloo')]
+    const clients = [client(1, 'Client Alpha')]
     const rows = [
       row(1, '2026-01-01', 400_000, 0),
       row(1, '2026-02-01', 0, 0),
@@ -110,7 +110,7 @@ describe('clientMix — how many months a client billed', () => {
   // Two rows for one client in one month must not count that month twice --
   // otherwise the monthly equivalent halves for no reason a reader could see.
   it('counts a month once however many rows it arrives in', () => {
-    const clients = [client(1, 'Babaloo')]
+    const clients = [client(1, 'Client Alpha')]
     const rows = [
       row(1, '2026-01-01', 400_000, 0),
       row(1, '2026-01-01', 0, 100_000),
@@ -121,10 +121,10 @@ describe('clientMix — how many months a client billed', () => {
 
   // valueMath filters the ranking by status and cannot reach the roster itself.
   it('carries each client status through, for the ranking to filter on', () => {
-    const clients = [client(1, 'Babaloo', 'churned')]
+    const clients = [client(1, 'Client Alpha', 'former')]
     const rows = [row(1, '2026-01-01', 400_000, 0)]
 
-    expect(clientMix(clients, rows).clients[0].status).toBe('churned')
+    expect(clientMix(clients, rows).clients[0].status).toBe('former')
   })
 })
 

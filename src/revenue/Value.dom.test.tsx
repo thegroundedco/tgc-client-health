@@ -30,9 +30,9 @@ function row(
 }
 
 const CLIENTS = [
-  client(1, 'Babaloo'),
-  client(2, 'Colorfil'),
-  client(3, 'Sno-Go', 'churned'),
+  client(1, 'Client Alpha'),
+  client(2, 'Client Bravo'),
+  client(3, 'Client Charlie', 'former'),
 ]
 
 const ROWS = [
@@ -52,22 +52,22 @@ describe('What each client is worth', () => {
   it('ranks the most valuable active client first', () => {
     draw()
     const names = screen.getAllByTestId('value-name').map((node) => node.textContent)
-    expect(names).toEqual(['Babaloo', 'Colorfil'])
+    expect(names).toEqual(['Client Alpha', 'Client Bravo'])
   })
 
   it('shows what a client has billed and what that is per month', () => {
     draw()
-    const babaloo = screen.getByRole('listitem', { name: 'Babaloo' })
-    expect(within(babaloo).getByTestId('value-total').textContent).toContain('$8,000')
-    expect(within(babaloo).getByTestId('value-rate').textContent).toContain('$4,000')
+    const alpha = screen.getByRole('listitem', { name: 'Client Alpha' })
+    expect(within(alpha).getByTestId('value-total').textContent).toContain('$8,000')
+    expect(within(alpha).getByTestId('value-rate').textContent).toContain('$4,000')
   })
 
   it('leaves departed clients out until they are asked for', async () => {
     draw()
-    expect(screen.queryByText('Sno-Go')).toBeNull()
+    expect(screen.queryByText('Client Charlie')).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 departed' }))
-    expect(screen.getByText('Sno-Go')).toBeTruthy()
+    expect(screen.getByText('Client Charlie')).toBeTruthy()
   })
 
   // The consequence the spec accepts: a departed client outranks the book.
@@ -76,7 +76,7 @@ describe('What each client is worth', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 departed' }))
 
     const names = screen.getAllByTestId('value-name').map((node) => node.textContent)
-    expect(names).toEqual(['Sno-Go', 'Babaloo', 'Colorfil'])
+    expect(names).toEqual(['Client Charlie', 'Client Alpha', 'Client Bravo'])
   })
 
   it('answers the question in a sentence, naming the clients it drew from', () => {
