@@ -57,6 +57,18 @@ export type MixReport = {
  *
  * On a book where one client can be a fifth of revenue, a mean describes that
  * client rather than the group. The median is what survives a Dixxon.
+ *
+ * INTEGER CENTS OUT, ALWAYS. The middle pair of an even-sized group is
+ * averaged, and two clients at $1,000.01 and $1,000.02 average to a HALF
+ * cent -- which `formatMoney` prints as "$1,000.02", a figure no client
+ * billed, on a page where every other number is exact. Every caller of this
+ * function is now money (tenure left this module earlier in the slice), so the
+ * rounding belongs here rather than at each reader.
+ *
+ * Rounding cannot manufacture evidence for the hypothesis being tested: the
+ * two group medians round by the same rule, and the only verdict a half cent
+ * can change is a near-tie into a DEAD HEAT, which is the reading that
+ * declines to pick a winner.
  */
 export function medianOf(values: readonly number[]): number | null {
   if (values.length === 0) return null
@@ -64,7 +76,7 @@ export function medianOf(values: readonly number[]): number | null {
   const middle = Math.floor(sorted.length / 2)
   return sorted.length % 2 === 1
     ? sorted[middle]
-    : (sorted[middle - 1] + sorted[middle]) / 2
+    : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
 }
 
 function summarise(group: readonly ClientEngagement[]): GroupSummary {

@@ -41,6 +41,17 @@ describe('medianOf', () => {
     expect(medianOf([1, 2, 10, 200])).toBe(6)
   })
 
+  // Money is integer cents everywhere in this project, and the median is
+  // rendered by formatMoney. An odd-cent middle pair averages to a HALF cent,
+  // which prints as a figure no client ever billed. Not currently firing on
+  // production-shaped data -- the project group's middle pair sums even today
+  // -- which is exactly why it needs a test rather than an observation.
+  it('never returns a fraction of a cent from an odd middle pair', () => {
+    const median = medianOf([100001, 100002])
+    expect(Number.isInteger(median)).toBe(true)
+    expect(median).toBe(100002)
+  })
+
   it('does not care what order it is given', () => {
     expect(medianOf([30, 1, 2])).toBe(2)
   })
