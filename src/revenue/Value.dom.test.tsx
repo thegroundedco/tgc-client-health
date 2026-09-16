@@ -79,11 +79,18 @@ describe('What each client is worth', () => {
     expect(names).toEqual(['Client Charlie', 'Client Alpha', 'Client Bravo'])
   })
 
+  // The two figures are asserted IN THEIR ROLES, not merely present. Swapping
+  // the winner's median for the loser's renders "retainer clients are worth
+  // more: the typical one has billed $3,000, against $29,000 for the typical
+  // project client" -- a sentence contradicting its own numbers, on the
+  // page's headline finding.
   it('answers the question in a sentence, naming the clients it drew from', () => {
     draw()
     const verdict = screen.getByTestId('value-verdict').textContent ?? ''
-    expect(verdict).toContain('Across all 3 clients ever billed')
-    expect(verdict).toMatch(/retainer clients are worth more/i)
+    expect(verdict).toBe(
+      'Across all 3 clients ever billed, retainer clients are worth more: the typical one ' +
+        'has billed $29,000, against $3,000 for the typical project client.',
+    )
   })
 
   // THE MUTANT THIS SLICE INVITES. The verdict is drawn from every client ever
@@ -107,5 +114,119 @@ describe('What each client is worth', () => {
     draw({ rows: [] })
     expect(screen.getByText(/No revenue has been entered/)).toBeTruthy()
     expect(screen.queryByTestId('value-name')).toBeNull()
+  })
+})
+
+// THE VERDICT THIS SLICE IS MOST LIKELY TO GET WRONG, at the layer the owner
+// actually reads. valueMath proves `winner` takes 'project' and null, but
+// every fixture above confirms the boss's belief, so the SENTENCE was free to
+// be hard-coded to "retainer" and pass all of it. The whole point of this
+// section is that the answer may contradict him.
+describe('the verdict sentence, in every branch it has', () => {
+  function drawVerdict(clients: RetentionClient[], rows: RevenueRow[]) {
+    render(<Value clients={clients} loadError={null} rows={rows} status="ready" />)
+    return screen.getByTestId('value-verdict').textContent ?? ''
+  }
+
+  it('says PROJECT clients are worth more when they are', () => {
+    const verdict = drawVerdict(
+      [client(1, 'Client Alpha'), client(2, 'Client Bravo')],
+      [row(1, '2026-01-01', 100_000, 0), row(2, '2026-01-01', 0, 900_000)],
+    )
+
+    expect(verdict).toBe(
+      'Across all 2 clients ever billed, project clients are worth more: the typical one ' +
+        'has billed $9,000, against $1,000 for the typical retainer client.',
+    )
+  })
+
+  // A DEAD HEAT IS REPORTED AS A DEAD HEAT. Resolving it toward the belief
+  // being tested would be the section manufacturing its own evidence.
+  it('calls a dead heat a dead heat rather than picking a side', () => {
+    const verdict = drawVerdict(
+      [client(1, 'Client Alpha'), client(2, 'Client Bravo')],
+      [row(1, '2026-01-01', 500_000, 0), row(2, '2026-01-01', 0, 500_000)],
+    )
+
+    expect(verdict).toBe(
+      'Across all 2 clients ever billed, retainer and project clients are worth about the ' +
+        'same: $5,000 for the typical client of either kind.',
+    )
+  })
+
+  // Spec 2.1 requires the sentence to name its population, and this branch
+  // was the one verdict that did not.
+  it('names its population even when there is nothing to compare', () => {
+    const verdict = drawVerdict(
+      [client(1, 'Client Alpha'), client(2, 'Client Bravo')],
+      [row(1, '2026-01-01', 100_000, 0), row(2, '2026-01-01', 900_000, 0)],
+    )
+
+    expect(verdict).toBe(
+      'Across all 2 clients ever billed, only one kind of client has billed anything, so ' +
+        'there is nothing to compare.',
+    )
+  })
+})
+
+// More than ten clients, which nothing above builds -- so the length control
+// was never rendered, never pressed, and its render condition could be
+// replaced with `false` without a test noticing.
+describe('how much of the list is drawn', () => {
+  // Descending totals, so the ranking is Client 1 .. Client 14 and a row count
+  // is enough to say how much was drawn.
+  function manyClients(activeCount: number): RetentionClient[] {
+    return Array.from({ length: 14 }, (_, index) =>
+      client(
+        index + 1,
+        `Client ${index + 1}`,
+        index < activeCount ? 'active' : index % 2 === 0 ? 'former' : 'cancelled',
+      ),
+    )
+  }
+
+  const MANY_ROWS = Array.from({ length: 14 }, (_, index) =>
+    index % 2 === 0
+      ? row(index + 1, '2026-01-01', (14 - index) * 100_000, 0)
+      : row(index + 1, '2026-01-01', 0, (14 - index) * 100_000),
+  )
+
+  function drawMany(activeCount: number) {
+    render(
+      <Value clients={manyClients(activeCount)} loadError={null} rows={MANY_ROWS} status="ready" />,
+    )
+  }
+
+  const rowCount = () => screen.queryAllByTestId('value-name').length
+
+  it('draws ten of fourteen until the reader asks for the rest', async () => {
+    drawMany(14)
+    expect(rowCount()).toBe(10)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show all 14' }))
+    expect(rowCount()).toBe(14)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show top 10' }))
+    expect(rowCount()).toBe(10)
+  })
+
+  // THE INTERFERENCE. Length and eligibility are independent controls, and
+  // `showAll` is state that outlives a change in eligibility: this sequence
+  // used to end with "Show top 10" offered above a list of two, which changed
+  // nothing when pressed and then disappeared.
+  it('withdraws the length control when hiding the departed shortens the list', async () => {
+    drawMany(2)
+    expect(rowCount()).toBe(2)
+    expect(screen.queryByRole('button', { name: /Show all|Show top/ })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show 12 departed' }))
+    expect(rowCount()).toBe(10)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show all 14' }))
+    expect(rowCount()).toBe(14)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide 12 departed' }))
+    expect(rowCount()).toBe(2)
+    expect(screen.queryByRole('button', { name: /Show all|Show top/ })).toBeNull()
   })
 })

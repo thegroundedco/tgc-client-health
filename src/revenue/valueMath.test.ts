@@ -9,6 +9,7 @@ import {
   eligibleCount,
   isActive,
   lengthToggleLabel,
+  showsLengthControl,
   visibleRows,
 } from './valueMath'
 
@@ -173,6 +174,15 @@ describe('who is eligible, and how many are drawn', () => {
     const { rows: ranked } = clientValue(clients, rows)
     expect(eligibleCount(ranked, false)).toBe(1)
     expect(eligibleCount(ranked, true)).toBe(3)
+  })
+
+  // The two controls are INDEPENDENT. The length control is drawn on the size
+  // of the eligible list and nothing else -- reading `showAll` here is what
+  // let it survive a change in eligibility and stand above a list of two.
+  it('draws the length control only when the list is longer than the cut', () => {
+    expect(showsLengthControl(TOP_N + 1)).toBe(true)
+    expect(showsLengthControl(TOP_N)).toBe(false)
+    expect(showsLengthControl(2)).toBe(false)
   })
 
   // Both controls say what pressing them will DO, not what state they are in.

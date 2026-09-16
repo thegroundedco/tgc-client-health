@@ -123,6 +123,23 @@ export function lengthToggleLabel(eligible: number, showAll: boolean): string {
 }
 
 /**
+ * Whether the length control has anything to do.
+ *
+ * THE TWO CONTROLS ARE INDEPENDENT, and this is the seam at which they used to
+ * interfere. The condition also fired on `showAll`, which is state that
+ * survives a change in eligibility: reveal twelve departed clients, press
+ * "Show all 14", then hide the departed again, and "Show top 10" stood above a
+ * list of two. Pressing it changed nothing, and then it vanished.
+ *
+ * Drawn only when the eligible list is longer than the cut, which is true
+ * whether it is currently drawn long or short -- so the control that expands
+ * the list is the same control that collapses it again.
+ */
+export function showsLengthControl(eligible: number): boolean {
+  return eligible > TOP_N
+}
+
+/**
  * Every client ranked by what they have actually billed, and the verdict drawn
  * from all of them.
  *

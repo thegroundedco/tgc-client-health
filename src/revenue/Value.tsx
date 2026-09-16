@@ -6,6 +6,7 @@ import {
   departedToggleLabel,
   eligibleCount,
   lengthToggleLabel,
+  showsLengthControl,
   visibleRows,
 } from './valueMath'
 import type { ValueRow, Verdict } from './valueMath'
@@ -32,17 +33,21 @@ import styles from './Revenue.module.css'
 function VerdictLine({ verdict }: { verdict: Verdict }) {
   const { clientCount, projectMedianCents, retainerMedianCents, winner } = verdict
 
+  // Every branch names the population it was drawn from, per spec 2.1. The
+  // sentence does NOT follow the list's filter, so a reader who has just
+  // pressed "show departed" needs the sentence to say what it counted.
+  const population = `Across all ${clientCount} clients ever billed`
+
   // Only one kind of client has billed anything. A comparison drawn from one
   // group is not a comparison.
   if (retainerMedianCents === null || projectMedianCents === null) {
     return (
       <p className="t-body prose" data-testid="value-verdict">
-        Only one kind of client has billed anything so far, so there is nothing to compare.
+        {population}, only one kind of client has billed anything, so there is nothing to
+        compare.
       </p>
     )
   }
-
-  const population = `Across all ${clientCount} clients ever billed`
 
   // A DEAD HEAT IS NOT EVIDENCE FOR THE BELIEF BEING TESTED, so it is reported
   // as a dead heat rather than resolved toward the hypothesis.
@@ -176,8 +181,9 @@ function ValueReady({
       <div className={styles.buttonRow}>
         {/* Each control is drawn only when it has something to do. A control
             that reveals nothing is worse than no control: it implies something
-            is hidden. */}
-        {eligible > visible.length || showAll ? (
+            is hidden. The rule is in valueMath rather than a condition here,
+            because the two controls interfering is exactly the bug it fixes. */}
+        {showsLengthControl(eligible) ? (
           <button
             aria-expanded={showAll}
             className="button button--quiet"
