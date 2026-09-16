@@ -7,6 +7,7 @@ import { Churn } from '../revenue/Churn'
 import { Concentration } from '../revenue/Concentration'
 import { Retention } from '../revenue/Retention'
 import { Tenure } from '../revenue/Tenure'
+import { Value } from '../revenue/Value'
 import { defaultPeriod } from '../lib/month'
 import { latestPeriod } from '../revenue/retentionMath'
 import { currentRows, departedRows, todayISO } from '../revenue/tenureMath'
@@ -135,6 +136,14 @@ export function Revenue() {
         </>
       )}
 
+      {/* Last, and outside the range control's reach: it answers a question
+          about relationships rather than about months. */}
+      <Value
+        clients={revenue.clients}
+        loadError={revenue.loadError}
+        rows={revenue.rows}
+        status={revenue.status}
+      />
     </section>
   )
 }

@@ -90,30 +90,32 @@ describe('the Revenue destination', () => {
     expect(screen.getByRole('heading', { name: 'Revenue' })).toBeTruthy()
   })
 
-  it('puts its five sections in the order the spec argues for', () => {
+  it('puts its six sections in the order the spec argues for', () => {
     // Slice 6d. The order is an argument, not an accident: what we are billing
     // and whether it is moving, then how much of last year we kept, then who we
     // are most exposed to, then how long clients stay and who left. Aggregate to
     // individual.
     //
-    // Asserted as a SEQUENCE rather than as five presence checks, because the
+    // Asserted as a SEQUENCE rather than as six presence checks, because the
     // reorder IS the deliverable -- Retention used to sit at the bottom, below
-    // Churn, and it is the figure the owner reports upward. Five presence
+    // Churn, and it is the figure the owner reports upward. Six presence
     // assertions would pass with the old order intact.
     given()
 
     const headings = screen
       .getAllByRole('heading', { level: 3 })
       .map((node) => node.textContent)
-    // Five as of slice C, 2026-09-16. "Retainer vs project" was the sixth and
-    // last section; it has been taken down while its maths is reshaped for a
-    // replacement that lands in the same position (Task 3 of this slice).
+    // Six as of slice C, 2026-09-16. "Retainer vs project" was the sixth and
+    // last section; it went down while its maths was reshaped, and "What each
+    // client is worth" (Task 3) is its replacement, landing in the same
+    // position -- last, and still outside the range control.
     expect(headings).toEqual([
       'Billing',
       'Retention',
       'Concentration',
       'Tenure',
       'Churn',
+      'What each client is worth',
     ])
   })
 

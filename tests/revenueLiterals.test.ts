@@ -39,6 +39,10 @@ const ROOT = join(import.meta.dirname, '..')
 // rule against fabricated percentages. It carries its own argument instead;
 // see its module comment.
 //
+// Value.tsx joined on arrival, in the same slice that wrote it -- unlike
+// Tenure.tsx, Retention.tsx and Concentration.tsx, which each joined only
+// after a reviewer found the gap.
+//
 // A list, not a directory scan: a directory scan would catch a stray literal
 // in a file that never reaches this page and give a false sense that the rule
 // is broader than it is.
@@ -48,6 +52,7 @@ const GUARDED_FILES = [
   join(ROOT, 'src', 'revenue', 'Retention.tsx'),
   join(ROOT, 'src', 'revenue', 'Concentration.tsx'),
   join(ROOT, 'src', 'revenue', 'RetentionChart.tsx'),
+  join(ROOT, 'src', 'revenue', 'Value.tsx'),
 ]
 
 // Comments stripped before the check reads the file. The rule is about MARKUP:
