@@ -2,21 +2,24 @@
 
 import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-// Both of Overview's reads are mocked, and this is load-bearing rather than
-// tidy. src/lib/supabase.ts calls readSupabaseConfig at MODULE SCOPE and throws
-// when VITE_ config is absent, and CI runs vitest with no VITE_ env at all --
-// the hazard clientForm.ts documents in its own header.
+// All three of Overview's reads are mocked, and this is load-bearing rather
+// than tidy. src/lib/supabase.ts calls readSupabaseConfig at MODULE SCOPE and
+// throws when VITE_ config is absent, and CI runs vitest with no VITE_ env at
+// all -- the hazard clientForm.ts documents in its own header.
 //
 // This file was safe for as long as Overview was a static page importing
 // nothing. Filling it on 2026-09-12 gave it two hooks, and the import chain
 // Overview -> useBoard -> supabase took the whole suite down in CI while
 // passing locally, because a developer machine has .env.local and CI does not.
+// Slice D added a third read, usePackages, down the same kind of chain.
 vi.mock('../revenue/useRetention', () => ({ useRetention: vi.fn() }))
 vi.mock('../board/useBoard', () => ({ useBoard: vi.fn() }))
+vi.mock('../clients/usePackages', () => ({ usePackages: vi.fn() }))
 
 import { Overview } from './Overview'
 import { useRetention } from '../revenue/useRetention'
 import { useBoard } from '../board/useBoard'
+import { usePackages } from '../clients/usePackages'
 
 beforeEach(() => {
   vi.mocked(useRetention).mockReturnValue({
@@ -36,12 +39,18 @@ beforeEach(() => {
     activeTotal: 0,
     reload: vi.fn(),
   } as ReturnType<typeof useBoard>)
+  vi.mocked(usePackages).mockReturnValue({
+    status: 'ready',
+    loadError: null,
+    byClient: new Map(),
+  } as ReturnType<typeof usePackages>)
 })
 
 afterEach(() => {
   document.body.innerHTML = ''
   vi.mocked(useRetention).mockReset()
   vi.mocked(useBoard).mockReset()
+  vi.mocked(usePackages).mockReset()
 })
 
 // Spec §6. This page was empty on purpose until 2026-09-11: six stat lines were
@@ -59,7 +68,7 @@ afterEach(() => {
 // because it reads the source and src/ has no Node types.
 describe('Overview', () => {
   it('names itself', () => {
-    render(<Overview />)
+    render(<Overview role="admin" />)
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeTruthy()
   })
 

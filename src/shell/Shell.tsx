@@ -105,7 +105,7 @@ export function Shell({
   function content() {
     switch (destination.kind) {
       case 'overview':
-        return <Overview />
+        return <Overview role={profile.role} />
       case 'clients':
         return (
           <Board
