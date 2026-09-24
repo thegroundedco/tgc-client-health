@@ -148,24 +148,38 @@ but not being scored right now", so a paused client sits on a rung and belongs i
 Departed clients are absent entirely; where they sat on a ladder they have left is not a fact about
 today.
 
-### 3.3 `movements(clients, byClient)`
+### 3.3 `movements(clients, byClient, asOf)`
 
 `{ climbed, descended }`, each an array of `{ clientId, name, from, to, now }`, where `from` is the
 entry rung, `to` the highest (or lowest) rung reached, and `now` the current rung when it differs
-from `to`, else null. Membership is `journeyOf` and nothing else, so the lists cannot disagree with
+from `to`, else null. **`asOf` decides what "now" means**, and it is here for the reason §3.2 gives:
+`currentStint` ignores a stint dated in the future, because a move recorded ahead of time is a plan
+rather than the present, and the rung a client is on today has to obey that rule as much as the
+ladder count does. Ordering is by the date of the move that reached `to`, most recent first. Membership is `journeyOf` and nothing else, so the lists cannot disagree with
 the function that defines the words.
 
 Both lists cover every client, departed included: a client who climbed and then left still climbed,
 and dropping them would quietly make the lists a story about the current roster.
 
-### 3.4 `onRampComparison(clients, byClient, asOf)` and `MIN_GROUP`
+### 3.4 `onRampComparison(clients, byClient)` and `MIN_GROUP`
 
-Population: **`departedRows`**, filtered to clients with at least one recorded stint. Reused rather
-than refiltered, so this section and the Tenure report cannot come to different views of who has
-left or of how long they stayed — `departedRows` already measures to the day they left rather than to
-today, and already returns `days: null` when either date is missing. Active clients are out because
-their tenure is still running; clients with no stint are out because there is nothing to group them
-by.
+**No `asOf`.** Every relationship this measures has already ended and is measured to the day it
+ended, so no clock changes an answer. Slice C removed exactly such a parameter from `clientMix`
+"rather than left unused, so that a future caller cannot supply a date under the impression it
+changes an answer", and the same reasoning binds here.
+
+Population: **`departedRows`**. Reused rather than refiltered, so this section and the Tenure report
+cannot come to different views of who has left or of how long they stayed — `departedRows` already
+measures to the day they left rather than to today, and already returns `days: null` when either
+date is missing. Active clients are out because their tenure is still running.
+
+**Clients with no recorded stint are excluded by `entryRung` returning null**, not by a filter of
+their own. An earlier draft of this section had both, and the pair gated on the identical predicate:
+`entryRung` is null exactly when there are no stints, because `sortStints` only sorts and never
+filters. One of the two was therefore unreachable by any test, which this project treats as a defect
+rather than as defence in depth. The guard is the half that was kept, because it states the rule in
+terms of the function that owns it — a client with no history has no entry rung, and a client with no
+entry rung is in neither group.
 
 Two groups, by `entryRung`: **`foundation`**, and **above** (any other rung, recognised or not, that
 is not `foundation`).
@@ -198,10 +212,21 @@ a verdict saying so — see §7.
 |---|---|
 | `src/clients/packageProgress.ts` | §3's rules, pure |
 | `src/clients/usePackages.ts` | the one new read |
+| `src/revenue/tenureMath.ts` | `LifecycleClient` split so `departedRows` can take this roster |
 | `src/shell/Overview.tsx` | the section, and a new `role` prop |
 | `src/shell/Overview.module.css` | its layout |
+| `src/shell/Shell.tsx` | passes `profile.role` to Overview |
 | `src/shell/destination.ts` | `LANDING` (§6) |
+| `src/shell/pages.dom.test.tsx` | mocks the new read, like the two it already mocks |
 | `tests/overviewProvenance.test.ts` | the pinned contents, updated deliberately |
+
+**`departedRows` needed a narrower parameter type before it could be reused.** `LifecycleClient`
+requires `end_reason_note`, and the roster `useRetention` reads does not select it. So the type
+splits into `LifecycleBasics` — the five lifecycle columns every rule here needs — and
+`LifecycleClient` as that plus the two `end_reason_*` fields, with `departedRows` generic over
+`T extends LifecycleBasics`. `Tenure` keeps working untouched, which is the test of whether the
+split was the right shape. The alternative was fabricating `end_reason_note: null` at the call
+site: putting a lie in the data to satisfy a type.
 
 **`packageProgress.ts` lives in `clients/`, not `shell/`.** It is domain arithmetic about clients
 rather than anything to do with this application's chrome. That distinction is about to matter: this
