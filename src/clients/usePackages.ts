@@ -39,6 +39,17 @@ export function usePackages(enabled: boolean): UsePackages {
       // rejection, leaving the hook in 'loading' forever. useClientRates
       // shipped without this guard and it had to be added back.
       try {
+        // THE ORDER IS LOAD-BEARING, NOT REDUNDANT, even though sortStints
+        // re-sorts every one of these rows before this module's own functions
+        // ever look at them. This exists for the CAP: PostgREST returns at
+        // most db-max-rows and, past that, simply stops -- and without an
+        // ORDER BY, WHICH rows survive is unspecified, so one client's most
+        // recent stint could be the row dropped while an older one for the
+        // same client comes through. Ascending by started_on at least makes
+        // the truncation deterministic and its direction knowable, which
+        // useClientRates.ts argues at length is worth having even where a
+        // redundant sort looks unnecessary -- an arbitrary truncation is worse
+        // than a predictable one.
         const { data, error } = await supabase
           .from('client_packages')
           .select(PACKAGE_COLUMNS)

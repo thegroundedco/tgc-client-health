@@ -121,6 +121,14 @@ export type Movements = { climbed: Move[]; descended: Move[] }
  * back to grow is a client who climbed. `now` exists so that reading does not
  * imply scale is current.
  *
+ * `asOf` DECIDES MEMBERSHIP, not just what `now` means: a stint dated after
+ * `asOf` is a plan, not an accomplished move, and judging journeyOf, the rung
+ * arithmetic or `reached` over it would render a promotion that has not
+ * happened yet -- and sort it to the top, since it is dated in the future.
+ * `ladderStanding` and `currentStint` already hold this line for their own
+ * readings; this function has to hold it too rather than only apply `asOf` at
+ * the very end.
+ *
  * Departed clients are included. A completed relationship still climbed, and
  * dropping them would make these lists a story about the current roster.
  */
@@ -133,21 +141,28 @@ export function movements(
   const descended: { move: Move; on: string }[] = []
 
   for (const client of clients) {
-    const stints = byClient.get(client.id) ?? []
-    const journey = journeyOf(stints)
+    // Filtered BEFORE judging, not after: a stint dated past asOf must not
+    // enter journeyOf, the rung arithmetic, or `reached` at all, the same
+    // membership rule ladderStanding and currentStint enforce for a single
+    // rung.
+    const started = sortStints(byClient.get(client.id) ?? []).filter(
+      (stint) => stint.started_on <= asOf,
+    )
+    const journey = journeyOf(started)
     if (journey === null || journey === 'stayed') continue
 
-    const sorted = sortStints(stints)
     // journeyOf returned non-null, so every rung is on the ladder.
-    const rungs = sorted.map((entry) => PACKAGE_CODES.indexOf(entry.package_code))
+    const rungs = started.map((entry) => PACKAGE_CODES.indexOf(entry.package_code))
     const extreme = journey === 'climbed' ? Math.max(...rungs) : Math.min(...rungs)
-    const reached = sorted[rungs.indexOf(extreme)]
-    const current = currentStint(sorted, asOf)
+    // The FIRST time the extreme rung was reached, not the most recent, when a
+    // client reaches the same extreme rung twice -- a choice, not a default.
+    const reached = started[rungs.indexOf(extreme)]
+    const current = currentStint(started, asOf)
 
     const move: Move = {
       clientId: client.id,
       name: client.name,
-      from: sorted[0].package_code,
+      from: started[0].package_code,
       to: reached.package_code,
       now:
         current === null || current.package_code === reached.package_code
@@ -243,7 +258,9 @@ export function onRampComparison(
   // date is IN the group and OUT of the median: treating the unknown as a zero
   // would drag the median down, and dropping them from the count would answer a
   // different question from the one the sentence appears to answer.
-  function group(all: readonly (number | null)[]) {
+  function group(
+    all: readonly (number | null)[],
+  ): { count: number; measured: number; medianDays: number | null } {
     const measured = all.filter((value): value is number => value !== null)
     return { count: all.length, measured: measured.length, medianDays: medianOf(measured) }
   }

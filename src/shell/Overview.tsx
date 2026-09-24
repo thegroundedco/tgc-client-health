@@ -39,6 +39,17 @@ function verdictSentence(comparison: Extract<Comparison, { kind: 'ready' }>): st
   const basis = `from ${comparison.foundation.measured} and ${comparison.above.measured} ended relationships`
   const opening = 'Of the relationships that have ended with a package recorded, those who joined'
 
+  // formatTenure buckets to whole months and years, so two medians that are
+  // NOT equal -- comparison.longer is computed on exact days and would not
+  // call this a tie -- can still format to the identical string (400 and 396
+  // days both read "1 yr 1 mo"). Printing "stayed longer... a median of X,
+  // against X" would contradict itself in the same breath, so that
+  // combination gets its own sentence instead of falling into the
+  // longer/shorter wording below.
+  if (comparison.longer !== 'tie' && atFoundation === above) {
+    return `${opening} at Foundation and those who joined above it stayed about the same length of time: both round to a median of ${atFoundation}, but the two medians are not exactly equal — they differ by less than that figure shows — ${basis}.`
+  }
+
   if (comparison.longer === 'tie') {
     return `${opening} at Foundation and those who joined above it stayed the same: a median of ${atFoundation} each — ${basis}.`
   }
@@ -182,7 +193,27 @@ export function Overview({ role }: { role: string }) {
             </p>
           )}
 
-          {packages.status === 'ready' && (
+          {/* GATED ON revenue.status TOO, not just packages.status -- the ladder's
+              numbers are computed from revenue.clients (the roster), which
+              useRetention holds as an empty array while loading and on error. Packages
+              is one small table against useRetention's two-query Promise.all, so
+              packages resolving first is the likely order, not the unlikely one: without
+              this gate the page would show a confident "Foundation 0 · Grow 0 · Scale
+              0 · No package recorded 0" and "no client has changed package" while it
+              could not yet read who the clients even are. `status` (the page-level
+              union) is deliberately NOT used here -- a useBoard failure has nothing to
+              do with the ladder and must not blank it; only revenue.status does. */}
+          {packages.status === 'ready' && revenue.status === 'loading' && (
+            <p className="t-body">Loading…</p>
+          )}
+
+          {packages.status === 'ready' && revenue.status === 'error' && (
+            <p className="t-body prose">
+              The client roster could not be read, so the ladder cannot be shown.
+            </p>
+          )}
+
+          {packages.status === 'ready' && revenue.status === 'ready' && (
             <>
               <ul aria-label="Clients by package" className={styles.rungs} role="list">
                 {standing.rungs.map((rung) => (
@@ -202,11 +233,15 @@ export function Overview({ role }: { role: string }) {
               </ul>
 
               {moved.climbed.length === 0 && moved.descended.length === 0 && (
-                <p className="t-body prose">No client has changed package yet.</p>
+                <p className="t-body prose">
+                  {packages.byClient.size === 0
+                    ? 'No package history has been recorded yet, so no movement can be shown.'
+                    : 'No client has changed package yet.'}
+                </p>
               )}
 
               {moved.climbed.length > 0 && (
-                <>
+                <div className={styles.movesGroup}>
                   <p className={`t-caption ${styles.basis}`}>Moved up</p>
                   <ul aria-label="Moved up" className={styles.list} role="list">
                     {moved.climbed.map((move) => (
@@ -219,7 +254,7 @@ export function Overview({ role }: { role: string }) {
                       </li>
                     ))}
                   </ul>
-                </>
+                </div>
               )}
 
               {/* The descents list was proposed here, not asked for: the owner's boss
@@ -227,7 +262,7 @@ export function Overview({ role }: { role: string }) {
                   flatter the roster than the ladder actually is. A client stepping DOWN
                   is closer to what this page is for. Approved by the owner, 2026-09-24. */}
               {moved.descended.length > 0 && (
-                <>
+                <div className={styles.movesGroup}>
                   <p className={`t-caption ${styles.basis}`}>Moved down</p>
                   <ul aria-label="Moved down" className={styles.list} role="list">
                     {moved.descended.map((move) => (
@@ -240,15 +275,16 @@ export function Overview({ role }: { role: string }) {
                       </li>
                     ))}
                   </ul>
-                </>
+                </div>
               )}
 
               {comparison.kind === 'waiting' ? (
                 <p className="t-body prose" data-testid="onramp-verdict">
                   Whether clients who join at Foundation stay longer is not answerable yet. It needs{' '}
                   {MIN_GROUP} ended relationships on each side with a package recorded, and there are{' '}
-                  {comparison.foundation} and {comparison.above}. Recording the package history of
-                  clients who have already left is what answers it.
+                  {comparison.foundation} who joined at Foundation and {comparison.above} who joined
+                  above it. Recording the package history of clients who have already left is what
+                  answers it.
                 </p>
               ) : (
                 <>

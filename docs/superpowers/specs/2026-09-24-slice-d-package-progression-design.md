@@ -152,11 +152,15 @@ today.
 
 `{ climbed, descended }`, each an array of `{ clientId, name, from, to, now }`, where `from` is the
 entry rung, `to` the highest (or lowest) rung reached, and `now` the current rung when it differs
-from `to`, else null. **`asOf` decides what "now" means**, and it is here for the reason §3.2 gives:
-`currentStint` ignores a stint dated in the future, because a move recorded ahead of time is a plan
-rather than the present, and the rung a client is on today has to obey that rule as much as the
-ladder count does. Ordering is by the date of the move that reached `to`, most recent first. Membership is `journeyOf` and nothing else, so the lists cannot disagree with
-the function that defines the words.
+from `to`, else null. **`asOf` decides MEMBERSHIP, not only what "now" means.** Every stint dated
+after `asOf` is filtered out before `journeyOf`, the rung arithmetic, or `reached` ever see it — the
+same rule §3.2 states for `currentStint`, that a move recorded ahead of time is a plan rather than an
+accomplished one. It is not enough to apply `asOf` only when computing `now`: judging membership and
+the extreme rung over the FULL history would let a future-dated stint be read as an accomplished
+climb (or descent) and sort it to the top of the list, since ordering is by the date of the move that
+reached `to`, most recent first. Membership is `journeyOf`, run over the stints that have actually
+started by `asOf`, and nothing else, so the lists cannot disagree with the function that defines the
+words.
 
 Both lists cover every client, departed included: a client who climbed and then left still climbed,
 and dropping them would quietly make the lists a story about the current roster.

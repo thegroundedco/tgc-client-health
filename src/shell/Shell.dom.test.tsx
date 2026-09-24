@@ -214,7 +214,7 @@ describe('the shell', () => {
     expect(screen.getByRole('heading', { name: 'Concentration' })).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
     // Overview's own heading, unconditional like Concentration's above: it
-    // renders before either of its two reads resolves, so it survives this
+    // renders before any of its three reads resolves, so it survives this
     // file's stubbed Supabase client. The old marker was the word "snapshot"
     // from the placeholder paragraph, retired when the page was filled from
     // the owner's own description on 2026-09-11.

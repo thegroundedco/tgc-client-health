@@ -210,10 +210,31 @@ describe('the ladder', () => {
     expect(row.textContent).toContain('Foundation')
   })
 
-  it('says when nobody has moved', () => {
-    given()
+  it('says when nobody has moved, once history has been recorded', () => {
+    // Both clients have a package recorded, and neither has changed it: this
+    // is the "history exists, nobody moved" case, distinct from the
+    // "no history at all" case below.
+    given({
+      packages: {
+        byClient: new Map([
+          [1, [stint(1, 'grow', '2025-01-01')]],
+          [2, [stint(2, 'grow', '2025-01-01')]],
+        ]),
+      },
+    })
 
     expect(screen.getByText(/no client has changed package yet/i)).toBeTruthy()
+  })
+
+  it('says no history has been recorded, rather than claiming nobody has moved', () => {
+    // On the day this ships, nothing is recorded -- an empty byClient map --
+    // and "no client has changed package yet" would be a claim about clients
+    // made from an absence of data, the same move clientPackages.ts refuses
+    // when it declines to read null as Foundation.
+    given({ packages: { byClient: new Map() } })
+
+    expect(screen.getByText(/no package history has been recorded yet/i)).toBeTruthy()
+    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
   })
 
   it('refuses the verdict until both sides have enough ended relationships', () => {
@@ -221,6 +242,39 @@ describe('the ladder', () => {
 
     expect(screen.getByTestId('onramp-verdict').textContent).toMatch(/not answerable yet/i)
     expect(screen.getByTestId('onramp-verdict').textContent).toContain('3')
+  })
+
+  it('labels which side of the verdict is short, rather than printing two bare numbers', () => {
+    const departed = (id: number, name: string, ended_on: string) => ({
+      id,
+      name,
+      status: 'former',
+      started_on: '2025-01-01',
+      ended_on,
+      end_reason_code: null,
+    })
+
+    given({
+      revenue: {
+        clients: [
+          departed(1, 'Acme', '2026-01-01'),
+          departed(2, 'Beta', '2026-01-01'),
+          departed(3, 'Gamma', '2025-03-01'),
+        ],
+        rows: [],
+      },
+      packages: {
+        byClient: new Map([
+          [1, [stint(1, 'foundation', '2025-01-01')]],
+          [2, [stint(2, 'foundation', '2025-01-01')]],
+          [3, [stint(3, 'grow', '2025-01-01')]],
+        ]),
+      },
+    })
+
+    const verdict = screen.getByTestId('onramp-verdict').textContent ?? ''
+    expect(verdict).toContain('2 who joined at Foundation')
+    expect(verdict).toContain('1 who joined above it')
   })
 
   it('states the verdict when it can, naming both medians and the sample', () => {
@@ -332,5 +386,80 @@ describe('the ladder', () => {
 
     const verdict = screen.getByTestId('onramp-verdict').textContent ?? ''
     expect(verdict).toMatch(/joined above Foundation stayed longer/i)
+  })
+
+  // C1: the ladder must never render a confident all-zero roster while the
+  // roster read (useRetention) is loading or has failed, even though packages
+  // itself is 'ready'. Packages is one small table against useRetention's
+  // two-query Promise.all, so packages resolving first is the likely order.
+  it('does not draw the ladder while the roster is still loading', () => {
+    given({
+      revenue: { status: 'loading', clients: [], rows: [] },
+      packages: {
+        byClient: new Map([[1, [stint(1, 'grow', '2025-01-01')]]]),
+      },
+    })
+
+    expect(screen.queryByTestId('rung-unrecorded')).toBeNull()
+    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
+    expect(screen.queryByText(/no package history has been recorded yet/i)).toBeNull()
+  })
+
+  it('does not draw the ladder when the roster read has failed', () => {
+    given({
+      revenue: { status: 'error', loadError: 'permission denied', clients: [], rows: [] },
+      packages: {
+        byClient: new Map([[1, [stint(1, 'grow', '2025-01-01')]]]),
+      },
+    })
+
+    expect(screen.queryByTestId('rung-unrecorded')).toBeNull()
+    // Says so, rather than sitting silent under the page's own error alert.
+    expect(screen.getByText(/roster could not be read/i)).toBeTruthy()
+  })
+
+  // I3: formatTenure buckets to whole months and years, so two medians that
+  // are NOT equal (400 and 396 days) can format to the identical string. The
+  // page must not print "stayed longer... a median of 1 yr 1 mo, against 1 yr
+  // 1 mo" -- a claim contradicted by its own two numbers in the same breath.
+  it('does not contradict itself when two different medians format the same way', () => {
+    const departed = (id: number, name: string, ended_on: string) => ({
+      id,
+      name,
+      status: 'former',
+      started_on: '2025-01-01',
+      ended_on,
+      end_reason_code: null,
+    })
+
+    given({
+      revenue: {
+        clients: [
+          // 400 days: 2025-01-01 to 2026-02-05.
+          departed(1, 'Acme', '2026-02-05'),
+          departed(2, 'Beta', '2026-02-05'),
+          departed(3, 'Gamma', '2026-02-05'),
+          // 396 days: 2025-01-01 to 2026-02-01. Both round to "1 yr 1 mo".
+          departed(4, 'Delta', '2026-02-01'),
+          departed(5, 'Epsilon', '2026-02-01'),
+          departed(6, 'Zeta', '2026-02-01'),
+        ],
+        rows: [],
+      },
+      packages: {
+        byClient: new Map([
+          [1, [stint(1, 'foundation', '2025-01-01')]],
+          [2, [stint(2, 'foundation', '2025-01-01')]],
+          [3, [stint(3, 'foundation', '2025-01-01')]],
+          [4, [stint(4, 'grow', '2025-01-01')]],
+          [5, [stint(5, 'grow', '2025-01-01')]],
+          [6, [stint(6, 'grow', '2025-01-01')]],
+        ]),
+      },
+    })
+
+    const verdict = screen.getByTestId('onramp-verdict').textContent ?? ''
+    expect(verdict).not.toMatch(/against 1 yr 1 mo/i)
+    expect(verdict).toMatch(/differ by less than/i)
   })
 })

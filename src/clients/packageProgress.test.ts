@@ -197,6 +197,17 @@ describe('movements', () => {
       'Acme',
     ])
   })
+
+  // The mirror of ladderStanding's "reads a stint dated in the future as a
+  // plan, not the present". Without asOf filtering membership, this client's
+  // planned scale move would be read as an accomplished climb -- and, because
+  // it is dated in the future, sorted to the very top of "Moved up".
+  it('reads a stint dated in the future as a plan, not an accomplished move', () => {
+    const clients = [client(1, 'Acme')]
+    const map = byClient(stint(1, 'foundation', '2025-01-01'), stint(1, 'scale', '2027-01-01'))
+
+    expect(movements(clients, map, TODAY)).toEqual({ climbed: [], descended: [] })
+  })
 })
 
 // A departed client with a start date, an end date and a recorded entry rung.
