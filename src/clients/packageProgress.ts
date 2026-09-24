@@ -222,14 +222,17 @@ export function onRampComparison(
   clients: readonly ProgressClient[],
   byClient: ReadonlyMap<number, PackageStint[]>,
 ): Comparison {
-  const recorded = clients.filter((client) => (byClient.get(client.id) ?? []).length > 0)
-
   const days: { foundation: (number | null)[]; above: (number | null)[] } = {
     foundation: [],
     above: [],
   }
 
-  for (const row of departedRows(recorded)) {
+  for (const row of departedRows(clients)) {
+    // A client with no recorded stint has no entry rung -- entryRung([]) is
+    // null -- so they join NEITHER group. This is the population the spec
+    // describes: joined at Foundation, or joined above it, with "joined"
+    // meaning a package was actually recorded, not merely that the client
+    // existed.
     const rung = entryRung(byClient.get(row.client.id) ?? [])
     if (rung === null) continue
     days[rung === 'foundation' ? 'foundation' : 'above'].push(row.days)
