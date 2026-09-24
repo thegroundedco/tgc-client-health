@@ -32,12 +32,12 @@ describe('the destination list', () => {
     ])
   })
 
-  // Spec §3.1. Overview is the homepage and WILL be the landing destination --
-  // but not while it is empty, because an empty first screen on every sign-in
-  // is worse than a menu whose first item is not where the app opens. This
-  // assertion is the reminder to change it deliberately rather than discover it.
-  it('lands on Clients, not on the still-empty Overview', () => {
-    expect(LANDING).toEqual({ kind: 'clients' })
+  // Spec §3.1. Overview is the homepage and WILL be the landing destination.
+  // It was empty through slice 6a and was filled on 2026-09-11, so this moved
+  // to Overview in slice D. This assertion is the reminder to never move it
+  // back without a reason recorded in the comment at its definition.
+  it('lands on Overview, the primary reader\'s working screen', () => {
+    expect(LANDING).toEqual({ kind: 'overview' })
   })
 })
 

@@ -136,13 +136,22 @@ function renderShell(role = 'admin') {
 }
 
 describe('the shell', () => {
-  // Spec §3.1: Clients, not Overview, while Overview is empty.
-  it('lands on Clients', () => {
+  // Slice 6a section 3.1 made this conditional: Clients "until Overview has
+  // content, and moves to Overview in the slice that gives it content."
+  // Overview was filled on 2026-09-11 and the landing did not move with it.
+  it('lands on Overview', () => {
     renderShell()
-    expect(screen.getByText('the board')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Clients' }).getAttribute('aria-current')).toBe(
+    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Overview' }).getAttribute('aria-current')).toBe(
       'page',
     )
+  })
+
+  it('lands somewhere every role can actually use', () => {
+    // A viewer reads neither revenue nor packages and still has a page: the
+    // at-risk list is drawn from scores, which is the one thing they can read.
+    renderShell('viewer')
+    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeTruthy()
   })
 
   it('carries the identity, the theme control and sign out', () => {
@@ -218,6 +227,7 @@ describe('the shell', () => {
   // suite still green. Two mounts is what says the remount happened.
   it('remounts the board on the way back from Admin, which is the reload', async () => {
     renderShell('admin')
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     expect(mounts).toBe(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
@@ -242,6 +252,7 @@ describe('the shell', () => {
     await useRealBoard({ status: 'error', loadError: 'the connection failed' })
     renderShell('admin')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     expect(screen.getByRole('navigation', { name: 'Sections' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Cannot reach the database' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Admin' })).toBeTruthy()
@@ -262,6 +273,7 @@ describe('the shell', () => {
     await useRealBoard({ clients: [], activeTotal: 0 })
     renderShell('account_manager')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     expect(screen.getByRole('navigation', { name: 'Sections' })).toBeTruthy()
     expect(
       screen.getByText('Add one to see it here.'),
@@ -333,6 +345,7 @@ describe('the shell', () => {
     await useRealBoard({})
     renderShell('admin')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     // The check-in's own Back button, which no other screen renders now that the
     // two admin screens say "Clients" -- so this is the assertion that says a
     // check-in really is open rather than the board still being on screen.
@@ -354,6 +367,7 @@ describe('the shell', () => {
     await useRealBoard({})
     renderShell('admin')
 
+    await userEvent.click(screen.getByRole('button', { name: 'Clients' }))
     await userEvent.click(screen.getByRole('button', { name: 'Acme' }))
     expect(screen.getByRole('button', { name: 'Board' })).toBeTruthy()
 

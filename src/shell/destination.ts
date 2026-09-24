@@ -86,11 +86,16 @@ type UnlistedKind = Exclude<DestinationKind, (typeof DESTINATIONS)[number]['kind
 const _everyKindIsInTheBar: UnlistedKind extends never ? true : never = true
 void _everyKindIsInTheBar
 
-// Spec §3.1. Overview is the homepage and will be this value -- but not while it
-// is still empty: making an empty page the first thing every person sees on
-// every sign-in is a worse tool than the one being replaced. One line to change,
-// and destination.test.ts names it so it is changed deliberately.
-export const LANDING: Destination = { kind: 'clients' }
+// Spec 6a section 3.1 said Overview "is the homepage and WILL be the landing
+// destination", but not while it was still empty -- making an empty page the
+// first thing every person sees was the reason this pointed at Clients. It was
+// filled on 2026-09-11 and this did not move with it.
+//
+// Moved in slice D, 2026-09-24. Recorded against the fold into the company's
+// other tool, which will bring its own home screen and probably discard this
+// line: five lines and a test against a cost paid every time the page's primary
+// reader signs in and has to navigate away from where he landed.
+export const LANDING: Destination = { kind: 'overview' }
 
 // The sections a role can actually reach, in the bar's order. Revenue entry is
 // gated on edit_revenue and not on view_revenue, deliberately: an account
