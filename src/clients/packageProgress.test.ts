@@ -108,6 +108,23 @@ describe('ladderStanding', () => {
       count: 1,
     })
   })
+
+  it('counts a rung this vocabulary does not know as its own entry, after the three it does', () => {
+    // Somebody IS on it -- silently dropping this client, or folding them into
+    // unrecorded, would both be wrong in ways every other test here is blind to.
+    const clients = [client(1, 'Acme')]
+    const map = byClient(stint(1, 'platinum', '2025-01-01'))
+
+    const standing = ladderStanding(clients, map, TODAY)
+
+    expect(standing.rungs).toEqual([
+      { code: 'foundation', count: 0 },
+      { code: 'grow', count: 0 },
+      { code: 'scale', count: 0 },
+      { code: 'platinum', count: 1 },
+    ])
+    expect(standing.unrecorded).toBe(0)
+  })
 })
 
 describe('movements', () => {
