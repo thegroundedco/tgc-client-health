@@ -166,6 +166,42 @@ describe('emitSql', () => {
     expect(sql).toMatch(/\(3, 'foundation', '2024-03-01'/)
   })
 
+  // THE COMMA HAS TO SURVIVE THE COMMENT. Each value tuple carries a trailing
+  // `-- client name`, and the first version of this emitter put the separating
+  // comma AFTER that comment -- so Postgres read it as part of the comment, the
+  // tuples lost their separator, and the whole statement was a syntax error.
+  // Every other assertion in this file passed: they checked that a tuple
+  // appeared, not that the statement was well formed.
+  it('separates the value tuples with a comma that is not inside a comment', () => {
+    const sql = emitSql(plan([row('Acme', 'grow'), row('Gamma', 'foundation')]))
+    const withoutComments = sql.replace(/--[^\n]*/g, '')
+
+    expect(withoutComments).toMatch(/\),\s*\(/)
+  })
+
+  // AND THE SEMICOLON TOO. The same emitter put the statement terminator after
+  // the last tuple's trailing comment, so it was commented out as well -- and
+  // the first version of this very test could not see it, because stripping the
+  // comments removed the semicolon along with them and "no comma before the
+  // semicolon" is trivially true when there is no semicolon. Assert the
+  // terminator is PRESENT, not merely that nothing bad precedes it.
+  it('terminates the insert with a semicolon that is not inside a comment', () => {
+    const sql = emitSql(plan([row('Acme', 'grow'), row('Gamma', 'foundation')]))
+    const withoutComments = sql.replace(/--[^\n]*/g, '')
+
+    // Cut at the FIRST semicolon, not to the end of the file. The first draft
+    // of this test sliced to the end and passed while the terminator was
+    // commented out, because the verification SELECTs further down carry
+    // semicolons of their own -- it was a vacuous test for a vacuous-test bug,
+    // and only mutation found it. If the insert's own terminator disappears,
+    // this segment runs on into the first SELECT, which is the tell.
+    const afterInsert = withoutComments.slice(withoutComments.indexOf('insert into'))
+    const statement = afterInsert.slice(0, afterInsert.indexOf(';') + 1)
+
+    expect(statement).not.toMatch(/select/i)
+    expect(statement.trimEnd()).toMatch(/\);$/)
+  })
+
   it('refuses to emit anything when the plan has problems', () => {
     const sql = emitSql(plan([row('Nobody', 'grow')]))
 

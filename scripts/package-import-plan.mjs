@@ -143,13 +143,27 @@ export function emitSql(plan) {
     ].join('\n')
   }
 
+  // NO SYNTAX EVER FOLLOWS A COMMENT ON THE SAME LINE. Each client's name goes
+  // on its own line ABOVE its tuple, so the separating comma and the statement
+  // terminator can never end up inside a `--`.
+  //
+  // Both of those shipped once, in one emitter: the comma joined after the
+  // trailing comment and Postgres lost the separator; the semicolon landed
+  // after the last comment and vanished with it. Neither was caught by an
+  // assertion that a tuple appeared, and the first test written for the comma
+  // could not see the semicolon at all -- stripping comments to look for the
+  // defect also stripped the terminator. Putting comments on their own lines
+  // removes the whole class rather than the two instances.
   const values = plan.stints
-    .map(
-      (stint) =>
-        `  (${stint.clientId}, '${stint.packageCode}', '${stint.startedOn}', null)` +
-        `  -- ${stint.name}${stint.assumed ? ', date assumed from the relationship start' : ''}`,
-    )
-    .join(',\n')
+    .map((stint, index) => {
+      const why = stint.assumed ? ', date assumed from the relationship start' : ''
+      const separator = index === plan.stints.length - 1 ? '' : ','
+      return (
+        `  -- ${stint.name}${why}\n` +
+        `  (${stint.clientId}, '${stint.packageCode}', '${stint.startedOn}', null)${separator}`
+      )
+    })
+    .join('\n')
 
   return `-- Package history backfill. ${plan.stints.length} stints, one per client.
 -- Generated; do not hand-edit. Change the sheet and rebuild.
