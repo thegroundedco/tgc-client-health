@@ -9,6 +9,10 @@ import { Shell } from './Shell'
 import type { Profile } from '../auth/useProfile'
 import { useBoard } from '../board/useBoard'
 import type { UseBoard } from '../board/useBoard'
+import type { UseRetention } from '../revenue/useRetention'
+import { useRetention } from '../revenue/useRetention'
+import type { UsePackages } from '../clients/usePackages'
+import { usePackages } from '../clients/usePackages'
 
 // The board reaches Supabase, and most of this file is about navigation rather
 // than about the board, so it is stubbed to a fixed screen -- a failed fetch
@@ -40,6 +44,10 @@ vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../board/useClientRates', () => ({
   useClientRates: vi.fn(() => ({ status: 'ready' as const, rates: new Map() })),
 }))
+// Mocks for Overview's dependencies. Overview does not gate the at-risk list
+// by role -- every role sees it if they have access to read the data via RLS.
+vi.mock('../revenue/useRetention', () => ({ useRetention: vi.fn() }))
+vi.mock('../clients/usePackages', () => ({ usePackages: vi.fn() }))
 vi.mock('../clients/ClientsAdmin', () => ({ ClientsAdmin: () => <p>client roster</p> }))
 // UsersAdmin stands in for any destination that can have a write in flight. The
 // real screen reports its `writing` value from an effect; this one reports it on
@@ -90,6 +98,20 @@ const BOARD: UseBoard = {
   reload: () => {},
 }
 
+const RETENTION: UseRetention = {
+  status: 'ready',
+  loadError: null,
+  clients: [],
+  rows: [],
+  reload: () => {},
+}
+
+const PACKAGES: UsePackages = {
+  status: 'ready',
+  loadError: null,
+  byClient: new Map(),
+}
+
 // The real component, reached past this file's own mock of it. importActual
 // un-mocks only the module named: Board's own import of useBoard still resolves
 // to the mock above, which is what makes an error or an empty roster
@@ -106,6 +128,8 @@ async function useRealBoard(state: Partial<UseBoard>) {
 // so nothing had needed the hook to return anything before.
 beforeEach(() => {
   vi.mocked(useBoard).mockReturnValue(BOARD)
+  vi.mocked(useRetention).mockReturnValue(RETENTION)
+  vi.mocked(usePackages).mockReturnValue(PACKAGES)
 })
 
 afterEach(() => {
@@ -113,6 +137,8 @@ afterEach(() => {
   boardImpl = () => <CountingBoard />
   mounts = 0
   vi.mocked(useBoard).mockReset()
+  vi.mocked(useRetention).mockReset()
+  vi.mocked(usePackages).mockReset()
 })
 
 function profile(role: string): Profile {
@@ -147,11 +173,25 @@ describe('the shell', () => {
     )
   })
 
-  it('lands somewhere every role can actually use', () => {
-    // A viewer reads neither revenue nor packages and still has a page: the
-    // at-risk list is drawn from scores, which is the one thing they can read.
+  it('lands somewhere every role can actually use', async () => {
+    // Overview does not gate the at-risk list by role. What a viewer sees in
+    // production is decided by Supabase RLS -- they can read scores, which is
+    // the half of the at-risk list they actually have access to. This test
+    // mocks retention to empty (simulating RLS hiding it) and scores to show
+    // Acme at risk, proving the page and its at-risk list are reachable for a
+    // viewer.
+    const scoredBoard = {
+      ...BOARD,
+      scores: new Map([[1, { client_id: 1, overall_score: 1.5, advocacy_applies: false }]]),
+    }
+    vi.mocked(useBoard).mockReturnValue(scoredBoard)
     renderShell('viewer')
-    expect(screen.getByRole('heading', { name: /needs attention/i })).toBeTruthy()
+
+    // Score of 1.5 puts Acme in the at_risk band. Await for the at-risk entry
+    // itself, not just the heading that renders unconditionally in loading and
+    // error states too.
+    expect(await screen.findByRole('list', { name: 'Needs attention' })).toBeTruthy()
+    expect(screen.getByRole('listitem', { name: 'Acme' })).toBeTruthy()
   })
 
   it('carries the identity, the theme control and sign out', () => {
