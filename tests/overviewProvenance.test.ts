@@ -17,11 +17,17 @@ import { describe, expect, it } from 'vitest'
 // Lives outside src/ because it reads the source, and tsconfig.app.json gives
 // src/ no Node types -- the same reason tests/tokens.test.ts does.
 
-// The page AND the rule it renders. Splitting them would let the contents move
-// from one file to the other and slip past this check without changing.
-const FILES = ['Overview.tsx', 'overviewMath.ts'].map((name) =>
-  readFileSync(join(import.meta.dirname, '..', 'src', 'shell', name), 'utf8'),
-)
+// The page AND the rules it renders. Splitting them would let the contents move
+// from one file to another and slip past this check without changing. Slice D
+// adds packageProgress.ts to the list for the same reason: it is where
+// ladderStanding and onRampComparison actually live, and without it here a
+// rung count could migrate from Overview.tsx into that module and slip the pin
+// below.
+const FILES = [
+  join('src', 'shell', 'Overview.tsx'),
+  join('src', 'shell', 'overviewMath.ts'),
+  join('src', 'clients', 'packageProgress.ts'),
+].map((path) => readFileSync(join(import.meta.dirname, '..', path), 'utf8'))
 
 const SOURCE = FILES.join('\n')
 const CODE = SOURCE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
@@ -48,11 +54,26 @@ describe('the Overview page', () => {
     expect(CODE).not.toContain("'incomplete'")
   })
 
-  // Foundation-to-Grow progression was asked for by the owner's boss on the
-  // same call and needs a schema change. When it arrives it belongs here, and
-  // this assertion should be the thing that gets updated.
-  it('has not grown contents nobody asked for', () => {
+  // Slice D, 2026-09-24. The assertion that used to stand here forbade any
+  // mention of Foundation, with a note that progression "needs a schema change.
+  // When it arrives it belongs here, and this assertion should be the thing
+  // that gets updated." The schema arrived on 2026-09-12 and this is that
+  // update -- not a weakening, but the same pinning applied to the contents
+  // that are now sourced.
+  it('shows the ladder the owner\'s boss asked for', () => {
+    expect(CODE).toContain('ladderStanding')
+    expect(CODE).toContain('onRampComparison')
+  })
+
+  // The climbers list came from the call. The DESCENTS list did not: it is the
+  // spec's own proposal, approved by the owner on 2026-09-24, and recorded here
+  // so that the trail stays honest about which contents were asked for.
+  it('records that the descents list was proposed, not requested', () => {
+    expect(SOURCE).toMatch(/proposal|proposed/i)
+    expect(CODE).toContain('descended')
+  })
+
+  it('has still not grown contents nobody asked for', () => {
     expect(CODE).not.toMatch(/lead ?source/i)
-    expect(CODE).not.toMatch(/foundation/i)
   })
 })
