@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entryRung, ladderStanding, movements } from './packageProgress'
+import { MIN_GROUP, entryRung, ladderStanding, movements, onRampComparison } from './packageProgress'
 import type { PackageStint } from './clientPackages'
 
 let nextId = 1
@@ -196,5 +196,225 @@ describe('movements', () => {
       'Beta',
       'Acme',
     ])
+  })
+})
+
+// A departed client with a start date, an end date and a recorded entry rung.
+function departed(
+  id: number,
+  name: string,
+  rung: string,
+  started_on: string,
+  ended_on: string,
+) {
+  return {
+    client: client(id, name, { status: 'former', started_on, ended_on }),
+    stint: stint(id, rung, started_on),
+  }
+}
+
+function comparisonOf(entries: ReturnType<typeof departed>[], extra: PackageStint[] = []) {
+  return onRampComparison(
+    entries.map((entry) => entry.client),
+    byClient(...entries.map((entry) => entry.stint), ...extra),
+  )
+}
+
+describe('onRampComparison', () => {
+  it('waits until there are enough ended relationships on both sides', () => {
+    const result = comparisonOf([
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2025-07-01'),
+      departed(2, 'Beta', 'grow', '2025-01-01', '2025-04-01'),
+    ])
+
+    expect(result).toEqual({ kind: 'waiting', foundation: 1, above: 1 })
+  })
+
+  it('says Foundation stayed longer when they did', () => {
+    const result = comparisonOf([
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(4, 'Delta', 'grow', '2025-01-01', '2025-03-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-03-01'),
+      departed(6, 'Zeta', 'scale', '2025-01-01', '2025-03-01'),
+    ])
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    expect(result.longer).toBe('foundation')
+    expect(result.foundation.measured).toBe(3)
+    expect(result.above.measured).toBe(3)
+  })
+
+  // THE TEST THIS SLICE MOST NEEDS. A verdict hard-coded to 'foundation' would
+  // pass every other case in this file.
+  it('says the other side stayed longer when THEY did', () => {
+    const result = comparisonOf([
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2025-03-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2025-03-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2025-03-01'),
+      departed(4, 'Delta', 'grow', '2025-01-01', '2026-01-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2026-01-01'),
+      departed(6, 'Zeta', 'scale', '2025-01-01', '2026-01-01'),
+    ])
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    expect(result.longer).toBe('above')
+    expect(result.above.medianDays).toBeGreaterThan(result.foundation.medianDays)
+  })
+
+  it('calls an exact draw a tie', () => {
+    const result = comparisonOf([
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2025-07-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2025-07-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2025-07-01'),
+      departed(4, 'Delta', 'grow', '2025-01-01', '2025-07-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-07-01'),
+      departed(6, 'Zeta', 'scale', '2025-01-01', '2025-07-01'),
+    ])
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    expect(result.longer).toBe('tie')
+  })
+
+  it('leaves out clients who are still here', () => {
+    // Three ended Foundation clients and three ACTIVE ones above. The active
+    // side cannot reach MIN_GROUP, so the answer is still waiting.
+    const ended = [
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+    ]
+    const active = [client(4, 'Delta'), client(5, 'Epsilon'), client(6, 'Zeta')]
+
+    const result = onRampComparison(
+      [...ended.map((entry) => entry.client), ...active],
+      byClient(
+        ...ended.map((entry) => entry.stint),
+        stint(4, 'grow', '2025-01-01'),
+        stint(5, 'grow', '2025-01-01'),
+        stint(6, 'grow', '2025-01-01'),
+      ),
+    )
+
+    expect(result).toEqual({ kind: 'waiting', foundation: 3, above: 0 })
+  })
+
+  it('leaves out a departed client with no package recorded', () => {
+    const ended = [
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+    ]
+    const unrecorded = client(9, 'Omega', { status: 'former', ended_on: '2026-01-01' })
+
+    const result = onRampComparison(
+      [...ended.map((entry) => entry.client), unrecorded],
+      byClient(...ended.map((entry) => entry.stint)),
+    )
+
+    // Omega is not silently read as "joined above Foundation".
+    expect(result).toEqual({ kind: 'waiting', foundation: 3, above: 0 })
+  })
+
+  it('counts a departed client with no start date, and does not measure them', () => {
+    const entries = [
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(4, 'Delta', 'grow', '2025-01-01', '2025-04-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-04-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2025-04-01'),
+    ]
+    const nostart = {
+      client: { ...client(7, 'Eta', { status: 'former', ended_on: '2026-01-01' }), started_on: null },
+      stint: stint(7, 'grow', '2025-01-01'),
+    }
+
+    const result = onRampComparison(
+      [...entries.map((entry) => entry.client), nostart.client],
+      byClient(...entries.map((entry) => entry.stint), nostart.stint),
+    )
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    // In the count, out of the median: an unknown treated as a zero would drag
+    // the median down, and dropping them from the count answers a different
+    // question from the one the sentence appears to answer.
+    expect(result.above.count).toBe(4)
+    expect(result.above.measured).toBe(3)
+  })
+
+  it('gates on a group measured count, not its total count', () => {
+    // Foundation's COUNT clears MIN_GROUP (Acme, Beta, Gamma: three departed
+    // clients) but its MEASURED count does not (Gamma has no start date, so
+    // only two of the three can go into a median). A gate that reads `count`
+    // would print a Foundation median built from two relationships while
+    // still claiming three were measured.
+    const entries = [
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(4, 'Delta', 'grow', '2025-01-01', '2025-04-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-04-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2025-04-01'),
+    ]
+    const nostart = {
+      client: {
+        ...client(3, 'Gamma', { status: 'former', ended_on: '2026-01-01' }),
+        started_on: null,
+      },
+      stint: stint(3, 'foundation', '2025-01-01'),
+    }
+
+    const result = onRampComparison(
+      [...entries.map((entry) => entry.client), nostart.client],
+      byClient(...entries.map((entry) => entry.stint), nostart.stint),
+    )
+
+    expect(result).toEqual({ kind: 'waiting', foundation: 2, above: 3 })
+  })
+
+  it('groups an unrecognised entry rung above Foundation', () => {
+    const result = comparisonOf([
+      departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+      departed(4, 'Delta', 'platinum', '2025-01-01', '2025-04-01'),
+      departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-04-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2025-04-01'),
+    ])
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    expect(result.above.measured).toBe(3)
+  })
+
+  it('uses the rung they ENTERED on, not the one they left on', () => {
+    // Three clients who entered at Foundation and climbed out of it before
+    // leaving. Grouping by the latest rung would put all three in `above` and
+    // leave Foundation empty.
+    const result = comparisonOf(
+      [
+        departed(1, 'Acme', 'foundation', '2025-01-01', '2026-01-01'),
+        departed(2, 'Beta', 'foundation', '2025-01-01', '2026-01-01'),
+        departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
+        departed(4, 'Delta', 'grow', '2025-01-01', '2025-04-01'),
+        departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-04-01'),
+        departed(6, 'Zeta', 'grow', '2025-01-01', '2025-04-01'),
+      ],
+      [stint(1, 'scale', '2025-06-01'), stint(2, 'scale', '2025-06-01'), stint(3, 'scale', '2025-06-01')],
+    )
+
+    expect(result.kind).toBe('ready')
+    if (result.kind !== 'ready') return
+    expect(result.foundation.measured).toBe(3)
+    expect(result.above.measured).toBe(3)
+  })
+
+  it('names the threshold once, where the rule and the sentence both read it', () => {
+    expect(MIN_GROUP).toBe(3)
   })
 })

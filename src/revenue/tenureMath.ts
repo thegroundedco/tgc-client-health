@@ -37,12 +37,23 @@ import { isChurned } from '../clients/clientForm'
 //    zero-padded date string reaches it -- not as a guard the tests can show
 //    is doing anything today.
 
-export type LifecycleClient = {
+/**
+ * The lifecycle columns a departure can be judged from.
+ *
+ * Split out of LifecycleClient in slice D: the Overview page holds the roster
+ * useRetention reads, which carries no end_reason_note, and it needs exactly
+ * this rule over exactly these columns. Fabricating a null note at that call
+ * site would have put a lie in the data to satisfy a type.
+ */
+export type LifecycleBasics = {
   id: number
   name: string
   status: string
   started_on: string | null
   ended_on: string | null
+}
+
+export type LifecycleClient = LifecycleBasics & {
   end_reason_code: string | null
   end_reason_note: string | null
 }
@@ -158,9 +169,9 @@ export function currentRows(
     })
 }
 
-export function departedRows(
-  rows: readonly LifecycleClient[],
-): DepartedRow[] {
+export function departedRows<T extends LifecycleBasics>(
+  rows: readonly T[],
+): { client: T; days: number | null }[] {
   return rows
     .filter((client) => isChurned(client.status))
     .map((client) => ({

@@ -1,6 +1,8 @@
 import { isChurned } from './clientForm'
 import { PACKAGE_CODES, currentStint, journeyOf, sortStints } from './clientPackages'
 import type { PackageStint } from './clientPackages'
+import { medianOf } from '../revenue/mixMath'
+import { departedRows } from '../revenue/tenureMath'
 
 // Who is on which rung, who has moved, and whether the on-ramp works.
 //
@@ -164,5 +166,109 @@ export function movements(
   return {
     climbed: climbed.sort(order).map((entry) => entry.move),
     descended: descended.sort(order).map((entry) => entry.move),
+  }
+}
+
+/**
+ * How many measured relationships each side needs before a median is printed.
+ *
+ * Three, set by the owner on 2026-09-24: low enough that the sentence can
+ * appear within a few months of the history being recorded, high enough that
+ * one unusual departure cannot set a median by itself. Exported so the rule and
+ * the sentence describing it cannot drift apart.
+ */
+export const MIN_GROUP = 3
+
+export type Group = {
+  /** Everybody in the group, including those with no start date. */
+  count: number
+  /** How many of them could actually be measured. */
+  measured: number
+  medianDays: number
+}
+
+export type Comparison =
+  | { kind: 'waiting'; foundation: number; above: number }
+  | {
+      kind: 'ready'
+      foundation: Group
+      above: Group
+      longer: 'foundation' | 'above' | 'tie'
+    }
+
+/**
+ * Whether clients who joined at Foundation stayed longer than clients who
+ * joined above it.
+ *
+ * THIS IS NOT THE COMPARISON THAT WAS ASKED FOR, and spec section 1 is the
+ * argument. The question as put pairs clients who signed at Foundation AND
+ * graduated against everyone who joined above Foundation -- so the first group
+ * holds only the on-ramp's successes while the second holds winners and losers
+ * alike, and it would report Foundation as the stronger on-ramp whatever the
+ * truth is. Both groups are therefore fixed at the moment the client signed:
+ * nothing that happens afterwards can move anybody between them.
+ *
+ * NO asOf PARAMETER. Every relationship here has ended and is measured to the
+ * day it ended, so no clock changes an answer. Slice C removed exactly such a
+ * parameter from clientMix rather than leave it unused, so that a future caller
+ * could not supply a date under the impression it changed something.
+ *
+ * departedRows is reused rather than refiltered: it already decides who has
+ * left, already measures to the day they left rather than to today, and already
+ * returns null days when a date is missing. Three chances for this section and
+ * the Tenure report to disagree, removed.
+ */
+export function onRampComparison(
+  clients: readonly ProgressClient[],
+  byClient: ReadonlyMap<number, PackageStint[]>,
+): Comparison {
+  const recorded = clients.filter((client) => (byClient.get(client.id) ?? []).length > 0)
+
+  const days: { foundation: (number | null)[]; above: (number | null)[] } = {
+    foundation: [],
+    above: [],
+  }
+
+  for (const row of departedRows(recorded)) {
+    const rung = entryRung(byClient.get(row.client.id) ?? [])
+    if (rung === null) continue
+    days[rung === 'foundation' ? 'foundation' : 'above'].push(row.days)
+  }
+
+  // Counted and measured are not the same number -- the distinction
+  // tenureMath.summarise already documents. A departed client with no start
+  // date is IN the group and OUT of the median: treating the unknown as a zero
+  // would drag the median down, and dropping them from the count would answer a
+  // different question from the one the sentence appears to answer.
+  function group(all: readonly (number | null)[]) {
+    const measured = all.filter((value): value is number => value !== null)
+    return { count: all.length, measured: measured.length, medianDays: medianOf(measured) }
+  }
+
+  const foundation = group(days.foundation)
+  const above = group(days.above)
+
+  // MIN_GROUP gates on the MEASURED count, since that is what the median rests
+  // on. The null checks are narrowing rather than defence: medianOf returns null
+  // only for an empty list, which measured >= MIN_GROUP already excludes.
+  if (
+    foundation.measured < MIN_GROUP ||
+    above.measured < MIN_GROUP ||
+    foundation.medianDays === null ||
+    above.medianDays === null
+  ) {
+    return { kind: 'waiting', foundation: foundation.measured, above: above.measured }
+  }
+
+  return {
+    kind: 'ready',
+    foundation: { ...foundation, medianDays: foundation.medianDays },
+    above: { ...above, medianDays: above.medianDays },
+    longer:
+      foundation.medianDays === above.medianDays
+        ? 'tie'
+        : foundation.medianDays > above.medianDays
+          ? 'foundation'
+          : 'above',
   }
 }
