@@ -222,10 +222,10 @@ export function Overview({ role }: { role: string }) {
                 </>
               )}
 
-              {/* The descents list is this section's one proposal rather than a request.
-                  The owner's boss asked to see who climbs; showing only promotions makes
-                  this page flatter the roster, and a client stepping DOWN the ladder is
-                  closer to what this page is for. Approved by the owner, 2026-09-24. */}
+              {/* The descents list was proposed here, not asked for: the owner's boss
+                  asked to see who climbs, and showing only promotions makes this page
+                  flatter the roster than the ladder actually is. A client stepping DOWN
+                  is closer to what this page is for. Approved by the owner, 2026-09-24. */}
               {moved.descended.length > 0 && (
                 <>
                   <p className={`t-caption ${styles.basis}`}>Moved down</p>

@@ -17,41 +17,58 @@ import { describe, expect, it } from 'vitest'
 // Lives outside src/ because it reads the source, and tsconfig.app.json gives
 // src/ no Node types -- the same reason tests/tokens.test.ts does.
 
-// The page AND the rules it renders. Splitting them would let the contents move
-// from one file to another and slip past this check without changing. Slice D
-// adds packageProgress.ts to the list for the same reason: it is where
-// ladderStanding and onRampComparison actually live, and without it here a
-// rung count could migrate from Overview.tsx into that module and slip the pin
-// below.
-const FILES = [
-  join('src', 'shell', 'Overview.tsx'),
-  join('src', 'shell', 'overviewMath.ts'),
-  join('src', 'clients', 'packageProgress.ts'),
-].map((path) => readFileSync(join(import.meta.dirname, '..', path), 'utf8'))
+// Two constants, built from overlapping but distinct file sets, and the
+// overlap is the point.
+//
+// PAGE is Overview.tsx + overviewMath.ts: what the PAGE renders. Every
+// assertion about what a reader sees on screen must be checked against this
+// one, and must key on a string that exists ONLY in this page's own JSX --
+// never on an identifier packageProgress.ts also declares. `ladderStanding`,
+// `onRampComparison` and `descended` are all names packageProgress.ts defines
+// for itself; a check for those strings against a SOURCE that includes that
+// file would stay true even if Overview.tsx stopped calling them entirely, or
+// stopped rendering the section that uses them. Slice D shipped exactly that
+// mistake once, caught in review: `CODE.toContain('ladderStanding')` and
+// `CODE.toContain('onRampComparison')` cannot fail on the regression they
+// claimed to pin, because packageProgress.ts's own source supplies both
+// strings regardless of whether the page reads them.
+//
+// ALL is PAGE plus packageProgress.ts, and exists for a narrower purpose:
+// stopping page CONTENT from migrating out of Overview.tsx and overviewMath.ts
+// and slipping past this file's pin without changing. A rung count moved into
+// packageProgress.ts would vanish from PAGE but still show up in ALL, which is
+// exactly the failure mode "has still not grown contents nobody asked for" is
+// checking for -- so that one check, and only that one, reads ALL.
+const PAGE_FILES = [join('src', 'shell', 'Overview.tsx'), join('src', 'shell', 'overviewMath.ts')].map(
+  (path) => readFileSync(join(import.meta.dirname, '..', path), 'utf8'),
+)
+const ALL_FILES = [...PAGE_FILES, readFileSync(join(import.meta.dirname, '..', 'src', 'clients', 'packageProgress.ts'), 'utf8')]
 
-const SOURCE = FILES.join('\n')
-const CODE = SOURCE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
+const PAGE_SOURCE = PAGE_FILES.join('\n')
+const PAGE_CODE = PAGE_SOURCE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
+const ALL_SOURCE = ALL_FILES.join('\n')
+const ALL_CODE = ALL_SOURCE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/\/\/[^\n]*/g, '')
 
 describe('the Overview page', () => {
   // A test that silently found nothing would pass forever. This project has
   // already shipped one check that reported success by finding no data.
   it('is read, not silently skipped', () => {
-    expect(SOURCE.length).toBeGreaterThan(1000)
-    expect(CODE).toContain('export function Overview')
+    expect(PAGE_SOURCE.length).toBeGreaterThan(1000)
+    expect(PAGE_CODE).toContain('export function Overview')
   })
 
   it('shows the two things the owner named', () => {
-    expect(CODE).toContain('needs attention')
-    expect(CODE).toContain('overExposed')
-    expect(CODE).toContain('at_risk')
+    expect(PAGE_CODE).toContain('needs attention')
+    expect(PAGE_CODE).toContain('overExposed')
+    expect(PAGE_CODE).toContain('at_risk')
   })
 
   // The board's other bands are deliberately absent. "Watch" says keep an eye
   // out and is not actionable; "incomplete" is not a bad score, and a false
   // "at risk" is as harmful as a false "healthy".
   it('raises neither watch nor incomplete', () => {
-    expect(CODE).not.toContain("'watch'")
-    expect(CODE).not.toContain("'incomplete'")
+    expect(PAGE_CODE).not.toContain("'watch'")
+    expect(PAGE_CODE).not.toContain("'incomplete'")
   })
 
   // Slice D, 2026-09-24. The assertion that used to stand here forbade any
@@ -60,20 +77,32 @@ describe('the Overview page', () => {
   // that gets updated." The schema arrived on 2026-09-12 and this is that
   // update -- not a weakening, but the same pinning applied to the contents
   // that are now sourced.
+  //
+  // Keyed on the JSX's own heading and test id, NOT on `ladderStanding` /
+  // `onRampComparison` -- see the note above PAGE/ALL for why those identifiers
+  // cannot tell "the page renders this" from "the rules module exists".
   it('shows the ladder the owner\'s boss asked for', () => {
-    expect(CODE).toContain('ladderStanding')
-    expect(CODE).toContain('onRampComparison')
+    expect(PAGE_CODE).toContain('Moving up the ladder')
+    expect(PAGE_CODE).toContain('onramp-verdict')
   })
 
   // The climbers list came from the call. The DESCENTS list did not: it is the
   // spec's own proposal, approved by the owner on 2026-09-24, and recorded here
   // so that the trail stays honest about which contents were asked for.
+  //
+  // The exact phrase, not just "proposal|proposed": Overview.tsx already
+  // contained the unrelated sentence "six stat lines were once proposed" before
+  // this slice, which would have made a loose regex here pass even with the
+  // descents comment deleted outright. And `PAGE_CODE.toContain('descended')`
+  // would be the same vacuous shape as the ladder check above -- descended is a
+  // name packageProgress.ts declares for itself -- so this checks the rendered
+  // heading text instead.
   it('records that the descents list was proposed, not requested', () => {
-    expect(SOURCE).toMatch(/proposal|proposed/i)
-    expect(CODE).toContain('descended')
+    expect(PAGE_SOURCE).toMatch(/proposed here, not asked for/i)
+    expect(PAGE_CODE).toContain('Moved down')
   })
 
   it('has still not grown contents nobody asked for', () => {
-    expect(CODE).not.toMatch(/lead ?source/i)
+    expect(ALL_CODE).not.toMatch(/lead ?source/i)
   })
 })

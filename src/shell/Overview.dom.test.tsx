@@ -189,6 +189,27 @@ describe('the ladder', () => {
     expect(row.textContent).toContain('Grow')
   })
 
+  // The descents list has no unit test elsewhere to fall back on -- it is this
+  // section's own proposal, not something Task 1/2 already proved -- so this is
+  // the only place a client stepping DOWN the ladder is ever rendered and
+  // checked.
+  it('names a client who has descended, and the move', () => {
+    given({
+      packages: {
+        byClient: new Map([
+          [1, [stint(1, 'grow', '2025-01-01'), stint(1, 'foundation', '2026-01-01')]],
+        ]),
+      },
+    })
+
+    // SCOPED to the descents list on the same grounds as the climbers test
+    // above: Acme carries the same accessible name in the attention list.
+    const descents = within(screen.getByRole('list', { name: 'Moved down' }))
+    const row = descents.getByRole('listitem', { name: 'Acme' })
+    expect(row.textContent).toContain('Grow')
+    expect(row.textContent).toContain('Foundation')
+  })
+
   it('says when nobody has moved', () => {
     given()
 
