@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-24-slice-d-package-progression-design.md`
 
+> **SUPERSEDED IN PART, 2026-09-25.** This plan was executed against a three-rung
+> ladder — Foundation, Grow, Scale — and that model is wrong. Scale is not a rung;
+> it is a class of post-foundation project that runs alongside Grow. See §0 of the
+> spec above before using anything here. The tasks and their mutation tables are
+> still the record of how this was built; the rung count, the descents list in
+> Task 4, and the one-row-per-client backfill in Task 6's follow-on are not.
+
 ## Global Constraints
 
 - **Synthetic client names in every test.** This repository is public and names real clients. Use `Client Alpha`, `Acme`, `Beta` — never a real one.

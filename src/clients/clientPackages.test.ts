@@ -66,7 +66,7 @@ describe('currentStint', () => {
   it('ignores a stint that has not started yet', () => {
     // A move recorded ahead of time is a plan, not the current state.
     const current = currentStint(
-      [stint('2026-01-01', 'foundation'), stint('2026-12-01', 'scale')],
+      [stint('2026-01-01', 'foundation'), stint('2026-12-01', 'grow')],
       '2026-09-30',
     )
 
