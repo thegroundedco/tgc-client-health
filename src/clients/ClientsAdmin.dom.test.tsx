@@ -999,18 +999,13 @@ describe('the package ladder', () => {
     expect(screen.getByRole('button', { name: 'Record package' })).toHaveProperty('disabled', true)
   })
 
-  it('offers the three tiers and nothing else', () => {
+  it('offers the two rungs and nothing else', () => {
     withHistory([])
 
     // The form is closed, so open it and read the select.
     return userEvent.click(screen.getByRole('button', { name: 'Edit Acme' })).then(() => {
       const options = [...screen.getByLabelText('Move to').querySelectorAll('option')]
-      expect(options.map((option) => option.value)).toEqual([
-        '',
-        'foundation',
-        'grow',
-        'scale',
-      ])
+      expect(options.map((option) => option.value)).toEqual(['', 'foundation', 'grow'])
     })
   })
 

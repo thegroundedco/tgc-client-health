@@ -17,14 +17,21 @@ describe('the package vocabulary', () => {
   // The three named on the 2026-09-11 call, in the order a client climbs them.
   // Unlike the client-type list, these were actually spoken -- "I would love to
   // see them graduate from foundation into grow", and scale ranked above both.
-  it('is the three tiers, in ladder order', () => {
-    expect(PACKAGE_CODES).toEqual(['foundation', 'grow', 'scale'])
+  // TWO rungs since 2026-09-25. Scale was the third until the owner corrected
+  // the model: it is a class of post-foundation project that runs ALONGSIDE
+  // Grow, not a rung above it, and ordering it above Grow turned starting a
+  // website rebuild into a climb and finishing one into a descent.
+  it('is the two rungs, in ladder order', () => {
+    expect(PACKAGE_CODES).toEqual(['foundation', 'grow'])
+  })
+
+  it('does not carry Scale, which is a project type rather than a rung', () => {
+    expect(PACKAGE_CODES).not.toContain('scale')
   })
 
   it('labels each one the way a person would say it', () => {
     expect(packageLabel('foundation')).toBe('Foundation')
     expect(packageLabel('grow')).toBe('Grow')
-    expect(packageLabel('scale')).toBe('Scale')
   })
 
   it('hands an unrecognised code straight back', () => {
@@ -86,36 +93,31 @@ describe('journeyOf', () => {
     ).toBe('climbed')
   })
 
-  it('calls two rungs up a climb as well', () => {
-    expect(
-      journeyOf([stint('2026-01-01', 'foundation'), stint('2026-06-01', 'scale')]),
-    ).toBe('climbed')
-  })
-
   it('calls a client who never moved a stayer', () => {
     expect(journeyOf([stint('2026-01-01', 'grow')])).toBe('stayed')
   })
 
   it('calls a client who moved DOWN a descent, not a climb', () => {
-    // It happens, and folding it into "stayed" would let a downgrade count as
-    // evidence for the ladder working.
+    // On a two-rung ladder this is a data error rather than an event -- a client
+    // does not return to Foundation, because revisiting their original branding
+    // is Scale work. journeyOf still names it rather than folding it into
+    // "stayed", so a wrong row cannot read as evidence the ladder is working.
     expect(
-      journeyOf([stint('2026-01-01', 'scale'), stint('2026-06-01', 'foundation')]),
+      journeyOf([stint('2026-01-01', 'grow'), stint('2026-06-01', 'foundation')]),
     ).toBe('descended')
   })
 
   it('judges by the HIGHEST rung reached, not the last one', () => {
-    // Foundation to Scale and back to FOUNDATION is still a client who climbed.
+    // Foundation to Grow and back to FOUNDATION is still a client who climbed.
     // The question is whether the ladder works, not where they sit today.
     //
-    // The return has to reach the bottom rung for this to bite: an earlier
-    // version ended on Grow, where the last rung is still above the first, so
-    // judging by the last rung gave the same answer and the test could not
-    // fail. Caught by mutation, not by reading.
+    // The return has to reach the bottom rung for this to bite: judging by the
+    // LAST rung would call this 'stayed', because the last rung equals the
+    // first. Caught by mutation, not by reading.
     expect(
       journeyOf([
         stint('2026-01-01', 'foundation'),
-        stint('2026-04-01', 'scale'),
+        stint('2026-04-01', 'grow'),
         stint('2026-08-01', 'foundation'),
       ]),
     ).toBe('climbed')

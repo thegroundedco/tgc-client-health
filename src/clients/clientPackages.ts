@@ -25,19 +25,37 @@ export type PackageStint = {
   note: string | null
 }
 
-// The three named on the call, IN LADDER ORDER -- the order is the data, not
-// presentation: journeyOf compares positions in this array to decide whether a
-// client climbed. Unlike the client-type vocabulary, these were actually
-// spoken, so they are not a guess.
+// TWO rungs, IN LADDER ORDER -- the order is the data, not presentation:
+// journeyOf compares positions in this array to decide whether a client moved
+// up. No CHECK constraint backs this, deliberately, so a rung is one edit here
+// rather than a migration. The same arrangement end_reason_code has.
 //
-// No CHECK constraint backs this, deliberately, so a fourth rung is one edit
-// here rather than a migration. The same arrangement end_reason_code has.
-export const PACKAGE_CODES: readonly string[] = ['foundation', 'grow', 'scale']
+// SCALE WAS HERE AND WAS REMOVED ON 2026-09-25, and the reason matters enough
+// that it should stop anyone putting it back as a third rung.
+//
+// Three rungs came from the 2026-09-11 call, where the owner's boss described
+// "moving up the ladder" from foundation to grow to scale. The owner corrected
+// it once the ladder was built: Foundation is a finite phase done by itself at
+// the start -- branding, messaging, website, photoshoot. Grow is the ongoing
+// creative, in sprints, and it is where a client lives afterwards. **Scale is
+// not a rung at all.** It is a class of post-foundation PROJECT -- a website
+// rebuild, a rebrand, a roadshow, event collateral -- and it runs ALONGSIDE
+// Grow rather than after it.
+//
+// Ordered above grow, it broke both directions at once: a Grow client starting
+// a website rebuild read as having CLIMBED to Scale, and vanished from the Grow
+// count while they were doing the most work; finishing that project read as a
+// DESCENT, which the Overview page would have published under the client's own
+// name. Neither event happened.
+//
+// So the ladder is the part that really is sequential and exclusive -- you are
+// in Foundation, or you are in Grow, and graduating is a real move in one
+// direction. Scale needs a concept of projects, which this tool does not have.
+export const PACKAGE_CODES: readonly string[] = ['foundation', 'grow']
 
 export const PACKAGE_LABELS: Record<string, string> = {
   foundation: 'Foundation',
   grow: 'Grow',
-  scale: 'Scale',
 }
 
 // Null is "nobody has said", not "foundation". Defaulting to the first rung

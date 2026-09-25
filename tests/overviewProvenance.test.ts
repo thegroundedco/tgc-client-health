@@ -82,24 +82,22 @@ describe('the Overview page', () => {
   // `onRampComparison` -- see the note above PAGE/ALL for why those identifiers
   // cannot tell "the page renders this" from "the rules module exists".
   it('shows the ladder the owner\'s boss asked for', () => {
-    expect(PAGE_CODE).toContain('Moving up the ladder')
+    expect(PAGE_CODE).toContain('Graduating from Foundation')
     expect(PAGE_CODE).toContain('onramp-verdict')
   })
 
-  // The climbers list came from the call. The DESCENTS list did not: it is the
-  // spec's own proposal, approved by the owner on 2026-09-24, and recorded here
-  // so that the trail stays honest about which contents were asked for.
+  // A descents list was rendered here from 2026-09-24 to 2026-09-25. It was the
+  // spec's own proposal rather than something asked for, and it was removed with
+  // the three-rung model that made it look sensible: while Scale sat above Grow,
+  // a client finishing a website rebuild read as a demotion, and this page would
+  // have published that under their name.
   //
-  // The exact phrase, not just "proposal|proposed": Overview.tsx already
-  // contained the unrelated sentence "six stat lines were once proposed" before
-  // this slice, which would have made a loose regex here pass even with the
-  // descents comment deleted outright. And `PAGE_CODE.toContain('descended')`
-  // would be the same vacuous shape as the ladder check above -- descended is a
-  // name packageProgress.ts declares for itself -- so this checks the rendered
-  // heading text instead.
-  it('records that the descents list was proposed, not requested', () => {
-    expect(PAGE_SOURCE).toMatch(/proposed here, not asked for/i)
-    expect(PAGE_CODE).toContain('Moved down')
+  // Pinned as an ABSENCE, keyed on the rendered heading rather than on
+  // `descended` -- that identifier is one packageProgress.ts declares for
+  // itself, so asserting on it would tell us nothing about what the page shows.
+  it('does not publish descents, which are a data error rather than news', () => {
+    expect(PAGE_CODE).not.toContain('Moved down')
+    expect(PAGE_SOURCE).toMatch(/Moved down. list stood here until/i)
   })
 
   it('has still not grown contents nobody asked for', () => {

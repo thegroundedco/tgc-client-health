@@ -11,11 +11,12 @@ import { PACKAGE_CODES, emitSql, planPackages, reportOf } from '../scripts/packa
 // through the app but never removed. That makes "get it right before writing"
 // the whole design, and is why this is a tested module rather than a script.
 //
-// One row per client: the current rung for a client still here, the rung they
-// joined at for a client who has left. Those are disjoint halves --
-// ladderStanding reads only active clients' CURRENT rung and onRampComparison
-// reads only departed clients' ENTRY rung -- so one row each answers both
-// without reconstructing any history.
+// TWO QUESTIONS PER CLIENT, not one, and the second is what the first version of
+// this module got wrong. A client signs at Foundation or at Grow; one who signed
+// at Foundation may since have graduated into Grow. Recording only where they
+// are TODAY would make a graduate look like somebody who signed at Grow -- which
+// is exactly the population onRampComparison contrasts them against, so the
+// error would land inside the one figure this backfill exists to produce.
 
 const ROSTER = [
   { id: 1, name: 'Acme', status: 'active', started_on: '2025-01-01', ended_on: null },
@@ -24,10 +25,10 @@ const ROSTER = [
   { id: 4, name: 'Delta', status: 'active', started_on: null, ended_on: null },
 ]
 
-const TODAY = '2026-09-24'
+const TODAY = '2026-09-25'
 
-function row(name: string, pkg: string, since = '') {
-  return { name, package: pkg, since }
+function row(name: string, signedAt: string, graduatedOn = '') {
+  return { name, signed_at: signedAt, graduated_on: graduatedOn }
 }
 
 function plan(rows: ReturnType<typeof row>[], roster = ROSTER, today = TODAY) {
@@ -35,35 +36,48 @@ function plan(rows: ReturnType<typeof row>[], roster = ROSTER, today = TODAY) {
 }
 
 describe('planPackages — what becomes a stint', () => {
-  it('dates a blank `since` to the day the relationship began, and says it assumed that', () => {
+  it('dates the signing stint to the day the relationship began', () => {
+    // No assumption here, unlike the first draft of this module: the rung they
+    // signed at is by definition the rung they held on their first day.
     const result = plan([row('Acme', 'grow')])
 
     expect(result.problems).toEqual([])
     expect(result.stints).toEqual([
-      { clientId: 1, name: 'Acme', packageCode: 'grow', startedOn: '2025-01-01', assumed: true },
+      { clientId: 1, name: 'Acme', packageCode: 'grow', startedOn: '2025-01-01' },
     ])
   })
 
-  it('takes a given `since` over the relationship start, and does not call it assumed', () => {
-    const result = plan([row('Acme', 'scale', '2026-04-01')])
+  it('writes a second stint for a client who graduated out of Foundation', () => {
+    const result = plan([row('Acme', 'foundation', '2025-09-01')])
+
+    expect(result.problems).toEqual([])
+    expect(result.stints).toEqual([
+      { clientId: 1, name: 'Acme', packageCode: 'foundation', startedOn: '2025-01-01' },
+      { clientId: 1, name: 'Acme', packageCode: 'grow', startedOn: '2025-09-01' },
+    ])
+  })
+
+  it('leaves a client who signed at Foundation and never got out of it on one stint', () => {
+    // They exist, and they matter most: a client who left during Foundation is
+    // exactly the short tenure that must count against Foundation, or the
+    // verdict flatters it.
+    const result = plan([row('Gamma', 'foundation')])
 
     expect(result.stints).toEqual([
-      { clientId: 1, name: 'Acme', packageCode: 'scale', startedOn: '2026-04-01', assumed: false },
+      { clientId: 3, name: 'Gamma', packageCode: 'foundation', startedOn: '2024-03-01' },
     ])
   })
 
   it('matches a name regardless of case and stray whitespace', () => {
-    // build-sql.mjs normalises the same way; a roster typed by hand into a
-    // spreadsheet will not match byte-for-byte.
     const result = plan([row('  acme  ', 'grow')])
 
     expect(result.problems).toEqual([])
     expect(result.stints[0].clientId).toBe(1)
   })
 
-  it('skips a row with no package, and does not treat it as a problem', () => {
-    // The owner is allowed not to know. An unrecorded client is a state this
-    // app renders honestly; a guessed rung is not.
+  it('skips a row with no signing rung, and does not treat it as a problem', () => {
+    // The owner is allowed not to know. An unrecorded client is a state this app
+    // renders honestly; a guessed rung is not.
     const result = plan([row('Acme', ''), row('Beta', 'grow')])
 
     expect(result.problems).toEqual([])
@@ -86,64 +100,75 @@ describe('planPackages — what it refuses', () => {
     expect(result.problems.join(' ')).toMatch(/Nobody/)
   })
 
-  it('refuses a package that is not on the ladder', () => {
-    const result = plan([row('Acme', 'platinum')])
+  it('refuses Scale, which is a project type rather than a rung', () => {
+    // It was the third rung until 2026-09-25. A sheet filled in from the old
+    // model must be refused rather than quietly written.
+    const result = plan([row('Acme', 'scale')])
 
     expect(result.stints).toEqual([])
-    expect(result.problems.join(' ')).toMatch(/platinum/)
+    expect(result.problems.join(' ')).toMatch(/scale/i)
+  })
+
+  it('refuses a graduation for a client who signed at Grow', () => {
+    // There is nowhere to graduate from. Accepting it would write a Grow stint
+    // on top of a Grow stint and invent a move that did not happen.
+    const result = plan([row('Acme', 'grow', '2026-01-01')])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/grow/i)
   })
 
   it('refuses two rows for one client', () => {
-    // The table's unique (client_id, started_on) would catch a same-day pair
-    // and nothing would catch a different-day one -- which would silently make
-    // this a history import rather than the one-row-per-client pass it is.
-    const result = plan([row('Acme', 'grow'), row('Acme', 'scale', '2026-01-01')])
+    const result = plan([row('Acme', 'grow'), row('Acme', 'foundation')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.join(' ')).toMatch(/Acme/)
   })
 
-  it('refuses a stint dated before the relationship began', () => {
-    const result = plan([row('Acme', 'grow', '2024-01-01')])
+  it('refuses a graduation dated before the relationship began', () => {
+    const result = plan([row('Acme', 'foundation', '2024-01-01')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.join(' ')).toMatch(/before/i)
   })
 
-  it('refuses a stint dated after the client left', () => {
-    const result = plan([row('Gamma', 'grow', '2026-06-01')])
+  it('refuses a graduation dated the very day the relationship began', () => {
+    // The table is unique on (client_id, started_on), so this pair would be
+    // refused by Postgres after the transaction had already started -- and a
+    // same-day graduation is not a graduation anyway.
+    const result = plan([row('Acme', 'foundation', '2025-01-01')])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/same day|before/i)
+  })
+
+  it('refuses a graduation dated after the client left', () => {
+    const result = plan([row('Gamma', 'foundation', '2026-06-01')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.join(' ')).toMatch(/after/i)
   })
 
-  it('refuses a stint dated in the future', () => {
-    // currentStint reads a future date as a plan rather than the present, so a
-    // backfill that emitted one would write a row the ladder refuses to count.
-    const result = plan([row('Acme', 'grow', '2027-01-01')])
+  it('refuses a graduation dated in the future', () => {
+    // currentStint reads a future date as a plan rather than the present, so the
+    // ladder would decline to count a row this import had written.
+    const result = plan([row('Acme', 'foundation', '2027-01-01')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.join(' ')).toMatch(/future/i)
   })
 
-  it('refuses to assume a date for a client with no start date', () => {
+  it('refuses a client with no start date, having nothing to date the signing from', () => {
     const result = plan([row('Delta', 'grow')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.join(' ')).toMatch(/Delta/)
   })
 
-  it('accepts that same client when given an explicit date', () => {
-    const result = plan([row('Delta', 'grow', '2026-05-01')])
-
-    expect(result.problems).toEqual([])
-    expect(result.stints[0]).toMatchObject({ clientId: 4, startedOn: '2026-05-01' })
-  })
-
   it('emits nothing at all when any row is a problem', () => {
     // One bad row stops the whole import. A partial write into a table with no
     // delete policy is the expensive kind of mistake.
-    const result = plan([row('Acme', 'grow'), row('Nobody', 'scale')])
+    const result = plan([row('Acme', 'grow'), row('Nobody', 'foundation')])
 
     expect(result.stints).toEqual([])
     expect(result.problems.length).toBe(1)
@@ -159,19 +184,18 @@ describe('emitSql', () => {
   })
 
   it('writes one insert per stint, with the client id rather than the name', () => {
-    const sql = emitSql(plan([row('Acme', 'grow'), row('Gamma', 'foundation')]))
+    const sql = emitSql(plan([row('Acme', 'foundation', '2025-09-01')]))
 
     expect(sql).toMatch(/insert into public\.client_packages/)
-    expect(sql).toMatch(/\(1, 'grow', '2025-01-01'/)
-    expect(sql).toMatch(/\(3, 'foundation', '2024-03-01'/)
+    expect(sql).toMatch(/\(1, 'foundation', '2025-01-01'/)
+    expect(sql).toMatch(/\(1, 'grow', '2025-09-01'/)
   })
 
-  // THE COMMA HAS TO SURVIVE THE COMMENT. Each value tuple carries a trailing
-  // `-- client name`, and the first version of this emitter put the separating
-  // comma AFTER that comment -- so Postgres read it as part of the comment, the
-  // tuples lost their separator, and the whole statement was a syntax error.
-  // Every other assertion in this file passed: they checked that a tuple
-  // appeared, not that the statement was well formed.
+  // THE COMMA HAS TO SURVIVE THE COMMENT. Each tuple carries a client name, and
+  // the first version of this emitter put the separating comma AFTER an inline
+  // comment -- so Postgres read it as comment text, the tuples lost their
+  // separator, and the statement was a syntax error. Every other assertion here
+  // passed: they checked that a tuple appeared, not that the statement parsed.
   it('separates the value tuples with a comma that is not inside a comment', () => {
     const sql = emitSql(plan([row('Acme', 'grow'), row('Gamma', 'foundation')]))
     const withoutComments = sql.replace(/--[^\n]*/g, '')
@@ -179,22 +203,14 @@ describe('emitSql', () => {
     expect(withoutComments).toMatch(/\),\s*\(/)
   })
 
-  // AND THE SEMICOLON TOO. The same emitter put the statement terminator after
-  // the last tuple's trailing comment, so it was commented out as well -- and
-  // the first version of this very test could not see it, because stripping the
-  // comments removed the semicolon along with them and "no comma before the
-  // semicolon" is trivially true when there is no semicolon. Assert the
-  // terminator is PRESENT, not merely that nothing bad precedes it.
   it('terminates the insert with a semicolon that is not inside a comment', () => {
     const sql = emitSql(plan([row('Acme', 'grow'), row('Gamma', 'foundation')]))
     const withoutComments = sql.replace(/--[^\n]*/g, '')
 
-    // Cut at the FIRST semicolon, not to the end of the file. The first draft
-    // of this test sliced to the end and passed while the terminator was
-    // commented out, because the verification SELECTs further down carry
-    // semicolons of their own -- it was a vacuous test for a vacuous-test bug,
-    // and only mutation found it. If the insert's own terminator disappears,
-    // this segment runs on into the first SELECT, which is the tell.
+    // Cut at the FIRST semicolon, not to the end of the file. The first draft of
+    // this test sliced to the end and passed while the terminator was commented
+    // out, because the verification SELECTs further down carry semicolons of
+    // their own -- a vacuous test for a vacuous-test bug, found only by mutation.
     const afterInsert = withoutComments.slice(withoutComments.indexOf('insert into'))
     const statement = afterInsert.slice(0, afterInsert.indexOf(';') + 1)
 
@@ -217,15 +233,21 @@ describe('emitSql', () => {
 })
 
 describe('reportOf', () => {
-  it('says how many dates were assumed rather than given', () => {
-    // The number the owner reads before deciding whether to commit: every
-    // assumed date asserts the client has never moved rung.
-    const report = reportOf(plan([row('Acme', 'grow'), row('Gamma', 'scale', '2025-01-01')]))
+  it('says how many clients signed at each rung, and how many graduated', () => {
+    const report = reportOf(
+      plan([
+        row('Acme', 'foundation', '2025-09-01'),
+        row('Beta', 'grow'),
+        row('Gamma', 'foundation'),
+      ]),
+    )
 
-    expect(report).toMatch(/1 .*assum/i)
+    expect(report).toMatch(/foundation: 2/i)
+    expect(report).toMatch(/grow: 1/i)
+    expect(report).toMatch(/1 .*graduat/i)
   })
 
-  it('names the clients left out for want of a package', () => {
+  it('names the clients left out for want of a signing rung', () => {
     const report = reportOf(plan([row('Acme', ''), row('Beta', 'grow')]))
 
     expect(report).toMatch(/Acme/)
@@ -236,8 +258,7 @@ describe('the ladder vocabulary', () => {
   // PACKAGE_CODES exists twice: in src/clients/clientPackages.ts, which the app
   // reads, and in the script, which node runs directly and cannot import a .ts
   // module. Two copies drift, so this is the mitigation -- the same one
-  // tests/capabilities.test.ts uses for the role presets, and the same reason:
-  // the duplication is forced, so the guard is the whole answer to it.
+  // tests/capabilities.test.ts uses for the role presets.
   it('is the same set in the script as in the app', () => {
     const source = readFileSync(
       join(import.meta.dirname, '..', 'src', 'clients', 'clientPackages.ts'),

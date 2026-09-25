@@ -23,6 +23,44 @@ half is missing.
 
 ---
 
+## 0. Correction, 2026-09-25: the ladder has two rungs, not three
+
+**Everything below was written against a three-rung ladder — Foundation, Grow, Scale — and that
+model is wrong.** The owner corrected it the day after this slice merged, and the correction is
+recorded here rather than edited silently into the sections, because the wrong model is the more
+instructive artifact.
+
+Where it came from: the 2026-09-11 call, where the owner's boss described "moving up the ladder"
+from foundation to grow to scale. Read as three rungs, it was a reasonable reading of what he said.
+
+What is actually true:
+
+- **Foundation** is a finite phase, done by itself at the start — branding, messaging, website,
+  photoshoot.
+- **Grow** is the ongoing creative, in sprints, and is where a client lives afterwards.
+- **Scale is not a rung.** It is a class of post-foundation *project* — a website rebuild, a
+  rebrand, a roadshow, event collateral — and it runs **alongside** Grow rather than after it.
+- A client signs at **Foundation or Grow**, never Scale.
+
+**What the wrong model would have published.** Ordered above Grow, Scale broke both directions at
+once: a Grow client starting a website rebuild read as having CLIMBED, and disappeared from the
+Grow count while doing the most work; finishing that project read as a DESCENT, which §2.2's list
+would have published under the client's own name on the homepage. Neither event happened.
+
+**What survives, and it is the part that matters.** §1's argument is untouched, and so is §3.4.
+Signing is always Foundation or Grow, so "joined at Foundation" against "joined above it" is
+exactly the boss's question and exactly what the code computes. The verdict needed no change.
+
+**What changed:** `PACKAGE_CODES` is `['foundation', 'grow']`; the descents list in §2.2 is
+removed; the section heading is "Graduating from Foundation", because with two rungs there is one
+possible move; and the backfill described in §8 needs two answers per client rather than one —
+where they signed, and when they graduated — because recording only a graduate's current rung
+would file them as a Grow signing, which is the very population §3.4 contrasts them against.
+
+Scale needs a concept of projects, which this tool does not have. It is out of scope, not deferred.
+
+---
+
 ## 1. The question, and the trap inside it
 
 The comparison as he framed it pairs **clients who signed at Foundation and then graduated**
@@ -67,7 +105,7 @@ page is for, and this section is context rather than an alarm.
 
 ### 2.1 Where everyone is today
 
-A count of active clients per rung — Foundation, Grow, Scale — in ladder order, beside **the number
+A count of active clients per rung — Foundation and Grow (see §0) — in ladder order, beside **the number
 of active clients with no package recorded at all**, given the same weight rather than tucked away.
 
 That last number is the honest denominator. `packageLabel(null)` already returns "No package
@@ -78,13 +116,19 @@ number most likely to get the data entered, which is what everything below it wa
 
 ### 2.2 Who moved
 
-Two lists, kept separate: clients who **climbed**, and clients who **descended**.
+~~Two lists, kept separate: clients who **climbed**, and clients who **descended**.~~
+**Superseded by §0: one list.** With two rungs there is one possible move, so the section shows
+clients who have **graduated from Foundation**. A client does not return to Foundation — revisiting
+their original branding is Scale work — so a reversed pair is a data error rather than news, and
+publishing it under a client's name would have the page state something that did not happen.
+`movements` still computes `descended`, because `journeyOf` defines it; the page does not render it.
 
 Each names the move — entry rung to highest rung reached, matching how `journeyOf` decides. When the
 client has since come back down, the line also names where they are now, so that "Foundation →
 Scale" cannot imply Scale is current.
 
-**The descents list was not asked for.** It is this document's proposal, approved by the owner on
+**The descents list was not asked for, and has since been removed — see §0.** It was this
+document's proposal, approved by the owner on
 2026-09-24, and recorded as such because the Overview page has a history here: six stat lines were
 once invented for it, the owner did not recognise them, and they were retired as never-sourced. The
 argument for it is that this page exists to surface what needs attention, a client stepping down the

@@ -6,28 +6,37 @@
 // "get it right before writing" the entire design, and is why the decisions live
 // in a module with tests instead of inside a one-off script.
 //
-// ONE ROW PER CLIENT, and the reason is worth stating because it looks like a
-// shortcut and is not. `ladderStanding` reads only ACTIVE clients' CURRENT rung;
-// `onRampComparison` reads only DEPARTED clients' ENTRY rung. Those halves are
-// disjoint, so a single row each -- what they are on now, or what they joined at
-// -- answers both the ladder and the verdict without reconstructing any history.
-// The movement lists stay empty until somebody actually moves, which is honest:
-// a reconstructed climb is a guess about a date, and the date is what decides
-// who counts as a climber.
+// TWO QUESTIONS PER CLIENT: what rung did they sign at, and if it was Foundation,
+// when did they graduate into Grow?
 //
-// Pure, and takes its clock as an argument, so every rule below is provable.
-// The I/O lives in the builder outside this repo -- this repository is public
-// and the roster names real clients.
+// The first draft of this module asked ONE question -- their current rung -- on
+// the reasoning that `ladderStanding` reads only active clients' current rung and
+// `onRampComparison` reads only departed clients' entry rung, so the halves are
+// disjoint. That reasoning was right about the two functions and wrong about the
+// clients: a client who signed at Foundation and has since graduated would have
+// been recorded as a Grow signing, which is precisely the population the verdict
+// contrasts them against. The error would have landed inside the one figure this
+// backfill exists to produce, and nothing downstream could have detected it.
+//
+// The signing stint needs no date of its own: the rung a client signed at is by
+// definition the rung they held on their first day, so it takes the relationship
+// start. Only the graduation needs a date from the owner.
+//
+// Pure, and takes its clock as an argument, so every rule below is provable. The
+// I/O lives in the builder outside this repo -- this repository is public and the
+// roster names real clients.
 
 /**
- * The three rungs, in ladder order.
+ * The two rungs, in ladder order.
  *
- * Duplicated from src/clients/clientPackages.ts because that is TypeScript and
- * this is a plain .mjs script node can run directly. tests/packageImport.test.ts
- * carries a drift guard that reads both and asserts they are the same set --
- * the same mitigation tests/capabilities.test.ts uses for the role presets.
+ * Scale was a third until 2026-09-25 and is not a rung: it is a class of
+ * post-foundation project -- a website rebuild, a rebrand, a roadshow -- that
+ * runs ALONGSIDE Grow. src/clients/clientPackages.ts carries the full reasoning.
+ * Duplicated from there because that is TypeScript and this is a plain .mjs
+ * script node runs directly; tests/packageImport.test.ts guards the drift, the
+ * same mitigation tests/capabilities.test.ts uses for the role presets.
  */
-export const PACKAGE_CODES = ['foundation', 'grow', 'scale']
+export const PACKAGE_CODES = ['foundation', 'grow']
 
 /** A roster typed into a spreadsheet will not match the database byte for byte. */
 function normalise(name) {
@@ -41,7 +50,7 @@ function normalise(name) {
  * Turn the owner's decisions into stints, or into the reasons they cannot be.
  *
  * @param {object} args
- * @param {{ name: string, package: string, since: string }[]} args.rows  one per CSV line
+ * @param {{ name: string, signed_at: string, graduated_on: string }[]} args.rows
  * @param {{ id: number, name: string, status: string, started_on: string|null, ended_on: string|null }[]} args.roster
  * @param {string} args.today  YYYY-MM-DD, passed in rather than read from a clock
  */
@@ -49,20 +58,21 @@ export function planPackages({ rows, roster, today }) {
   const problems = []
   const stints = []
   const skipped = []
+  const graduated = []
 
   const byName = new Map(roster.map((client) => [normalise(client.name), client]))
   const seen = new Set()
 
   for (const raw of rows) {
     const name = String(raw.name ?? '').trim()
-    const code = String(raw.package ?? '')
+    const signedAt = String(raw.signed_at ?? '')
       .trim()
       .toLowerCase()
-    const since = String(raw.since ?? '').trim()
+    const graduatedOn = String(raw.graduated_on ?? '').trim()
 
-    // An empty package is "I do not know", which this app renders honestly as
+    // An empty rung is "I do not know", which this app renders honestly as
     // "No package recorded". A guessed rung is the thing it must never do.
-    if (code === '') {
+    if (signedAt === '') {
       skipped.push(name)
       continue
     }
@@ -73,65 +83,93 @@ export function planPackages({ rows, roster, today }) {
       continue
     }
 
-    if (!PACKAGE_CODES.includes(code)) {
-      problems.push(`"${name}": "${code}" is not a package on the ladder.`)
+    if (!PACKAGE_CODES.includes(signedAt)) {
+      problems.push(
+        `"${name}": "${signedAt}" is not a rung a client can sign at. Use foundation or grow.` +
+          (signedAt === 'scale'
+            ? ' Scale is a project type that runs alongside Grow, not a rung.'
+            : ''),
+      )
       continue
     }
 
     if (seen.has(client.id)) {
-      // The table's unique (client_id, started_on) would catch a same-day pair
-      // and nothing would catch a different-day one -- which would quietly turn
-      // this into a history import rather than the one-row-per-client pass it is.
-      problems.push(`"${name}" appears more than once; this import writes one stint per client.`)
+      problems.push(`"${name}" appears more than once; this import writes one client per row.`)
       continue
     }
     seen.add(client.id)
 
-    let startedOn = since
-    let assumed = false
+    if (client.started_on === null || client.started_on === undefined) {
+      problems.push(`"${name}" has no start date, so there is nothing to date their signing from.`)
+      continue
+    }
 
-    if (startedOn === '') {
-      if (client.started_on === null || client.started_on === undefined) {
+    if (graduatedOn !== '' && signedAt !== 'foundation') {
+      problems.push(
+        `"${name}" signed at Grow, so there is nowhere to graduate from; leave graduated_on empty.`,
+      )
+      continue
+    }
+
+    if (graduatedOn !== '') {
+      if (graduatedOn < client.started_on) {
         problems.push(
-          `"${name}" has no start date, so a blank "since" has nothing to date the stint from.`,
+          `"${name}": graduating on ${graduatedOn} is before the relationship began on ${client.started_on}.`,
         )
         continue
       }
-      startedOn = client.started_on
-      assumed = true
+      if (graduatedOn === client.started_on) {
+        // The table is unique on (client_id, started_on), so this pair would be
+        // refused by Postgres mid-transaction -- and a graduation on the first
+        // day is not a graduation.
+        problems.push(
+          `"${name}": graduating on ${graduatedOn} is the same day the relationship began.`,
+        )
+        continue
+      }
+      if (client.ended_on !== null && client.ended_on !== undefined && graduatedOn > client.ended_on) {
+        problems.push(`"${name}": graduating on ${graduatedOn} is after they left on ${client.ended_on}.`)
+        continue
+      }
+      if (graduatedOn > today) {
+        // currentStint reads a future date as a plan rather than the present, so
+        // the ladder would decline to count a row this import had written.
+        problems.push(
+          `"${name}": graduating on ${graduatedOn} is in the future; a stint dated ahead is a plan, not history.`,
+        )
+        continue
+      }
     }
 
-    if (client.started_on !== null && client.started_on !== undefined && startedOn < client.started_on) {
-      problems.push(`"${name}": ${startedOn} is before the relationship began on ${client.started_on}.`)
-      continue
-    }
+    stints.push({
+      clientId: client.id,
+      name: client.name,
+      packageCode: signedAt,
+      startedOn: client.started_on,
+    })
 
-    if (client.ended_on !== null && client.ended_on !== undefined && startedOn > client.ended_on) {
-      problems.push(`"${name}": ${startedOn} is after they left on ${client.ended_on}.`)
-      continue
+    if (graduatedOn !== '') {
+      stints.push({
+        clientId: client.id,
+        name: client.name,
+        packageCode: 'grow',
+        startedOn: graduatedOn,
+      })
+      graduated.push(client.name)
     }
-
-    if (startedOn > today) {
-      // currentStint reads a future date as a plan rather than the present, so
-      // a row dated ahead is one the ladder would decline to count.
-      problems.push(`"${name}": ${startedOn} is in the future; a stint dated ahead is a plan, not history.`)
-      continue
-    }
-
-    stints.push({ clientId: client.id, name: client.name, packageCode: code, startedOn, assumed })
   }
 
   // ONE BAD ROW STOPS EVERYTHING. A partial write into a table with no delete
   // policy is the expensive kind of mistake, and the cheap fix is to make the
   // whole import refuse until the sheet is right.
-  return { stints: problems.length > 0 ? [] : stints, problems, skipped }
+  return { stints: problems.length > 0 ? [] : stints, problems, skipped, graduated }
 }
 
 /**
  * The transaction, which ends in `rollback;` on purpose.
  *
  * Run it once: the selects print what was written and what the invariants say,
- * and then nothing is kept. Read them, change the last line to `commit;`, run it
+ * and then nothing is kept. Read them, change the last line to a commit, run it
  * again. The same two-pass shape the 2025 revenue import used.
  */
 export function emitSql(plan) {
@@ -143,29 +181,28 @@ export function emitSql(plan) {
     ].join('\n')
   }
 
-  // NO SYNTAX EVER FOLLOWS A COMMENT ON THE SAME LINE. Each client's name goes
-  // on its own line ABOVE its tuple, so the separating comma and the statement
+  // NO SYNTAX EVER FOLLOWS A COMMENT ON THE SAME LINE. Each client's name goes on
+  // its own line ABOVE its tuple, so the separating comma and the statement
   // terminator can never end up inside a `--`.
   //
-  // Both of those shipped once, in one emitter: the comma joined after the
-  // trailing comment and Postgres lost the separator; the semicolon landed
-  // after the last comment and vanished with it. Neither was caught by an
-  // assertion that a tuple appeared, and the first test written for the comma
-  // could not see the semicolon at all -- stripping comments to look for the
-  // defect also stripped the terminator. Putting comments on their own lines
-  // removes the whole class rather than the two instances.
+  // Both of those shipped once, in one emitter: the comma joined after a trailing
+  // comment and Postgres lost the separator; the semicolon landed after the last
+  // comment and vanished with it. Neither was caught by an assertion that a tuple
+  // appeared, and the first test written for the comma could not see the
+  // semicolon at all -- stripping comments to look for the defect also stripped
+  // the terminator. Comments on their own lines remove the class.
   const values = plan.stints
     .map((stint, index) => {
-      const why = stint.assumed ? ', date assumed from the relationship start' : ''
       const separator = index === plan.stints.length - 1 ? '' : ','
+      const what = stint.packageCode === 'foundation' ? 'signed' : 'signed or graduated'
       return (
-        `  -- ${stint.name}${why}\n` +
+        `  -- ${stint.name}, ${what}\n` +
         `  (${stint.clientId}, '${stint.packageCode}', '${stint.startedOn}', null)${separator}`
       )
     })
     .join('\n')
 
-  return `-- Package history backfill. ${plan.stints.length} stints, one per client.
+  return `-- Package history backfill. ${plan.stints.length} stints across ${plan.stints.length - plan.graduated.length} clients.
 -- Generated; do not hand-edit. Change the sheet and rebuild.
 begin;
 
@@ -174,7 +211,7 @@ values
 ${values};
 
 -- What landed, by rung.
-select package_code, count(*) as clients
+select package_code, count(*) as stints
 from public.client_packages
 group by package_code
 order by package_code;
@@ -190,11 +227,12 @@ join public.clients c on c.id = p.client_id
 where (c.started_on is not null and p.started_on < c.started_on)
    or (c.ended_on is not null and p.started_on > c.ended_on);
 
--- No client may end up with two stints from this pass.
+-- A client may hold at most two stints from this pass, and a second one is
+-- always Grow. Zero rows is the pass.
 select client_id, count(*) as stints
 from public.client_packages
 group by client_id
-having count(*) > 1;
+having count(*) > 2;
 
 -- ROLLBACK, deliberately. Run this whole script once: the selects above print
 -- the totals and the invariant breaches, and then nothing is kept. Check them,
@@ -211,24 +249,28 @@ export function reportOf(plan) {
     )
   }
 
-  const assumed = plan.stints.filter((stint) => stint.assumed)
+  // Counted by where each client SIGNED, which is one row per client -- not by
+  // stint, which would count a graduate twice and make the two numbers add up to
+  // something that is not the roster.
+  const signings = plan.stints.filter(
+    (stint, index) =>
+      index === 0 || plan.stints[index - 1].clientId !== stint.clientId,
+  )
   const byRung = PACKAGE_CODES.map(
-    (code) => `  ${code}: ${plan.stints.filter((stint) => stint.packageCode === code).length}`,
+    (code) => `  ${code}: ${signings.filter((stint) => stint.packageCode === code).length}`,
   ).join('\n')
 
   const lines = [
-    `${plan.stints.length} stints, one per client.`,
+    `${signings.length} clients, ${plan.stints.length} stints.`,
+    'Signed at:',
     byRung,
-    // The number that decides whether this is safe to commit: an assumed date
-    // asserts the client has been on that rung since the relationship began,
-    // and therefore that they have never moved. Wrong for anyone who has.
-    `${assumed.length} of ${plan.stints.length} dated by assumption from the relationship start:`,
-    ...assumed.map((stint) => `  ${stint.name} (${stint.startedOn})`),
+    `${plan.graduated.length} graduated from Foundation into Grow:`,
+    ...plan.graduated.map((name) => `  ${name}`),
   ]
 
   if (plan.skipped.length > 0) {
     lines.push(
-      `${plan.skipped.length} left out for want of a package, and they will read as "No package recorded":`,
+      `${plan.skipped.length} left out for want of a signing rung, and they will read as "No package recorded":`,
       ...plan.skipped.map((name) => `  ${name}`),
     )
   }

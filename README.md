@@ -952,7 +952,16 @@ evaluating them over all 32 combinations of their inputs.
 ## The package ladder
 
 `client_packages` records which package a client has been on and when they moved
--- **foundation, grow, scale**, in that order. A table of stints rather than a
+-- **foundation and grow**, in that order.
+
+**There were three rungs until 2026-09-25, and Scale was the third.** It is not
+a rung: Foundation is a finite phase done by itself at the start, Grow is the
+ongoing creative a client lives in afterwards, and Scale is a class of
+post-foundation *project* -- a website rebuild, a rebrand, a roadshow -- that
+runs **alongside** Grow. Ordered above Grow it broke both directions: a client
+starting a rebuild read as a climb and vanished from the Grow count, and
+finishing it read as a demotion the Overview page would have published under
+their name. A client signs at Foundation or at Grow, never at Scale. A table of stints rather than a
 column on `clients`, and the requirement forces it: a current-package column
 answers "what are they on now" and cannot answer a single question the ladder
 exists for, because every one of them is about the journey. The current package
@@ -970,9 +979,10 @@ the first rung would invent a journey for every client on the roster.
 
 ### Where it is read, and the two gates
 
-The Overview page's "Moving up the ladder" section is the only reader. It shows
-the roster by rung, who has climbed or descended, and one sentence on whether
-clients who join at Foundation stay longer than clients who join above it.
+The Overview page's "Graduating from Foundation" section is the only reader. It
+shows the roster by rung, who has graduated, and one sentence on whether clients
+who join at Foundation stay longer than clients who join above it. One list, not
+two: with two rungs there is a single possible move.
 
 `client_packages` is `select`-gated on `manage_clients` in RLS -- there is no
 view/edit split, unlike revenue, because anyone who can edit the roster can record
@@ -995,8 +1005,11 @@ Worth knowing before recording any history, because they touch disjoint halves:
 - `onRampComparison` reads only **departed** clients' **entry** rung, and measures
   tenure only over relationships that have ended.
 
-So one row per client -- what they are on now, or what they joined at -- answers
-both without reconstructing any history. Only the movement lists need more.
+So the backfill needs **two answers per client, not one**: the rung they signed
+at, and -- if that was Foundation -- the date they graduated into Grow. Recording
+only where a client sits today would file a graduate as a Grow signing, which is
+exactly the population the verdict contrasts them against, so the error would
+land inside the one figure the backfill exists to produce.
 
 The section also reports how many active clients have **no package recorded**,
 with the same weight as the three rungs. That number is the honest denominator; a
