@@ -17,14 +17,21 @@ describe('the package vocabulary', () => {
   // The three named on the 2026-09-11 call, in the order a client climbs them.
   // Unlike the client-type list, these were actually spoken -- "I would love to
   // see them graduate from foundation into grow", and scale ranked above both.
-  it('is the three tiers, in ladder order', () => {
-    expect(PACKAGE_CODES).toEqual(['foundation', 'grow', 'scale'])
+  // TWO rungs since 2026-09-25. Scale was the third until the owner corrected
+  // the model: it is a class of post-foundation project that runs ALONGSIDE
+  // Grow, not a rung above it, and ordering it above Grow turned starting a
+  // website rebuild into a climb and finishing one into a descent.
+  it('is the two rungs, in ladder order', () => {
+    expect(PACKAGE_CODES).toEqual(['foundation', 'grow'])
+  })
+
+  it('does not carry Scale, which is a project type rather than a rung', () => {
+    expect(PACKAGE_CODES).not.toContain('scale')
   })
 
   it('labels each one the way a person would say it', () => {
     expect(packageLabel('foundation')).toBe('Foundation')
     expect(packageLabel('grow')).toBe('Grow')
-    expect(packageLabel('scale')).toBe('Scale')
   })
 
   it('hands an unrecognised code straight back', () => {
@@ -59,7 +66,7 @@ describe('currentStint', () => {
   it('ignores a stint that has not started yet', () => {
     // A move recorded ahead of time is a plan, not the current state.
     const current = currentStint(
-      [stint('2026-01-01', 'foundation'), stint('2026-12-01', 'scale')],
+      [stint('2026-01-01', 'foundation'), stint('2026-12-01', 'grow')],
       '2026-09-30',
     )
 
@@ -86,36 +93,31 @@ describe('journeyOf', () => {
     ).toBe('climbed')
   })
 
-  it('calls two rungs up a climb as well', () => {
-    expect(
-      journeyOf([stint('2026-01-01', 'foundation'), stint('2026-06-01', 'scale')]),
-    ).toBe('climbed')
-  })
-
   it('calls a client who never moved a stayer', () => {
     expect(journeyOf([stint('2026-01-01', 'grow')])).toBe('stayed')
   })
 
   it('calls a client who moved DOWN a descent, not a climb', () => {
-    // It happens, and folding it into "stayed" would let a downgrade count as
-    // evidence for the ladder working.
+    // On a two-rung ladder this is a data error rather than an event -- a client
+    // does not return to Foundation, because revisiting their original branding
+    // is Scale work. journeyOf still names it rather than folding it into
+    // "stayed", so a wrong row cannot read as evidence the ladder is working.
     expect(
-      journeyOf([stint('2026-01-01', 'scale'), stint('2026-06-01', 'foundation')]),
+      journeyOf([stint('2026-01-01', 'grow'), stint('2026-06-01', 'foundation')]),
     ).toBe('descended')
   })
 
   it('judges by the HIGHEST rung reached, not the last one', () => {
-    // Foundation to Scale and back to FOUNDATION is still a client who climbed.
+    // Foundation to Grow and back to FOUNDATION is still a client who climbed.
     // The question is whether the ladder works, not where they sit today.
     //
-    // The return has to reach the bottom rung for this to bite: an earlier
-    // version ended on Grow, where the last rung is still above the first, so
-    // judging by the last rung gave the same answer and the test could not
-    // fail. Caught by mutation, not by reading.
+    // The return has to reach the bottom rung for this to bite: judging by the
+    // LAST rung would call this 'stayed', because the last rung equals the
+    // first. Caught by mutation, not by reading.
     expect(
       journeyOf([
         stint('2026-01-01', 'foundation'),
-        stint('2026-04-01', 'scale'),
+        stint('2026-04-01', 'grow'),
         stint('2026-08-01', 'foundation'),
       ]),
     ).toBe('climbed')
@@ -164,13 +166,31 @@ describe('stintProblems', () => {
     expect(problems.map((p) => p.text).join(' ')).toMatch(/already on Grow/i)
   })
 
-  it('allows a move back to a package they were on before', () => {
-    // Foundation, Grow, back to Foundation is a real thing that happens, and
-    // only the CURRENT package makes a move redundant.
+  it('refuses a move back down the ladder', () => {
+    // This test asserted the opposite until 2026-09-25, on the three-rung
+    // model's reasoning that "Foundation, Grow, back to Foundation is a real
+    // thing that happens". It is not: Foundation is a finite phase at the start
+    // of an engagement, and revisiting a client's original branding later is
+    // Scale work, which this ladder does not record.
+    //
+    // It has to be refused HERE, because the Overview page stopped rendering
+    // descents when the model was corrected -- so a Grow -> Foundation row
+    // entered by hand would drop the client out of every ladder narrative with
+    // nothing anywhere showing the bad row. It cannot be deleted afterwards,
+    // only edited.
+    const problems = stintProblems(
+      { packageCode: 'foundation', startedOn: '2026-09-01', note: '' },
+      [stint('2026-01-01', 'foundation'), stint('2026-06-01', 'grow')],
+    )
+
+    expect(problems.map((problem) => problem.field)).toEqual(['packageCode'])
+    expect(problems[0].text).toMatch(/does not move back/i)
+  })
+
+  it('still allows the move the ladder is for', () => {
     expect(
-      stintProblems({ packageCode: 'foundation', startedOn: '2026-09-01', note: '' }, [
+      stintProblems({ packageCode: 'grow', startedOn: '2026-06-01', note: '' }, [
         stint('2026-01-01', 'foundation'),
-        stint('2026-06-01', 'grow'),
       ]),
     ).toEqual([])
   })

@@ -64,11 +64,11 @@ export type LadderStanding = {
  * `status === 'active'` is the wrong test and the easy mistake here.
  *
  * `unrecorded` is returned beside the rungs and not as an afterthought. A ladder
- * showing three counts and hiding the fourth would undo clientPackages' decision
+ * showing its two rungs and hiding the unrecorded count would undo clientPackages' decision
  * that null is "nobody has said" rather than foundation -- at the last step,
  * where it is least visible.
  *
- * A rung this vocabulary does not know is counted after the three it does,
+ * A rung this vocabulary does not know is counted after the two it does,
  * rather than silently dropped or folded into unrecorded: somebody IS on it.
  */
 export function ladderStanding(
@@ -117,9 +117,9 @@ export type Movements = { climbed: Move[]; descended: Move[] }
  * Membership is journeyOf and nothing else, so these lists cannot come to a
  * different view from the function that defines the words. That also means
  * `from` and `to` describe the ENTRY and the EXTREME rung rather than the
- * latest one, because that is how journeyOf decides -- foundation to scale and
- * back to grow is a client who climbed. `now` exists so that reading does not
- * imply scale is current.
+ * latest one, because that is how journeyOf decides -- foundation to grow and
+ * back to foundation is a client who climbed. `now` exists so that reading does
+ * not imply the highest rung is where they sit today.
  *
  * `asOf` DECIDES MEMBERSHIP, not just what `now` means: a stint dated after
  * `asOf` is a plan, not an accomplished move, and judging journeyOf, the rung

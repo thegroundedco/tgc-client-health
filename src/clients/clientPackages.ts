@@ -25,19 +25,37 @@ export type PackageStint = {
   note: string | null
 }
 
-// The three named on the call, IN LADDER ORDER -- the order is the data, not
-// presentation: journeyOf compares positions in this array to decide whether a
-// client climbed. Unlike the client-type vocabulary, these were actually
-// spoken, so they are not a guess.
+// TWO rungs, IN LADDER ORDER -- the order is the data, not presentation:
+// journeyOf compares positions in this array to decide whether a client moved
+// up. No CHECK constraint backs this, deliberately, so a rung is one edit here
+// rather than a migration. The same arrangement end_reason_code has.
 //
-// No CHECK constraint backs this, deliberately, so a fourth rung is one edit
-// here rather than a migration. The same arrangement end_reason_code has.
-export const PACKAGE_CODES: readonly string[] = ['foundation', 'grow', 'scale']
+// SCALE WAS HERE AND WAS REMOVED ON 2026-09-25, and the reason matters enough
+// that it should stop anyone putting it back as a third rung.
+//
+// Three rungs came from the 2026-09-11 call, where the owner's boss described
+// "moving up the ladder" from foundation to grow to scale. The owner corrected
+// it once the ladder was built: Foundation is a finite phase done by itself at
+// the start -- branding, messaging, website, photoshoot. Grow is the ongoing
+// creative, in sprints, and it is where a client lives afterwards. **Scale is
+// not a rung at all.** It is a class of post-foundation PROJECT -- a website
+// rebuild, a rebrand, a roadshow, event collateral -- and it runs ALONGSIDE
+// Grow rather than after it.
+//
+// Ordered above grow, it broke both directions at once: a Grow client starting
+// a website rebuild read as having CLIMBED to Scale, and vanished from the Grow
+// count while they were doing the most work; finishing that project read as a
+// DESCENT, which the Overview page would have published under the client's own
+// name. Neither event happened.
+//
+// So the ladder is the part that really is sequential and exclusive -- you are
+// in Foundation, or you are in Grow, and graduating is a real move in one
+// direction. Scale needs a concept of projects, which this tool does not have.
+export const PACKAGE_CODES: readonly string[] = ['foundation', 'grow']
 
 export const PACKAGE_LABELS: Record<string, string> = {
   foundation: 'Foundation',
   grow: 'Grow',
-  scale: 'Scale',
 }
 
 // Null is "nobody has said", not "foundation". Defaulting to the first rung
@@ -76,9 +94,9 @@ export type Journey = 'climbed' | 'stayed' | 'descended'
  * Whether a client moved up the ladder, stayed put, or came back down.
  *
  * Judged by the HIGHEST rung reached against the one they signed on at, not by
- * where they are today: foundation to scale and back to grow is still a client
- * who climbed, and the question is whether the ladder works rather than where
- * anybody currently sits.
+ * where they are today: foundation to grow and back to foundation is still a
+ * client who climbed, and the question is whether the ladder works rather than
+ * where anybody currently sits.
  *
  * Null when there is no history, or when a rung is not one this list knows: an
  * unrecognised tier has no position, so no movement can be judged, and guessing
@@ -135,13 +153,36 @@ export function stintProblems(
     })
   }
 
-  // Only the CURRENT package makes a move redundant. Foundation, Grow, back to
-  // Foundation is a real thing that happens.
   const current = currentStint(existing)
   if (current !== null && current.package_code === draft.packageCode) {
     problems.push({
       field: 'packageCode',
       text: `They are already on ${packageLabel(draft.packageCode)}.`,
+    })
+  }
+
+  // MOVING DOWN IS REFUSED, as of 2026-09-25. This comment previously read
+  // "Foundation, Grow, back to Foundation is a real thing that happens", which
+  // was true of the three-rung model and is not true of the business: Foundation
+  // is a finite phase at the start of an engagement, and revisiting a client's
+  // original branding later is Scale work, which is not on this ladder.
+  //
+  // Refused HERE rather than surfaced later, because the Overview page stopped
+  // rendering descents when the model was corrected -- so without this, an admin
+  // could record Grow -> Foundation with no warning, the client would drop out
+  // of every ladder narrative, the page would say nobody has graduated, and
+  // nothing anywhere would show the bad row. A wrong stint cannot be deleted
+  // through this app, only edited, which makes the entry point the right place
+  // to stop it.
+  const from = current === null ? -1 : PACKAGE_CODES.indexOf(current.package_code)
+  const to = PACKAGE_CODES.indexOf(draft.packageCode)
+  if (from !== -1 && to !== -1 && to < from) {
+    problems.push({
+      field: 'packageCode',
+      text:
+        `A client does not move back to ${packageLabel(draft.packageCode)} from ` +
+        `${packageLabel(current!.package_code)}. Revisiting earlier work is a Scale project, ` +
+        `which this ladder does not record.`,
     })
   }
 

@@ -171,7 +171,7 @@ describe('the ladder', () => {
     expect(screen.getByTestId('rung-unrecorded').textContent).toBe('1')
   })
 
-  it('names a client who has climbed, and the move', () => {
+  it('names a client who has graduated, and the move', () => {
     given({
       packages: {
         byClient: new Map([
@@ -180,20 +180,21 @@ describe('the ladder', () => {
       },
     })
 
-    // SCOPED to the climbers list on purpose. Acme is also 70% of revenue, so
+    // SCOPED to the graduates list on purpose. Acme is also 70% of revenue, so
     // it has a row in the attention list above with the same accessible name,
     // and an unscoped query matches both and throws.
-    const climbers = within(screen.getByRole('list', { name: 'Moved up' }))
+    const climbers = within(screen.getByRole('list', { name: 'Graduated' }))
     const row = climbers.getByRole('listitem', { name: 'Acme' })
     expect(row.textContent).toContain('Foundation')
     expect(row.textContent).toContain('Grow')
   })
 
-  // The descents list has no unit test elsewhere to fall back on -- it is this
-  // section's own proposal, not something Task 1/2 already proved -- so this is
-  // the only place a client stepping DOWN the ladder is ever rendered and
-  // checked.
-  it('names a client who has descended, and the move', () => {
+  // A "Moved down" list stood here until 2026-09-25 and was removed with the
+  // three-rung model: it only looked sensible while Scale was a rung above Grow,
+  // where finishing a website rebuild read as a demotion. A reversed pair is now
+  // a data error rather than news, and publishing it under the client's own name
+  // on this page would be the page stating something that did not happen.
+  it('does not publish a descent, even when the data contains one', () => {
     given({
       packages: {
         byClient: new Map([
@@ -202,15 +203,12 @@ describe('the ladder', () => {
       },
     })
 
-    // SCOPED to the descents list on the same grounds as the climbers test
-    // above: Acme carries the same accessible name in the attention list.
-    const descents = within(screen.getByRole('list', { name: 'Moved down' }))
-    const row = descents.getByRole('listitem', { name: 'Acme' })
-    expect(row.textContent).toContain('Grow')
-    expect(row.textContent).toContain('Foundation')
+    expect(screen.queryByRole('list', { name: 'Moved down' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Graduated' })).toBeNull()
+    expect(screen.getByText(/no client has graduated from Foundation yet/i)).toBeTruthy()
   })
 
-  it('says when nobody has moved, once history has been recorded', () => {
+  it('says when nobody has graduated, once history has been recorded', () => {
     // Both clients have a package recorded, and neither has changed it: this
     // is the "history exists, nobody moved" case, distinct from the
     // "no history at all" case below.
@@ -223,18 +221,18 @@ describe('the ladder', () => {
       },
     })
 
-    expect(screen.getByText(/no client has changed package yet/i)).toBeTruthy()
+    expect(screen.getByText(/no client has graduated from Foundation yet/i)).toBeTruthy()
   })
 
   it('says no history has been recorded, rather than claiming nobody has moved', () => {
     // On the day this ships, nothing is recorded -- an empty byClient map --
-    // and "no client has changed package yet" would be a claim about clients
+    // and "no client has graduated from Foundation yet" would be a claim about clients
     // made from an absence of data, the same move clientPackages.ts refuses
     // when it declines to read null as Foundation.
     given({ packages: { byClient: new Map() } })
 
     expect(screen.getByText(/no package history has been recorded yet/i)).toBeTruthy()
-    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
+    expect(screen.queryByText(/no client has graduated from Foundation yet/i)).toBeNull()
   })
 
   it('refuses the verdict until both sides have enough ended relationships', () => {
@@ -401,7 +399,7 @@ describe('the ladder', () => {
     })
 
     expect(screen.queryByTestId('rung-unrecorded')).toBeNull()
-    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
+    expect(screen.queryByText(/no client has graduated from Foundation yet/i)).toBeNull()
     expect(screen.queryByText(/no package history has been recorded yet/i)).toBeNull()
   })
 

@@ -180,7 +180,7 @@ export function Overview({ role }: { role: string }) {
 
       {maySeePackages && (
         <>
-          <h3 className="t-subhead">Moving up the ladder</h3>
+          <h3 className="t-subhead">Graduating from Foundation</h3>
 
           {packages.status === 'loading' && <p className="t-body">Loading…</p>}
 
@@ -198,8 +198,8 @@ export function Overview({ role }: { role: string }) {
               useRetention holds as an empty array while loading and on error. Packages
               is one small table against useRetention's two-query Promise.all, so
               packages resolving first is the likely order, not the unlikely one: without
-              this gate the page would show a confident "Foundation 0 · Grow 0 · Scale
-              0 · No package recorded 0" and "no client has changed package" while it
+              this gate the page would show a confident "Foundation 0 · Grow 0 ·
+              No package recorded 0" and "no client has graduated" while it
               could not yet read who the clients even are. `status` (the page-level
               union) is deliberately NOT used here -- a useBoard failure has nothing to
               do with the ladder and must not blank it; only revenue.status does. */}
@@ -232,40 +232,32 @@ export function Overview({ role }: { role: string }) {
                 </li>
               </ul>
 
-              {moved.climbed.length === 0 && moved.descended.length === 0 && (
+              {moved.climbed.length === 0 && (
                 <p className="t-body prose">
                   {packages.byClient.size === 0
-                    ? 'No package history has been recorded yet, so no movement can be shown.'
-                    : 'No client has changed package yet.'}
+                    ? 'No package history has been recorded yet, so no graduation can be shown.'
+                    : 'No client has graduated from Foundation yet.'}
                 </p>
               )}
 
+              {/* ONE list, because there is one move. Foundation is a finite phase
+                  and Grow is where a client lives afterwards, so graduating is the
+                  only journey the ladder describes -- a client does not return to
+                  Foundation, because revisiting their original branding is Scale
+                  work, and Scale is not on this ladder.
+
+                  A "Moved down" list stood here until 2026-09-25. It was proposed
+                  in the slice D spec rather than asked for, and it only looked
+                  sensible while Scale was modelled as a third rung: a client
+                  finishing a website rebuild would have been published under their
+                  own name as having been demoted. `movements` still computes
+                  `descended`, because `journeyOf` defines it and a reversed pair is
+                  a real data error, but it is not news and does not belong here. */}
               {moved.climbed.length > 0 && (
                 <div className={styles.movesGroup}>
-                  <p className={`t-caption ${styles.basis}`}>Moved up</p>
-                  <ul aria-label="Moved up" className={styles.list} role="list">
+                  <p className={`t-caption ${styles.basis}`}>Graduated</p>
+                  <ul aria-label="Graduated" className={styles.list} role="list">
                     {moved.climbed.map((move) => (
-                      <li aria-label={move.name} className={styles.row} key={move.clientId}>
-                        <span className="t-body">{move.name}</span>
-                        <span className={`t-caption ${styles.why}`}>
-                          {packageLabel(move.from)} → {packageLabel(move.to)}
-                          {move.now !== null && `, now ${packageLabel(move.now)}`}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* The descents list was proposed here, not asked for: the owner's boss
-                  asked to see who climbs, and showing only promotions makes this page
-                  flatter the roster than the ladder actually is. A client stepping DOWN
-                  is closer to what this page is for. Approved by the owner, 2026-09-24. */}
-              {moved.descended.length > 0 && (
-                <div className={styles.movesGroup}>
-                  <p className={`t-caption ${styles.basis}`}>Moved down</p>
-                  <ul aria-label="Moved down" className={styles.list} role="list">
-                    {moved.descended.map((move) => (
                       <li aria-label={move.name} className={styles.row} key={move.clientId}>
                         <span className="t-body">{move.name}</span>
                         <span className={`t-caption ${styles.why}`}>

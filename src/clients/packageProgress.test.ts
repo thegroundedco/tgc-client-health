@@ -63,7 +63,6 @@ describe('ladderStanding', () => {
     expect(ladderStanding(clients, map, TODAY).rungs).toEqual([
       { code: 'foundation', count: 1 },
       { code: 'grow', count: 2 },
-      { code: 'scale', count: 0 },
     ])
   })
 
@@ -101,7 +100,7 @@ describe('ladderStanding', () => {
 
   it('reads a stint dated in the future as a plan, not the present', () => {
     const clients = [client(1, 'Acme')]
-    const map = byClient(stint(1, 'foundation', '2025-01-01'), stint(1, 'scale', '2027-01-01'))
+    const map = byClient(stint(1, 'foundation', '2025-01-01'), stint(1, 'grow', '2027-01-01'))
 
     expect(ladderStanding(clients, map, TODAY).rungs).toContainEqual({
       code: 'foundation',
@@ -109,7 +108,7 @@ describe('ladderStanding', () => {
     })
   })
 
-  it('counts a rung this vocabulary does not know as its own entry, after the three it does', () => {
+  it('counts a rung this vocabulary does not know as its own entry, after the two it does', () => {
     // Somebody IS on it -- silently dropping this client, or folding them into
     // unrecorded, would both be wrong in ways every other test here is blind to.
     const clients = [client(1, 'Acme')]
@@ -120,7 +119,6 @@ describe('ladderStanding', () => {
     expect(standing.rungs).toEqual([
       { code: 'foundation', count: 0 },
       { code: 'grow', count: 0 },
-      { code: 'scale', count: 0 },
       { code: 'platinum', count: 1 },
     ])
     expect(standing.unrecorded).toBe(0)
@@ -141,12 +139,12 @@ describe('movements', () => {
     const clients = [client(1, 'Acme')]
     const map = byClient(
       stint(1, 'foundation', '2025-01-01'),
-      stint(1, 'scale', '2025-06-01'),
-      stint(1, 'grow', '2026-01-01'),
+      stint(1, 'grow', '2025-06-01'),
+      stint(1, 'foundation', '2026-01-01'),
     )
 
     expect(movements(clients, map, TODAY).climbed).toEqual([
-      { clientId: 1, name: 'Acme', from: 'foundation', to: 'scale', now: 'grow' },
+      { clientId: 1, name: 'Acme', from: 'foundation', to: 'grow', now: 'foundation' },
     ])
   })
 
@@ -155,15 +153,15 @@ describe('movements', () => {
     const map = byClient(
       stint(1, 'foundation', '2025-01-01'),
       stint(1, 'grow', '2026-01-01'),
-      stint(2, 'scale', '2025-01-01'),
-      stint(2, 'grow', '2026-01-01'),
+      stint(2, 'grow', '2025-01-01'),
+      stint(2, 'foundation', '2026-01-01'),
     )
 
     const moved = movements(clients, map, TODAY)
 
     expect(moved.climbed.map((move) => move.name)).toEqual(['Acme'])
     expect(moved.descended).toEqual([
-      { clientId: 2, name: 'Beta', from: 'scale', to: 'grow', now: null },
+      { clientId: 2, name: 'Beta', from: 'grow', to: 'foundation', now: null },
     ])
   })
 
@@ -204,7 +202,7 @@ describe('movements', () => {
   // it is dated in the future, sorted to the very top of "Moved up".
   it('reads a stint dated in the future as a plan, not an accomplished move', () => {
     const clients = [client(1, 'Acme')]
-    const map = byClient(stint(1, 'foundation', '2025-01-01'), stint(1, 'scale', '2027-01-01'))
+    const map = byClient(stint(1, 'foundation', '2025-01-01'), stint(1, 'grow', '2027-01-01'))
 
     expect(movements(clients, map, TODAY)).toEqual({ climbed: [], descended: [] })
   })
@@ -248,7 +246,7 @@ describe('onRampComparison', () => {
       departed(3, 'Gamma', 'foundation', '2025-01-01', '2026-01-01'),
       departed(4, 'Delta', 'grow', '2025-01-01', '2025-03-01'),
       departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-03-01'),
-      departed(6, 'Zeta', 'scale', '2025-01-01', '2025-03-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2025-03-01'),
     ])
 
     expect(result.kind).toBe('ready')
@@ -267,7 +265,7 @@ describe('onRampComparison', () => {
       departed(3, 'Gamma', 'foundation', '2025-01-01', '2025-03-01'),
       departed(4, 'Delta', 'grow', '2025-01-01', '2026-01-01'),
       departed(5, 'Epsilon', 'grow', '2025-01-01', '2026-01-01'),
-      departed(6, 'Zeta', 'scale', '2025-01-01', '2026-01-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2026-01-01'),
     ])
 
     expect(result.kind).toBe('ready')
@@ -283,7 +281,7 @@ describe('onRampComparison', () => {
       departed(3, 'Gamma', 'foundation', '2025-01-01', '2025-07-01'),
       departed(4, 'Delta', 'grow', '2025-01-01', '2025-07-01'),
       departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-07-01'),
-      departed(6, 'Zeta', 'scale', '2025-01-01', '2025-07-01'),
+      departed(6, 'Zeta', 'grow', '2025-01-01', '2025-07-01'),
     ])
 
     expect(result.kind).toBe('ready')
@@ -416,7 +414,7 @@ describe('onRampComparison', () => {
         departed(5, 'Epsilon', 'grow', '2025-01-01', '2025-04-01'),
         departed(6, 'Zeta', 'grow', '2025-01-01', '2025-04-01'),
       ],
-      [stint(1, 'scale', '2025-06-01'), stint(2, 'scale', '2025-06-01'), stint(3, 'scale', '2025-06-01')],
+      [stint(1, 'grow', '2025-06-01'), stint(2, 'grow', '2025-06-01'), stint(3, 'grow', '2025-06-01')],
     )
 
     expect(result.kind).toBe('ready')
