@@ -38,6 +38,30 @@
  */
 export const PACKAGE_CODES = ['foundation', 'grow']
 
+/**
+ * A real calendar day, written the way Postgres renders a `date`.
+ *
+ * EVERY OTHER RULE HERE IS A LEXICAL STRING COMPARISON, which is safe only once
+ * the shape is known. A cell reading `2025-06-01', null), (999, 'grow', '2020-01-01`
+ * sorts above the relationship start and below today, so it passed every
+ * comparison and was interpolated straight into the SQL literal -- writing an
+ * extra stint against an arbitrary client_id into a table with no delete policy.
+ * A bare apostrophe broke the statement instead.
+ */
+function isDay(text) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+  const [year, month, day] = text.split('-').map(Number)
+  const at = new Date(Date.UTC(year, month - 1, day))
+  return (
+    at.getUTCFullYear() === year && at.getUTCMonth() === month - 1 && at.getUTCDate() === day
+  )
+}
+
+/** A client name is only ever written into a comment; a newline would end it. */
+function oneLine(text) {
+  return String(text ?? '').replace(/[\r\n]+/g, ' ')
+}
+
 /** A roster typed into a spreadsheet will not match the database byte for byte. */
 function normalise(name) {
   return String(name ?? '')
@@ -60,7 +84,25 @@ export function planPackages({ rows, roster, today }) {
   const skipped = []
   const graduated = []
 
-  const byName = new Map(roster.map((client) => [normalise(client.name), client]))
+  // Built with a collision check rather than from entries. `clients_name_unique`
+  // is on `lower(name)` only, while `normalise` also trims and collapses internal
+  // whitespace -- so two rows that are distinct in the database can collide here,
+  // and a Map built from entries would silently keep the last one and write the
+  // sheet's row against the wrong client_id.
+  const byName = new Map()
+  for (const client of roster) {
+    const key = normalise(client.name)
+    const already = byName.get(key)
+    if (already !== undefined) {
+      problems.push(
+        `More than one client is named "${client.name}" once case and spacing are ignored ` +
+          `(ids ${already.id} and ${client.id}); this import cannot tell them apart.`,
+      )
+      continue
+    }
+    byName.set(key, client)
+  }
+
   const seen = new Set()
 
   for (const raw of rows) {
@@ -70,16 +112,27 @@ export function planPackages({ rows, roster, today }) {
       .toLowerCase()
     const graduatedOn = String(raw.graduated_on ?? '').trim()
 
+    // THE NAME IS RESOLVED FIRST, before the blank-rung short-circuit. The other
+    // way round, a typo'd name with a blank rung was reported as a client who
+    // "will read as No package recorded" -- so the owner never learned the row
+    // matched nothing at all -- and a client listed twice, once blank and once
+    // filled, was reported as skipped AND written with no problem raised.
+    const client = byName.get(normalise(name))
+    if (client === undefined) {
+      problems.push(`No client matches "${name}".`)
+      continue
+    }
+
+    if (seen.has(client.id)) {
+      problems.push(`"${name}" appears more than once; this import writes one client per row.`)
+      continue
+    }
+    seen.add(client.id)
+
     // An empty rung is "I do not know", which this app renders honestly as
     // "No package recorded". A guessed rung is the thing it must never do.
     if (signedAt === '') {
       skipped.push(name)
-      continue
-    }
-
-    const client = byName.get(normalise(name))
-    if (client === undefined) {
-      problems.push(`No client matches "${name}".`)
       continue
     }
 
@@ -92,12 +145,6 @@ export function planPackages({ rows, roster, today }) {
       )
       continue
     }
-
-    if (seen.has(client.id)) {
-      problems.push(`"${name}" appears more than once; this import writes one client per row.`)
-      continue
-    }
-    seen.add(client.id)
 
     if (client.started_on === null || client.started_on === undefined) {
       problems.push(`"${name}" has no start date, so there is nothing to date their signing from.`)
@@ -112,6 +159,12 @@ export function planPackages({ rows, roster, today }) {
     }
 
     if (graduatedOn !== '') {
+      if (!isDay(graduatedOn)) {
+        problems.push(
+          `"${name}": "${graduatedOn}" is not a date. Write a real day as YYYY-MM-DD.`,
+        )
+        continue
+      }
       if (graduatedOn < client.started_on) {
         problems.push(
           `"${name}": graduating on ${graduatedOn} is before the relationship began on ${client.started_on}.`,
@@ -176,7 +229,20 @@ export function emitSql(plan) {
   if (plan.problems.length > 0) {
     return [
       '-- REFUSED. Nothing is emitted while the plan has problems:',
-      ...plan.problems.map((problem) => `--   ${problem}`),
+      ...plan.problems.map((problem) => `--   ${oneLine(problem)}`),
+      '',
+    ].join('\n')
+  }
+
+  // A sheet with every rung left blank is VALID and has nothing to write. The
+  // insert was emitted anyway, as `values` followed by a bare semicolon, which
+  // aborts the transaction at its first statement -- so the operator's
+  // run-it-once-and-read-the-counts pass showed them a syntax error instead of
+  // the counts, on a file that had done nothing wrong.
+  if (plan.stints.length === 0) {
+    return [
+      '-- Nothing to write: no row in the sheet carries a signing rung.',
+      `-- ${plan.skipped.length} client(s) were left out, and will read as "No package recorded".`,
       '',
     ].join('\n')
   }
@@ -191,12 +257,16 @@ export function emitSql(plan) {
   // appeared, and the first test written for the comma could not see the
   // semicolon at all -- stripping comments to look for the defect also stripped
   // the terminator. Comments on their own lines remove the class.
+  const pairs = plan.stints
+    .map((stint) => `  (${stint.clientId}, '${stint.startedOn}')`)
+    .join(',\n')
+
   const values = plan.stints
     .map((stint, index) => {
       const separator = index === plan.stints.length - 1 ? '' : ','
       const what = stint.packageCode === 'foundation' ? 'signed' : 'signed or graduated'
       return (
-        `  -- ${stint.name}, ${what}\n` +
+        `  -- ${oneLine(stint.name)}, ${what}\n` +
         `  (${stint.clientId}, '${stint.packageCode}', '${stint.startedOn}', null)${separator}`
       )
     })
@@ -216,9 +286,26 @@ from public.client_packages
 group by package_code
 order by package_code;
 
--- The total, against what this script believed it was writing.
+-- The total, against what this script believed it was writing -- SCOPED to the
+-- rows this pass wrote. An unscoped count over the whole table reports a false
+-- mismatch the moment anybody has used the package editor, which shipped on
+-- 2026-09-12.
 select count(*) as rows_written, ${plan.stints.length} as rows_expected
-from public.client_packages;
+from public.client_packages
+where (client_id, started_on) in (
+${pairs}
+);
+
+-- Anything in this table that this pass did NOT write. Zero rows means the
+-- table was empty before; any row here is history entered through the editor,
+-- and this import has just added a second one alongside it.
+select c.name, p.package_code, p.started_on
+from public.client_packages p
+join public.clients c on c.id = p.client_id
+where (p.client_id, p.started_on) not in (
+${pairs}
+)
+order by c.name;
 
 -- Every stint must sit inside its client's relationship. Zero rows is the pass.
 select c.name, p.started_on, c.started_on as relationship_began, c.ended_on
@@ -227,10 +314,13 @@ join public.clients c on c.id = p.client_id
 where (c.started_on is not null and p.started_on < c.started_on)
    or (c.ended_on is not null and p.started_on > c.ended_on);
 
--- A client may hold at most two stints from this pass, and a second one is
+-- A client may hold at most two stints FROM THIS PASS, and a second one is
 -- always Grow. Zero rows is the pass.
 select client_id, count(*) as stints
 from public.client_packages
+where (client_id, started_on) in (
+${pairs}
+)
 group by client_id
 having count(*) > 2;
 

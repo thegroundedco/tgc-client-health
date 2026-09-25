@@ -165,6 +165,66 @@ describe('planPackages — what it refuses', () => {
     expect(result.problems.join(' ')).toMatch(/Delta/)
   })
 
+  it('refuses a graduation date that is not a date', () => {
+    // The date is interpolated into a SQL literal, and every other rule here is
+    // a lexical string comparison -- so a cell crafted to sort between the
+    // relationship start and today passes all of them. This one closed a real
+    // injection: `2025-06-01', null), (999, 'grow', '2020-01-01` sorts above
+    // 2025-01-01 and below today, and emitted an extra stint against an
+    // arbitrary client_id into a table with no delete policy.
+    const evil = "2025-06-01', null), (999, 'grow', '2020-01-01"
+    const result = plan([row('Acme', 'foundation', evil)])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/not a date|YYYY-MM-DD/i)
+  })
+
+  it('refuses a graduation date with an apostrophe, which would break the statement', () => {
+    const result = plan([row('Acme', 'foundation', "2025-06-01'")])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/not a date|YYYY-MM-DD/i)
+  })
+
+  it('refuses a calendar-shaped date that is not a real day', () => {
+    const result = plan([row('Acme', 'foundation', '2025-02-31')])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/not a date|real/i)
+  })
+
+  it('refuses an unmatched name even when the rung is blank', () => {
+    // The blank-rung short-circuit used to run first, so a typo'd name was
+    // reported as a client who "will read as No package recorded" and the owner
+    // never learned the row matched nothing at all.
+    const result = plan([row('Nobdy', '')])
+
+    expect(result.problems.join(' ')).toMatch(/Nobdy/)
+    expect(result.skipped).toEqual([])
+  })
+
+  it('refuses a client listed twice, even when one of the rows is blank', () => {
+    const result = plan([row('Acme', ''), row('Acme', 'grow')])
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/Acme/)
+  })
+
+  it('refuses a roster whose names collide once normalised', () => {
+    // clients_name_unique is on lower(name) only, but normalise also trims and
+    // collapses internal whitespace -- so "Acme" and "Acme  Ltd" are distinct in
+    // the database and could collide here. Keeping the last silently would write
+    // the row against the wrong client_id.
+    const roster = [
+      { id: 1, name: 'Acme', status: 'active', started_on: '2025-01-01', ended_on: null },
+      { id: 9, name: 'ACME ', status: 'active', started_on: '2025-01-01', ended_on: null },
+    ]
+    const result = plan([row('Acme', 'grow')], roster)
+
+    expect(result.stints).toEqual([])
+    expect(result.problems.join(' ')).toMatch(/more than one client/i)
+  })
+
   it('emits nothing at all when any row is a problem', () => {
     // One bad row stops the whole import. A partial write into a table with no
     // delete policy is the expensive kind of mistake.
@@ -225,10 +285,50 @@ describe('emitSql', () => {
     expect(sql).toMatch(/Nobody/)
   })
 
-  it('counts the rows back out, so the transaction proves what it wrote', () => {
+  it('counts back only the rows this pass wrote, not the whole table', () => {
+    // The package editor shipped on 2026-09-12, so a stint entered by hand would
+    // make an unscoped count report a false mismatch on the headline check.
     const sql = emitSql(plan([row('Acme', 'grow')]))
 
-    expect(sql).toMatch(/select count\(\*\)/i)
+    // Pull out the statement that actually reports the headline number and
+    // require the scope to be IN it. Asserting the pair-list substring appears
+    // anywhere in the file was the first version, and it survived mutation: the
+    // clause can be there and be neutered (`where true or ...`) with the
+    // substring intact.
+    const counting = sql
+      .split(';')
+      .find((statement: string) => statement.includes('rows_expected')) as string
+
+    expect(counting).toMatch(/select count\(\*\)/i)
+    expect(counting).toMatch(/where\s*\(client_id, started_on\) in/i)
+    expect(counting).not.toMatch(/where\s+true/i)
+  })
+
+  it('refuses to emit an insert when the sheet produced no stints at all', () => {
+    // Every row blank is a valid sheet with nothing to write. Emitting the
+    // statement anyway produced `values\n;`, which aborts the transaction at
+    // the first statement -- so the operator's read-the-verification-counts pass
+    // showed them an error instead of the counts.
+    const sql = emitSql(plan([row('Acme', ''), row('Beta', '')]))
+
+    expect(sql).not.toMatch(/insert into/)
+    expect(sql).toMatch(/nothing to write/i)
+  })
+
+  it('never lets a client name break out of its comment line', () => {
+    const roster = [
+      { id: 1, name: 'Acme\nEvil, signed', status: 'active', started_on: '2025-01-01', ended_on: null },
+    ]
+    const sql = emitSql(planPackages({ rows: [row('Acme\nEvil, signed', 'grow')], roster, today: TODAY }))
+
+    // Keyed on the fragment that would ESCAPE, not on lines that carry a `--`.
+    // The first version asked "is every line with a comment marker a pure
+    // comment", which a broken-out name satisfies trivially: the escaped half
+    // lands on its own line with no marker on it at all, and the test skipped it.
+    for (const line of sql.split('\n')) {
+      if (line.includes('Evil')) expect(line.trimStart().startsWith('--')).toBe(true)
+    }
+    expect(sql).not.toMatch(/^\s*Evil/m)
   })
 })
 

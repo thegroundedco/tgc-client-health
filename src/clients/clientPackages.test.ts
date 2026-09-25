@@ -166,13 +166,31 @@ describe('stintProblems', () => {
     expect(problems.map((p) => p.text).join(' ')).toMatch(/already on Grow/i)
   })
 
-  it('allows a move back to a package they were on before', () => {
-    // Foundation, Grow, back to Foundation is a real thing that happens, and
-    // only the CURRENT package makes a move redundant.
+  it('refuses a move back down the ladder', () => {
+    // This test asserted the opposite until 2026-09-25, on the three-rung
+    // model's reasoning that "Foundation, Grow, back to Foundation is a real
+    // thing that happens". It is not: Foundation is a finite phase at the start
+    // of an engagement, and revisiting a client's original branding later is
+    // Scale work, which this ladder does not record.
+    //
+    // It has to be refused HERE, because the Overview page stopped rendering
+    // descents when the model was corrected -- so a Grow -> Foundation row
+    // entered by hand would drop the client out of every ladder narrative with
+    // nothing anywhere showing the bad row. It cannot be deleted afterwards,
+    // only edited.
+    const problems = stintProblems(
+      { packageCode: 'foundation', startedOn: '2026-09-01', note: '' },
+      [stint('2026-01-01', 'foundation'), stint('2026-06-01', 'grow')],
+    )
+
+    expect(problems.map((problem) => problem.field)).toEqual(['packageCode'])
+    expect(problems[0].text).toMatch(/does not move back/i)
+  })
+
+  it('still allows the move the ladder is for', () => {
     expect(
-      stintProblems({ packageCode: 'foundation', startedOn: '2026-09-01', note: '' }, [
+      stintProblems({ packageCode: 'grow', startedOn: '2026-06-01', note: '' }, [
         stint('2026-01-01', 'foundation'),
-        stint('2026-06-01', 'grow'),
       ]),
     ).toEqual([])
   })

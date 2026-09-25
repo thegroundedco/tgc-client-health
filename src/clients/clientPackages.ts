@@ -94,9 +94,9 @@ export type Journey = 'climbed' | 'stayed' | 'descended'
  * Whether a client moved up the ladder, stayed put, or came back down.
  *
  * Judged by the HIGHEST rung reached against the one they signed on at, not by
- * where they are today: foundation to scale and back to grow is still a client
- * who climbed, and the question is whether the ladder works rather than where
- * anybody currently sits.
+ * where they are today: foundation to grow and back to foundation is still a
+ * client who climbed, and the question is whether the ladder works rather than
+ * where anybody currently sits.
  *
  * Null when there is no history, or when a rung is not one this list knows: an
  * unrecognised tier has no position, so no movement can be judged, and guessing
@@ -153,13 +153,36 @@ export function stintProblems(
     })
   }
 
-  // Only the CURRENT package makes a move redundant. Foundation, Grow, back to
-  // Foundation is a real thing that happens.
   const current = currentStint(existing)
   if (current !== null && current.package_code === draft.packageCode) {
     problems.push({
       field: 'packageCode',
       text: `They are already on ${packageLabel(draft.packageCode)}.`,
+    })
+  }
+
+  // MOVING DOWN IS REFUSED, as of 2026-09-25. This comment previously read
+  // "Foundation, Grow, back to Foundation is a real thing that happens", which
+  // was true of the three-rung model and is not true of the business: Foundation
+  // is a finite phase at the start of an engagement, and revisiting a client's
+  // original branding later is Scale work, which is not on this ladder.
+  //
+  // Refused HERE rather than surfaced later, because the Overview page stopped
+  // rendering descents when the model was corrected -- so without this, an admin
+  // could record Grow -> Foundation with no warning, the client would drop out
+  // of every ladder narrative, the page would say nobody has graduated, and
+  // nothing anywhere would show the bad row. A wrong stint cannot be deleted
+  // through this app, only edited, which makes the entry point the right place
+  // to stop it.
+  const from = current === null ? -1 : PACKAGE_CODES.indexOf(current.package_code)
+  const to = PACKAGE_CODES.indexOf(draft.packageCode)
+  if (from !== -1 && to !== -1 && to < from) {
+    problems.push({
+      field: 'packageCode',
+      text:
+        `A client does not move back to ${packageLabel(draft.packageCode)} from ` +
+        `${packageLabel(current!.package_code)}. Revisiting earlier work is a Scale project, ` +
+        `which this ladder does not record.`,
     })
   }
 

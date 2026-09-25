@@ -111,7 +111,7 @@ of active clients with no package recorded at all**, given the same weight rathe
 That last number is the honest denominator. `packageLabel(null)` already returns "No package
 recorded" and `clientPackages.ts` already refuses to read null as Foundation, on the grounds that
 defaulting to the first rung "would invent a journey for every client on the roster". A ladder
-showing three counts and hiding a fourth would undo that decision at the last step. It is also the
+showing its rungs and hiding the unrecorded count would undo that decision at the last step. It is also the
 number most likely to get the data entered, which is what everything below it waits on.
 
 ### 2.2 Who moved

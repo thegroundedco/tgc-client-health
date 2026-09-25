@@ -226,13 +226,13 @@ describe('the ladder', () => {
 
   it('says no history has been recorded, rather than claiming nobody has moved', () => {
     // On the day this ships, nothing is recorded -- an empty byClient map --
-    // and "no client has changed package yet" would be a claim about clients
+    // and "no client has graduated from Foundation yet" would be a claim about clients
     // made from an absence of data, the same move clientPackages.ts refuses
     // when it declines to read null as Foundation.
     given({ packages: { byClient: new Map() } })
 
     expect(screen.getByText(/no package history has been recorded yet/i)).toBeTruthy()
-    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
+    expect(screen.queryByText(/no client has graduated from Foundation yet/i)).toBeNull()
   })
 
   it('refuses the verdict until both sides have enough ended relationships', () => {
@@ -399,7 +399,7 @@ describe('the ladder', () => {
     })
 
     expect(screen.queryByTestId('rung-unrecorded')).toBeNull()
-    expect(screen.queryByText(/no client has changed package yet/i)).toBeNull()
+    expect(screen.queryByText(/no client has graduated from Foundation yet/i)).toBeNull()
     expect(screen.queryByText(/no package history has been recorded yet/i)).toBeNull()
   })
 

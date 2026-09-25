@@ -972,7 +972,7 @@ ends would invite the two to disagree. The relationship ending is
 `clients.ended_on` and is deliberately not duplicated here.
 
 The vocabulary lives in `src/clients/clientPackages.ts` and there is **no CHECK
-constraint** behind it, so a fourth rung is one edit rather than a migration --
+constraint** behind it, so a rung is one edit rather than a migration --
 the same arrangement `clients.end_reason_code` has. `packageLabel(null)` returns
 "No package recorded" rather than defaulting to foundation, because defaulting to
 the first rung would invent a journey for every client on the roster.
@@ -1012,8 +1012,8 @@ exactly the population the verdict contrasts them against, so the error would
 land inside the one figure the backfill exists to produce.
 
 The section also reports how many active clients have **no package recorded**,
-with the same weight as the three rungs. That number is the honest denominator; a
-ladder showing three counts and hiding the fourth would undo the null rule above
+with the same weight as the two rungs. That number is the honest denominator; a
+ladder showing its rungs and hiding the unrecorded count would undo the null rule above
 at the last step.
 
 ### There is no delete policy

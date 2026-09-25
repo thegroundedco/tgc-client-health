@@ -198,8 +198,8 @@ export function Overview({ role }: { role: string }) {
               useRetention holds as an empty array while loading and on error. Packages
               is one small table against useRetention's two-query Promise.all, so
               packages resolving first is the likely order, not the unlikely one: without
-              this gate the page would show a confident "Foundation 0 · Grow 0
-              0 · No package recorded 0" and "no client has changed package" while it
+              this gate the page would show a confident "Foundation 0 · Grow 0 ·
+              No package recorded 0" and "no client has graduated" while it
               could not yet read who the clients even are. `status` (the page-level
               union) is deliberately NOT used here -- a useBoard failure has nothing to
               do with the ladder and must not blank it; only revenue.status does. */}
