@@ -949,6 +949,71 @@ screen translates them rather than repeating them:
 actually deployed, by reading the constraints out of `pg_constraint` and
 evaluating them over all 32 combinations of their inputs.
 
+## The package ladder
+
+`client_packages` records which package a client has been on and when they moved
+-- **foundation, grow, scale**, in that order. A table of stints rather than a
+column on `clients`, and the requirement forces it: a current-package column
+answers "what are they on now" and cannot answer a single question the ladder
+exists for, because every one of them is about the journey. The current package
+is the latest stint that has actually started, derived rather than stored twice.
+
+A stint has a start and no end: it ends when the next one begins, so storing both
+ends would invite the two to disagree. The relationship ending is
+`clients.ended_on` and is deliberately not duplicated here.
+
+The vocabulary lives in `src/clients/clientPackages.ts` and there is **no CHECK
+constraint** behind it, so a fourth rung is one edit rather than a migration --
+the same arrangement `clients.end_reason_code` has. `packageLabel(null)` returns
+"No package recorded" rather than defaulting to foundation, because defaulting to
+the first rung would invent a journey for every client on the roster.
+
+### Where it is read, and the two gates
+
+The Overview page's "Moving up the ladder" section is the only reader. It shows
+the roster by rung, who has climbed or descended, and one sentence on whether
+clients who join at Foundation stay longer than clients who join above it.
+
+`client_packages` is `select`-gated on `manage_clients` in RLS -- there is no
+view/edit split, unlike revenue, because anyone who can edit the roster can record
+what package a client is on. So the section is gated **twice**, and both are
+load-bearing:
+
+- **The render.** Overview draws the section only when `can(role, 'manage_clients')`.
+- **The read.** `usePackages(enabled)` issues no query at all when that is false.
+
+Drawing it for a viewer and letting RLS return nothing would render an empty
+ladder, which reads as "no client has a package recorded" -- a different and
+false statement. Hiding rows that were already fetched is not a permission check.
+
+### What the two figures actually read
+
+Worth knowing before recording any history, because they touch disjoint halves:
+
+- `ladderStanding` reads only **active** clients' **current** rung. Paused counts
+  -- a paused client is still a client -- and departed clients are absent entirely.
+- `onRampComparison` reads only **departed** clients' **entry** rung, and measures
+  tenure only over relationships that have ended.
+
+So one row per client -- what they are on now, or what they joined at -- answers
+both without reconstructing any history. Only the movement lists need more.
+
+The section also reports how many active clients have **no package recorded**,
+with the same weight as the three rungs. That number is the honest denominator; a
+ladder showing three counts and hiding the fourth would undo the null rule above
+at the last step.
+
+### There is no delete policy
+
+Three policies, not four, exactly as `client_month_revenue`. A stint entered in
+error is corrected by editing it and can never be removed through the app. That
+is what makes the backfill a tested module rather than a script:
+`scripts/package-import-plan.mjs` holds the rules and
+`tests/packageImport.test.ts` proves them, while the I/O lives outside this
+repository because the roster names real clients. One bad row refuses the whole
+import, and the SQL it generates ends in `rollback;` until changed by hand --
+the same two-pass shape the 2025 revenue import used.
+
 ## Security notes
 
 - The browser receives only the **publishable** key. The secret key must never appear
