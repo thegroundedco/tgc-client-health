@@ -1,7 +1,6 @@
 import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET } from '../lib/buckets'
 import { formatPeriod } from '../lib/month'
 import { BAND_LABELS, bandFor } from '../lib/scoreMath'
-import { isOpenable } from './boardScope'
 import type { CardCheckin } from './cardSummary'
 import {
   advocacyContext,
@@ -16,6 +15,7 @@ import styles from './Matrix.module.css'
 
 type Props = {
   clients: readonly BoardClient[]
+  members: ReadonlySet<number>
   checkins: ReadonlyMap<number, CardCheckin>
   scores: ReadonlyMap<number, BoardScore>
   period: string
@@ -41,7 +41,7 @@ function Score({ value }: { value: number | null }) {
   return <>{value.toFixed(2)}</>
 }
 
-// The board's second view: every active client down the rows, the six buckets
+// The board's second view: every one of the month's members down the rows, the six buckets
 // across, and what the agency averages in each. Spec §4.
 //
 // It holds no arithmetic. Every number here comes from matrix.ts, and every
@@ -66,8 +66,8 @@ function endedASelection(): boolean {
   return (globalThis.getSelection?.()?.toString() ?? '') !== ''
 }
 
-export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
-  const rows = matrixRows(clients, checkins, scores)
+export function Matrix({ clients, members, checkins, scores, period, onOpen }: Props) {
+  const rows = matrixRows(clients, members, checkins, scores)
 
   // Reachable with the archive toggle on and every client archived: Board's
   // empty-roster branch does not fire in that case, because what it measures is
@@ -188,7 +188,7 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                   // below stays the keyboard path, which is why it must not be
                   // removed now that the row does the same job for a mouse.
                   onClick={
-                    isOpenable(row.client.status)
+                    members.has(row.client.id)
                       ? () => {
                           if (endedASelection()) return
                           onOpen(row.client)
@@ -204,13 +204,13 @@ export function Matrix({ clients, checkins, scores, period, onOpen }: Props) {
                         column at 2px while the rest of the grid is 1px. See
                         .name in the stylesheet. */}
                     <span className={styles.nameRow}>
-                      {/* isOpenable is applied rather than assumed. The matrix
-                          only ever shows active clients, so it never refuses
+                      {/* Membership is applied rather than assumed. The matrix
+                          only ever shows the month's members, so it never refuses
                           here -- but the reason the rule exists is that
                           checkins_insert_edit_scores carries no status predicate
                           of its own, and a view that assumes instead of asking
                           is how that gap gets reopened. */}
-                      {isOpenable(row.client.status) ? (
+                      {members.has(row.client.id) ? (
                         <button
                           className={styles.open}
                           // stopPropagation, because the row above now reaches

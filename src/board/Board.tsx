@@ -135,8 +135,8 @@ export function Board({ profile, onEditClient }: Props) {
 
   // Derived before the four render branches, so every branch below can use
   // them.
-  const archived = archivedCount(board.clients)
-  const visible = visibleClients(board.clients, showArchived)
+  const archived = archivedCount(board.clients, board.members)
+  const visible = visibleClients(board.clients, board.members, showArchived)
 
   // Drawn only when there is something to reveal. A control that reveals
   // nothing is worse than no control: it implies something is hidden.
@@ -274,7 +274,7 @@ export function Board({ profile, onEditClient }: Props) {
         {/* §6's progress line. role="status" because this number changes on the
             way back from a check-in -- the one moment somebody wants to hear
             that their submission counted.
-            activeTotal, never visible.length: a former client cannot owe a
+            activeTotal, never visible.length: a client outside the month's members cannot owe a
             check-in, so counting one here would make this sentence false, and
             pressing the toggle must not change what it says. */}
         <p className="t-caption" role="status">
@@ -313,12 +313,13 @@ export function Board({ profile, onEditClient }: Props) {
       {addClientPanel}
 
       {view === 'matrix' ? (
-        // Every active client, not `visible`: the cards are the month's work
+        // Every one of the month's members, not `visible`: the cards are the month's work
         // list and honour the archive toggle, the matrix is the roster's health
         // picture and does not. Spec §8, decision 3.
         <Matrix
           checkins={board.checkins}
           clients={board.clients}
+          members={board.members}
           onOpen={setSelected}
           period={period}
           scores={board.scores}
@@ -337,6 +338,8 @@ export function Board({ profile, onEditClient }: Props) {
               client={client}
               key={client.id}
               onOpen={() => setSelected(client)}
+              openable={board.members.has(client.id)}
+              period={period}
               rate={rates.get(client.id)}
               score={board.scores.get(client.id) ?? null}
               viewerId={profile.id}

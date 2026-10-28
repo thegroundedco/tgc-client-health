@@ -12,7 +12,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const CLIENT: BoardClient = { id: 7, name: 'Polar Divide', status: 'active', started_on: null }
+const CLIENT: BoardClient = { id: 7, name: 'Polar Divide', status: 'active', started_on: null, ended_on: null }
 const ME = '11111111-1111-1111-1111-111111111111'
 
 // Defaults a client past its 90 days, no check-in and no score -- the emptiest
@@ -25,6 +25,8 @@ type RenderOptions = {
   viewerId?: string
   onOpen?: () => void
   rate?: ClientRate
+  openable?: boolean
+  period?: string
 }
 
 function renderCard(overrides: RenderOptions = {}) {
@@ -35,12 +37,17 @@ function renderCard(overrides: RenderOptions = {}) {
     viewerId = ME,
     onOpen = () => {},
     rate,
+    // What the old status rule implied: only an active client was openable.
+    openable = client.status === 'active',
+    period = '2026-09-01',
   } = overrides
   return render(
     <ClientCard
       checkin={checkin}
       client={client}
       onOpen={onOpen}
+      openable={openable}
+      period={period}
       rate={rate}
       score={score}
       viewerId={viewerId}
@@ -236,7 +243,7 @@ describe('a client card', () => {
   // Six bars when the gate is open, and every one of them labelled.
   it('draws six bars for a client past 90 days', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
       checkin: {
         client_id: 1,
         submitted_at: null,
@@ -257,7 +264,7 @@ describe('a client card', () => {
   // zero.
   it('draws five bars and a note for a client inside 90 days', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-08-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-08-01', ended_on: null },
       checkin: { client_id: 1, submitted_at: null, submitted_by: null, comm_score: 4 },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: false },
     })
@@ -267,7 +274,7 @@ describe('a client card', () => {
 
   it('names the six buckets in rubric order, so a reader compares positions across cards', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
       checkin: {
         client_id: 1,
         submitted_at: null,
@@ -288,7 +295,7 @@ describe('a client card', () => {
   // Four Nos is adv_score 1.00 -- a real, low bar, NOT an absent one.
   it('draws a bar for an Advocacy score of 1', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
       checkin: { client_id: 1, submitted_at: null, submitted_by: null, adv_score: 1 },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: true },
     })
@@ -300,7 +307,7 @@ describe('a client card', () => {
   // score.
   it('says not scored for a null bucket', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
       checkin: { client_id: 1, submitted_at: null, submitted_by: null, adv_score: null },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: true },
     })
@@ -320,7 +327,7 @@ describe('a client card', () => {
   // "healthy".
   it('shows an em dash and Not scored when there is no overall', () => {
     renderCard({
-      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
+      client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
       checkin: null,
       score: null,
     })
@@ -359,8 +366,9 @@ describe('what a client is worth per month, on the card', () => {
 })
 
 describe('an archived client card', () => {
-  const ARCHIVED: BoardClient = { id: 8, name: 'Test Client', status: 'former', started_on: null }
-  const PAUSED: BoardClient = { id: 9, name: 'Bellwether', status: 'paused', started_on: null }
+  // clients_lifecycle_coherent forbids a former client with no end date, so the end date is required.
+  const ARCHIVED: BoardClient = { id: 8, name: 'Test Client', status: 'former', started_on: null, ended_on: '2026-07-31' }
+  const PAUSED: BoardClient = { id: 9, name: 'Bellwether', status: 'paused', started_on: null, ended_on: null }
 
   it('marks an active card with no status pill, so the working roster stays quiet', () => {
     renderCard()
@@ -396,7 +404,9 @@ describe('an archived client card', () => {
   it('says why it cannot be scored', async () => {
     renderCard({ client: ARCHIVED })
 
-    expect(screen.getByTestId('card-locked').textContent).toContain('cannot be scored')
+    expect(screen.getByTestId('card-locked').textContent).toBe(
+      'This client is former and ended on July 31, 2026, before September 2026. Their past check-ins are unchanged.',
+    )
   })
 
   it('gives a paused client its own reason, not a churned one', async () => {
@@ -437,5 +447,29 @@ describe('an archived client card', () => {
     await userEvent.click(screen.getByRole('button', { name: /Polar Divide/ }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('card-locked')).toBeNull()
+  })
+})
+
+describe('a card by membership, not by status', () => {
+  it('opens a cancelled client the month they are a member of', () => {
+    renderCard({
+      client: { id: 5, name: 'Polar Divide', status: 'cancelled', started_on: null, ended_on: '2026-09-30' },
+      openable: true,
+    })
+
+    expect(nameButton()).toBeTruthy()
+  })
+
+  it('explains a client who had not started yet, and is not a link', () => {
+    renderCard({
+      client: { id: 6, name: 'Polar Divide', status: 'active', started_on: '2026-10-07', ended_on: null },
+      openable: false,
+      period: '2026-09-01',
+    })
+
+    expect(screen.getByTestId('card-locked').textContent).toContain(
+      'This client starts on October 7, 2026, after September 2026, so there is nothing to score yet.',
+    )
+    expect(screen.queryByRole('button', { name: /Polar Divide/ })).toBeNull()
   })
 })

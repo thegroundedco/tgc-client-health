@@ -90,7 +90,8 @@ function CountingBoard() {
 const BOARD: UseBoard = {
   status: 'ready',
   loadError: null,
-  clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+  clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null }],
+  members: new Set([1]),
   checkins: new Map(),
   scores: new Map(),
   submitted: 0,
@@ -310,7 +311,7 @@ describe('the shell', () => {
   // which somebody needs the client admin, so the bar has to be there and the
   // trip has to work in both directions.
   it('draws the bar, and stays navigable, when the roster is empty', async () => {
-    await useRealBoard({ clients: [], activeTotal: 0 })
+    await useRealBoard({ clients: [], members: new Set<number>(), activeTotal: 0 })
     renderShell('account_manager')
 
     await userEvent.click(screen.getByRole('button', { name: 'Clients' }))

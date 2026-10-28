@@ -15,7 +15,7 @@ const PERIOD = '2026-08-01'
 const OLD = '2020-01-01'
 
 function client(id: number, name: string, overrides: Partial<BoardClient> = {}): BoardClient {
-  return { id, name, status: 'active', started_on: OLD, ...overrides }
+  return { id, name, status: 'active', started_on: OLD, ended_on: null, ...overrides }
 }
 
 function checkin(id: number, scores: Partial<CardCheckin> = {}): CardCheckin {
@@ -38,6 +38,7 @@ type Given = {
   checkins?: [number, CardCheckin][]
   scores?: [number, BoardScore][]
   onOpen?: (client: BoardClient) => void
+  members?: number[]
 }
 
 function renderMatrix(given: Given = {}) {
@@ -46,11 +47,14 @@ function renderMatrix(given: Given = {}) {
     checkins = [],
     scores = [],
     onOpen = () => {},
+    // The active ones, which is who the matrix used to list.
+    members = clients.filter((c) => c.status === 'active').map((c) => c.id),
   } = given
   return render(
     <Matrix
       checkins={new Map(checkins)}
       clients={clients}
+      members={new Set(members)}
       onOpen={onOpen}
       period={PERIOD}
       scores={new Map(scores)}
@@ -507,5 +511,19 @@ describe('opening a client from anywhere in the row', () => {
     renderMatrix({ clients: [client(1, 'Babaloo')], onOpen })
     await userEvent.click(screen.getByText('Communication'))
     expect(onOpen).not.toHaveBeenCalled()
+  })
+})
+
+describe('the matrix by membership, not by status', () => {
+  it('opens a member whose status is cancelled, from the name button', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(1, 'Cinder', { status: 'cancelled', ended_on: '2026-09-30' })],
+      members: [1],
+      onOpen,
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /Cinder/ }))
+    expect(onOpen).toHaveBeenCalledTimes(1)
   })
 })

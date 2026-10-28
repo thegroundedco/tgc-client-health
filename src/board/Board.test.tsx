@@ -80,9 +80,9 @@ const PROFILE: Profile = {
 }
 
 const CLIENTS = [
-  { id: 1, name: 'Babaloo', status: 'active', started_on: null },
-  { id: 2, name: 'Colorfil', status: 'active', started_on: null },
-  { id: 3, name: 'Sno-Go', status: 'active', started_on: null },
+  { id: 1, name: 'Babaloo', status: 'active', started_on: null, ended_on: null },
+  { id: 2, name: 'Colorfil', status: 'active', started_on: null, ended_on: null },
+  { id: 3, name: 'Sno-Go', status: 'active', started_on: null, ended_on: null },
 ]
 
 // REPAIR (task 4, not in its step list): this fixture used to be built from
@@ -102,7 +102,13 @@ const SUBMITTED: CardCheckin = {
 }
 
 function board(overrides: Partial<UseBoard> = {}): UseBoard {
+  // Members default to the active clients, which is who the board used to show:
+  // a test that wants a different month passes `members` itself.
+  const members = new Set(
+    (overrides.clients ?? CLIENTS).filter((c) => c.status === 'active').map((c) => c.id),
+  )
   return {
+    members,
     status: 'ready',
     loadError: null,
     clients: CLIENTS,
@@ -141,7 +147,8 @@ const clientList = () => screen.queryByRole('list', { name: /clients/i })
 const READY = {
   status: 'ready' as const,
   loadError: null,
-  clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+  clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null }],
+  members: new Set([1]),
   checkins: new Map(),
   // Same repair as board()'s, above: task 2 added `scores` to UseBoard, and
   // this fixture is a second place it must exist for the file to typecheck.
@@ -279,8 +286,8 @@ describe('the board', () => {
     // days and draws six bars; Beta is inside the gate and draws five.
     given({
       clients: [
-        { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' },
-        { id: 2, name: 'Beta', status: 'active', started_on: '2026-08-01' },
+        { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
+        { id: 2, name: 'Beta', status: 'active', started_on: '2026-08-01', ended_on: null },
       ],
       activeTotal: 2,
       scores: new Map([
@@ -332,9 +339,9 @@ describe('the show-archived toggle', () => {
   const MIXED = {
     ...READY,
     clients: [
-      { id: 1, name: 'Acme', status: 'active', started_on: null },
-      { id: 2, name: 'Bellwether', status: 'paused', started_on: null },
-      { id: 3, name: 'Test Client', status: 'former', started_on: null },
+      { id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null },
+      { id: 2, name: 'Bellwether', status: 'paused', started_on: null, ended_on: null },
+      { id: 3, name: 'Test Client', status: 'former', started_on: null, ended_on: null },
     ],
     activeTotal: 1,
   }
@@ -349,6 +356,25 @@ describe('the show-archived toggle', () => {
     render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
     expect(cardNames()).toEqual(['Acme'])
+  })
+
+  it('puts the members on the board by membership, not by status', () => {
+    vi.mocked(useBoard).mockReturnValue({
+      ...MIXED,
+      clients: [
+        { id: 1, name: 'Early', status: 'active', started_on: '2026-10-07', ended_on: null },
+        { id: 2, name: 'Later', status: 'active', started_on: '2026-10-14', ended_on: null },
+        { id: 3, name: 'Test Client', status: 'former', started_on: null, ended_on: '2026-09-30' },
+      ],
+      members: new Set([3]),
+      activeTotal: 1,
+    })
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
+
+    expect(cardNames()).toEqual(['Test Client'])
+    // A member is openable whatever their status says.
+    expect(screen.getByRole('button', { name: 'Test Client' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show 2 archived' })).toBeTruthy()
   })
 
   it('offers a toggle naming how many are hidden', () => {
@@ -413,7 +439,8 @@ describe('the show-archived toggle', () => {
     // three clients exist.
     vi.mocked(useBoard).mockReturnValue({
       ...MIXED,
-      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null }],
+      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null, ended_on: null }],
+      members: new Set<number>(),
       activeTotal: 0,
       submitted: 0,
     })
@@ -431,7 +458,8 @@ describe('the show-archived toggle', () => {
     // telling them how to get a working roster back disappeared.
     vi.mocked(useBoard).mockReturnValue({
       ...MIXED,
-      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null }],
+      clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null, ended_on: null }],
+      members: new Set<number>(),
       activeTotal: 0,
       submitted: 0,
     })
@@ -541,8 +569,8 @@ describe('the Cards | Matrix toggle', () => {
     // pressed a display control.
     given({
       clients: [
-        { id: 1, name: 'Active One', status: 'active', started_on: null },
-        { id: 2, name: 'Gone', status: 'churned', started_on: null },
+        { id: 1, name: 'Active One', status: 'active', started_on: null, ended_on: null },
+        { id: 2, name: 'Gone', status: 'churned', started_on: null, ended_on: null },
       ],
       activeTotal: 1,
     })
