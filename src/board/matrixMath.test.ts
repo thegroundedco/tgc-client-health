@@ -70,10 +70,10 @@ function rowsOf(
 }
 
 describe('matrixRows', () => {
-  it('returns every active client, alphabetically, whatever order they arrived in', () => {
+  it('returns every member, alphabetically, whatever order they arrived in', () => {
     // Not "whatever the cards are showing": the matrix sorts by name directly
     // rather than through visibleClients, whose status-grouping arm it never
-    // uses because it only ever holds active clients.
+    // uses because it only ever holds the month's members.
     const rows = matrixRows(
       [client(3, 'York'), client(1, 'Babaloo'), client(2, 'Gait Happens')],
       new Set([1, 2, 3]),
@@ -93,10 +93,10 @@ describe('matrixRows', () => {
     expect(rows.map((row) => row.client.name)).toEqual(['Cinder', 'Zinc'])
   })
 
-  it('drops every client who is not active', () => {
+  it('drops every client who is not a member', () => {
     // The Average row describes the agency. It must not move because somebody
-    // pressed a display control, so the matrix uses isOnBoard rather than the
-    // board's show-archived state.
+    // pressed a display control, so the matrix uses the month's members rather
+    // than the board's show-archived state.
     const rows = matrixRows(
       [
         client(1, 'Active One'),

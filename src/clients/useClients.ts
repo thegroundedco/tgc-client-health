@@ -85,9 +85,9 @@ export function useClients(): UseClients {
     // and the person sees a spinner with no message and no retry.
     try {
       // No status filter, deliberately, and this is the one query in the app
-      // that reads every row. The board reads only active clients; this screen
-      // is where a former one has to stay visible. clients_select_view_scores
-      // has no status predicate, so the policy permits it.
+      // that reads every row. The board also reads every row but draws only the
+      // month's members; this screen is where a former one has to stay
+      // visible. clients_select_view_scores has no status predicate, so the policy permits it.
       const clientResult = await supabase
         .from('clients')
         .select(CLIENT_COLUMNS)

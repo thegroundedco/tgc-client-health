@@ -564,7 +564,7 @@ describe('the Cards | Matrix toggle', () => {
     )
   })
 
-  it('shows every active client whatever the archive toggle is doing', () => {
+  it('shows every member whatever the archive toggle is doing', () => {
     // Decision 3: the agency's own average must not move because somebody
     // pressed a display control.
     given({

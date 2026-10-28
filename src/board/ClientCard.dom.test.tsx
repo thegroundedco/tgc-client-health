@@ -401,7 +401,7 @@ describe('an archived client card', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
-  it('says why it cannot be scored', async () => {
+  it("says why it is not on this month's board", async () => {
     renderCard({ client: ARCHIVED })
 
     expect(screen.getByTestId('card-locked').textContent).toBe(
