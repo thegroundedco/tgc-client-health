@@ -92,6 +92,17 @@ describe('EndClientPanel', () => {
     expect(screen.getByText('Acme is cancelled as of September 30, 2026. You can still finish this check-in. To undo it, use Edit client.')).toBeTruthy()
   })
 
+  it('does not claim a cancellation the hook refused, and keeps the form', async () => {
+    hook.apply.mockResolvedValue(false)
+    renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelled this month' }))
+    await userEvent.selectOptions(screen.getByLabelText('Reason they left'), 'price')
+    await userEvent.click(screen.getByRole('button', { name: 'Mark cancelled' }))
+    expect(hook.apply).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/is cancelled as of/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Mark cancelled' })).toBeTruthy()
+  })
+
   it('shows the failure the hook reports', () => {
     hook.state = { kind: 'failed', message: 'Nope. Nothing was changed.' }
     renderPanel()

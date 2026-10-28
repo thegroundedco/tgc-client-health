@@ -456,6 +456,22 @@ describe('opening a client from anywhere in the row', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
   })
 
+  // Membership, not status, decides who opens. A cancelled client stays on the
+  // month's board when they have a check-in there, and the row must open them.
+  it('opens a cancelled member from the row, not just from the name', async () => {
+    const onOpen = vi.fn()
+    renderMatrix({
+      clients: [client(5, 'Gone', { status: 'cancelled', ended_on: '2026-08-20' })],
+      checkins: [[5, checkin(5, { comm_score: 4 })]],
+      members: [5],
+      onOpen,
+    })
+    const cells = within(screen.getByTestId('matrix-row')).getAllByRole('cell')
+    await userEvent.click(cells[0])
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen.mock.calls[0][0].id).toBe(5)
+  })
+
   // Once, not twice. The button's handler and the row's handler both reach
   // onOpen, and a click on the name passes through both unless the button stops
   // it -- which would open, then re-open, the same card.
