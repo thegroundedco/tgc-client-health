@@ -135,8 +135,8 @@ export function Board({ profile, onEditClient }: Props) {
 
   // Derived before the four render branches, so every branch below can use
   // them.
-  const archived = archivedCount(board.clients)
-  const visible = visibleClients(board.clients, showArchived)
+  const archived = archivedCount(board.clients, board.members)
+  const visible = visibleClients(board.clients, board.members, showArchived)
 
   // Drawn only when there is something to reveal. A control that reveals
   // nothing is worse than no control: it implies something is hidden.
@@ -223,11 +223,12 @@ export function Board({ profile, onEditClient }: Props) {
             visible.length: this line is about the roster, not about what the
             toggle happens to be showing. */}
         <h2 className="t-header">{progressLine(board.submitted, board.activeTotal, period)}</h2>
-        {/* Always rendered, not one arm of a ternary with the toggle below:
-            the sentence is how to get a working roster back, and that is
-            exactly what somebody needs the moment they retire their last
-            client -- whether or not there is anything archived to reveal. */}
-        <p className="t-body prose">Add one to see it here.</p>
+        {/* Only when the roster itself is empty. With clients on the roster
+            and none on this month's board, "add one" is wrong: the month is
+            empty, not the roster, and the archive toggle below is the way to
+            the rest. Not one arm of a ternary with the toggle: an empty roster
+            still needs both the sentence and the add button. */}
+        {board.clients.length === 0 && <p className="t-body prose">Add one to see it here.</p>}
         {/* Bare, without .addBar's auto margin: .state is a column aligned to
             flex-start, so pushing the button to the inline end would strand it
             away from the sentence that just told somebody to press it. */}
@@ -274,7 +275,7 @@ export function Board({ profile, onEditClient }: Props) {
         {/* §6's progress line. role="status" because this number changes on the
             way back from a check-in -- the one moment somebody wants to hear
             that their submission counted.
-            activeTotal, never visible.length: a former client cannot owe a
+            activeTotal, never visible.length: a client outside the month's members cannot owe a
             check-in, so counting one here would make this sentence false, and
             pressing the toggle must not change what it says. */}
         <p className="t-caption" role="status">
@@ -313,12 +314,13 @@ export function Board({ profile, onEditClient }: Props) {
       {addClientPanel}
 
       {view === 'matrix' ? (
-        // Every active client, not `visible`: the cards are the month's work
+        // Every one of the month's members, not `visible`: the cards are the month's work
         // list and honour the archive toggle, the matrix is the roster's health
         // picture and does not. Spec §8, decision 3.
         <Matrix
           checkins={board.checkins}
           clients={board.clients}
+          members={board.members}
           onOpen={setSelected}
           period={period}
           scores={board.scores}
@@ -337,6 +339,8 @@ export function Board({ profile, onEditClient }: Props) {
               client={client}
               key={client.id}
               onOpen={() => setSelected(client)}
+              openable={board.members.has(client.id)}
+              period={period}
               rate={rates.get(client.id)}
               score={board.scores.get(client.id) ?? null}
               viewerId={profile.id}

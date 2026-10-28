@@ -7,7 +7,7 @@ import type { BoardClient, BoardScore } from './useBoard'
 import type { ClientRate } from './rateMath'
 import styles from './ClientCard.module.css'
 import { isChurned, statusLabel } from '../clients/clientForm'
-import { isOpenable, notOpenableReason } from './boardScope'
+import { notOpenableReason } from './boardScope'
 import { formatMoney } from '../revenue/money'
 
 type Props = {
@@ -17,16 +17,21 @@ type Props = {
   viewerId: string
   onOpen: () => void
   rate?: ClientRate
+  // Whether this client is a member of the month on show (spec §2), decided once
+  // by the board from the member set and passed down, so the card never
+  // re-derives it from the status -- which is what it used to do, and why a
+  // client who left in September read as locked on September's board.
+  openable: boolean
+  period: string
 }
 
-export function ClientCard({ client, checkin, score, viewerId, onOpen, rate }: Props) {
+export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, openable, period }: Props) {
   // From the view, never recomputed here. The overall cannot be a generated
   // column (spec §6), so the view is the one place it exists -- and `npm run
   // verify:scoring-view` is what proves that expression is right. A second
   // local calculation would be a second thing to keep in agreement.
   const total = score?.overall_score ?? null
   const band = bandFor(total)
-  const openable = isOpenable(client.status)
 
   // The gate decides how many bars there are, not whether one of them is empty.
   // An empty sixth bar reads as a score of zero, and Advocacy inside 90 days is
@@ -172,7 +177,7 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate }: P
           this client: checkins_insert_edit_scores has no status predicate. */}
       {!openable && (
         <p className="t-caption" data-testid="card-locked">
-          {notOpenableReason(client.status)}
+          {notOpenableReason(client, period)}
         </p>
       )}
     </li>

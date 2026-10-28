@@ -23,7 +23,7 @@ const PERIOD = '2026-08-01'
 const OLD = '2020-01-01'
 
 function client(id: number, name: string, overrides: Partial<BoardClient> = {}): BoardClient {
-  return { id, name, status: 'active', started_on: OLD, ...overrides }
+  return { id, name, status: 'active', started_on: OLD, ended_on: null, ...overrides }
 }
 
 // Only the columns the matrix reads. Every bucket defaults to null, so a test
@@ -70,28 +70,40 @@ function rowsOf(
 }
 
 describe('matrixRows', () => {
-  it('returns every active client, alphabetically, whatever order they arrived in', () => {
+  it('returns every member, alphabetically, whatever order they arrived in', () => {
     // Not "whatever the cards are showing": the matrix sorts by name directly
     // rather than through visibleClients, whose status-grouping arm it never
-    // uses because it only ever holds active clients.
+    // uses because it only ever holds the month's members.
     const rows = matrixRows(
       [client(3, 'York'), client(1, 'Babaloo'), client(2, 'Gait Happens')],
+      new Set([1, 2, 3]),
       new Map(),
       new Map(),
     )
     expect(rows.map((row) => row.client.name)).toEqual(['Babaloo', 'Gait Happens', 'York'])
   })
 
-  it('drops every client who is not active', () => {
+  it('lists exactly the members, whatever their status', () => {
+    const clients = [
+      { id: 1, name: 'Zinc', status: 'active', started_on: null, ended_on: null },
+      { id: 2, name: 'Cinder', status: 'cancelled', started_on: null, ended_on: '2026-09-30' },
+      { id: 3, name: 'Early', status: 'active', started_on: '2026-10-07', ended_on: null },
+    ]
+    const rows = matrixRows(clients, new Set([1, 2]), new Map(), new Map())
+    expect(rows.map((row) => row.client.name)).toEqual(['Cinder', 'Zinc'])
+  })
+
+  it('drops every client who is not a member', () => {
     // The Average row describes the agency. It must not move because somebody
-    // pressed a display control, so the matrix uses isOnBoard rather than the
-    // board's show-archived state.
+    // pressed a display control, so the matrix uses the month's members rather
+    // than the board's show-archived state.
     const rows = matrixRows(
       [
         client(1, 'Active One'),
         client(2, 'Paused One', { status: 'paused' }),
         client(3, 'Churned One', { status: 'churned' }),
       ],
+      new Set([1]),
       new Map(),
       new Map(),
     )
@@ -101,6 +113,7 @@ describe('matrixRows', () => {
   it('carries the check-in and the overall for a client who has them', () => {
     const rows = matrixRows(
       [client(1, 'Babaloo')],
+      new Set([1]),
       new Map([[1, checkin(1, { comm_score: 3.67 })]]),
       new Map([[1, score(1, 3.59)]]),
     )
@@ -111,14 +124,14 @@ describe('matrixRows', () => {
   it('gives a client with no check-in a null checkin and a null overall', () => {
     // Never 0. This is the single case where a bug would silently flatter every
     // average in the table.
-    const rows = matrixRows([client(1, 'Babaloo')], new Map(), new Map())
+    const rows = matrixRows([client(1, 'Babaloo')], new Set([1]), new Map(), new Map())
     expect(rows[0].checkin).toBeNull()
     expect(rows[0].overall).toBeNull()
   })
 
   it('does not mutate the array it was given', () => {
     const clients = [client(2, 'York'), client(1, 'Babaloo')]
-    matrixRows(clients, new Map(), new Map())
+    matrixRows(clients, new Set([1, 2]), new Map(), new Map())
     expect(clients.map((entry) => entry.name)).toEqual(['York', 'Babaloo'])
   })
 })

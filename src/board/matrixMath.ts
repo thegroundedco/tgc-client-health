@@ -2,7 +2,6 @@ import { BUCKET_DEFINITIONS, CHOICE_YES, GATED_BUCKET } from '../lib/buckets'
 import type { Bucket } from '../lib/buckets'
 import { advocacyApplies } from '../lib/gate'
 import { meanTo2dp } from '../lib/scoreMath'
-import { isOnBoard } from './boardScope'
 import { BUCKET_SCORE_KEY } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
 import type { BoardClient, BoardScore } from './useBoard'
@@ -40,17 +39,20 @@ export type ColumnAverage = {
   eligible: number
 }
 
-// Every active client, alphabetically, carrying whatever was loaded for them.
+// The month's members, alphabetically, carrying whatever was loaded for them.
 //
-// isOnBoard rather than the board's show-archived state, deliberately: the
-// Average row describes the agency, and that number must not move because
-// somebody pressed a display control. Spec §4, decision 3.
+// The member set rather than the board's show-archived state, deliberately: the
+// Average row describes the month and must not move because somebody pressed a
+// display control. Membership is the month rule in boardScope.ts (spec §2), so
+// a client who left in September is a row on September's matrix whatever their
+// status is today, and one who has not started yet is not.
 //
 // Sorted by name directly rather than through visibleClients, whose
-// status-grouping arm this list never exercises -- every row here is active, so
-// the status rank is uniform and only the name comparison ever runs.
+// membership-and-status grouping arm this list never exercises -- every row here
+// is a member, so the rank is uniform and only the name comparison ever runs.
 export function matrixRows(
   clients: readonly BoardClient[],
+  members: ReadonlySet<number>,
   checkins: ReadonlyMap<number, CardCheckin>,
   scores: ReadonlyMap<number, BoardScore>,
 ): MatrixRow[] {
@@ -60,7 +62,7 @@ export function matrixRows(
       // caller's. The board's clients array belongs to the hook's state and
       // React compares it by identity: sorting it in place would be a silent
       // mutation.
-      .filter((client) => isOnBoard(client.status))
+      .filter((client) => members.has(client.id))
       .map((client) => ({
         client,
         checkin: checkins.get(client.id) ?? null,

@@ -55,6 +55,7 @@ function given(
     status: 'ready',
     loadError: null,
     clients: [],
+    members: new Set<number>(),
     checkins: new Map(),
     scores: new Map(),
     submitted: 0,

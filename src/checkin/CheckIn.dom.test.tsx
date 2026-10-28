@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
@@ -22,17 +22,31 @@ vi.mock('./useCheckin', () => ({
   useCheckin: () => hookState.current,
 }))
 
+// The end-client panel mounted in CheckIn pulls in useStatusChange and, through
+// it, lib/supabase, which throws at module scope with no VITE_ env. This file
+// is about the check-in screen, not the panel, so the hook is stubbed idle.
+const statusChange = vi.hoisted(() => ({
+  apply: vi.fn(async (_change: unknown) => true),
+  state: { kind: 'idle' } as { kind: string; message?: string },
+}))
+vi.mock('../clients/useStatusChange', () => ({
+  useStatusChange: () => ({ state: statusChange.state, apply: statusChange.apply }),
+}))
+
 const { CheckIn } = await import('./CheckIn')
 
 afterEach(() => {
   document.body.innerHTML = ''
+  statusChange.apply.mockReset()
+  statusChange.apply.mockResolvedValue(true)
+  statusChange.state = { kind: 'idle' }
 })
 
 const PERIOD = '2026-08-01'
 // Long clear of the gate, so a test not about the gate itself gets every
 // question enabled or disabled purely by role, with no Advocacy-shaped
 // surprise mixed in.
-const CLIENT = { id: 1, name: 'Acme', started_on: '2020-01-01' }
+const CLIENT = { id: 1, name: 'Acme', status: 'active', started_on: '2020-01-01' }
 
 function profile(role: Profile['role']): Profile {
   return {
@@ -300,5 +314,51 @@ describe('CheckIn, the question controls per kind', () => {
       expect(legend.textContent).toContain('strongly disagree')
       expect(legend.textContent).toContain('strongly agree')
     }
+  })
+})
+
+// Spec §3: the pause/cancel panel is a manage_clients control on the READY
+// screen only. useStatusChange is a mock here (tests/supabaseModuleScope.test.ts
+// forbids reaching lib/supabase unmocked), so this proves the mount and the two
+// props CheckIn hands the panel -- hasCheckin and onPaused -- not the panel's
+// own behaviour, which is EndClientPanel.dom.test.tsx's.
+describe('CheckIn, the end-client panel', () => {
+  it('offers it to someone who can manage clients', () => {
+    renderAs('account_manager')
+    expect(screen.getByRole('button', { name: 'Cancelled this month' })).toBeTruthy()
+  })
+
+  it('does not offer it to a viewer', () => {
+    renderAs('viewer')
+    expect(screen.queryByRole('button', { name: 'Cancelled this month' })).toBeNull()
+  })
+
+  it('does not offer it while the check-in is still loading', () => {
+    renderAs('account_manager', { status: 'loading' })
+    expect(screen.queryByRole('button', { name: 'Cancelled this month' })).toBeNull()
+  })
+
+  it('goes back to the board once a pause has been written', async () => {
+    const onBack = vi.fn()
+    hookState.current = mockCheckin()
+    render(
+      <CheckIn client={CLIENT} period={PERIOD} profile={profile('account_manager')} onBack={onBack} onEditClient={() => {}} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Paused this month' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pause Acme' }))
+    await waitFor(() => expect(onBack).toHaveBeenCalledTimes(1))
+    expect(statusChange.apply).toHaveBeenCalledWith({ kind: 'pause' })
+  })
+
+  it('warns that a month with a stored check-in keeps the client on its board', () => {
+    renderAs('account_manager', { stored: { id: 'c1' } as unknown as UseCheckin['stored'] })
+    fireEvent.click(screen.getByRole('button', { name: 'Paused this month' }))
+    expect(screen.getByText(/already have a check-in/)).toBeTruthy()
+  })
+
+  it('does not make that claim when the month has no stored check-in', () => {
+    renderAs('account_manager', { stored: null })
+    fireEvent.click(screen.getByRole('button', { name: 'Paused this month' }))
+    expect(screen.queryByText(/already have a check-in/)).toBeNull()
   })
 })

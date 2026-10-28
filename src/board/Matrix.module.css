@@ -419,8 +419,8 @@
    reason, which that file records: before it was scoped, every card lit up on
    hover including archived ones that were no longer buttons, so a highlight
    that had always meant "clickable" started meaning nothing on part of the
-   grid. The matrix shows only active clients today, which is exactly why the
-   markup applies isOpenable rather than assuming it, and this is the same
+   grid. The matrix shows only the month's members today, which is exactly why the
+   markup applies membership rather than assuming it, and this is the same
    defence one layer down.
 
    BOX-SHADOW, NOT A BORDER, and that is not a style preference. A border here

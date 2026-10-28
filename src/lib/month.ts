@@ -82,3 +82,22 @@ export function formatSavedAt(iso: string): string {
     timeStyle: 'short',
   })
 }
+
+// The last day of a period's month, as YYYY-MM-DD. Day 0 of the NEXT month is
+// the last day of this one -- Date does the 28/29/30/31 arithmetic, and the
+// result is formatted from its parts, never through toISOString, which would
+// shift it across midnight in any zone west of UTC.
+export function lastDayOf(period: string): string {
+  const [year, month] = period.split('-').map(Number)
+  const day = new Date(year, month, 0).getDate()
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// A stored YYYY-MM-DD, written the way a person would. Built from parts for the
+// same reason as lastDayOf. Nonsense comes back unchanged, like formatSavedAt.
+export function formatDay(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+  if (Number.isNaN(parsed.getTime())) return date
+  return parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
