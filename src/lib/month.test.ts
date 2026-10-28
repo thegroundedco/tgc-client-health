@@ -3,8 +3,10 @@ import {
   addMonths,
   currentPeriod,
   defaultPeriod,
+  formatDay,
   formatPeriod,
   formatSavedAt,
+  lastDayOf,
   periodFor,
   periodOptions,
   previousPeriod,
@@ -134,5 +136,26 @@ describe('formatSavedAt', () => {
     // "Invalid Date", which looks like a crash to the person reading it.
     expect(formatSavedAt('nonsense')).toBe('nonsense')
     expect(formatSavedAt('')).toBe('')
+  })
+})
+
+describe('lastDayOf', () => {
+  it.each([
+    ['2026-09-01', '2026-09-30'],
+    ['2026-10-01', '2026-10-31'],
+    ['2026-02-01', '2026-02-28'],
+    ['2028-02-01', '2028-02-29'],
+    ['2026-12-01', '2026-12-31'],
+  ])('%s ends on %s', (period, last) => {
+    expect(lastDayOf(period)).toBe(last)
+  })
+})
+
+describe('formatDay', () => {
+  it('reads as a date a person would write', () => {
+    expect(formatDay('2026-10-07')).toBe('October 7, 2026')
+  })
+  it('hands back nonsense unchanged rather than printing "Invalid Date"', () => {
+    expect(formatDay('soon')).toBe('soon')
   })
 })

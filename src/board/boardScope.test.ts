@@ -1,84 +1,122 @@
 import { describe, expect, it } from 'vitest'
-import { CLIENT_STATUSES } from '../clients/clientForm'
 import {
-  activeCount,
   archivedCount,
-  isOnBoard,
-  isOpenable,
+  boardMembers,
+  isOnBoardFor,
   notOpenableReason,
   toggleLabel,
   visibleClients,
 } from './boardScope'
 import type { ScopedClient } from './boardScope'
 
+const SEPT = '2026-09-01'
+
 function client(overrides: Partial<ScopedClient> = {}): ScopedClient {
-  return { id: 1, name: 'Acme', status: 'active', ...overrides }
+  return { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null, ...overrides }
 }
 
-const ROSTER: ScopedClient[] = [
-  client({ id: 1, name: 'Zinc', status: 'active' }),
-  client({ id: 2, name: 'Acme', status: 'active' }),
-  client({ id: 3, name: 'Bellwether', status: 'paused' }),
-  client({ id: 4, name: 'Cinder', status: 'cancelled' }),
-  client({ id: 5, name: 'Test Client', status: 'former' }),
+// One table, read by both the rule and the member set, so the two cannot
+// disagree about a case. Each row names the edge it exists to catch.
+const CASES: [string, Partial<ScopedClient>, boolean, boolean][] = [
+  // [why, client, hasCheckin, expected]
+  ['active, started long ago', {}, false, true],
+  ['started mid-month', { started_on: '2026-09-15' }, false, true],
+  ['started on the last day', { started_on: '2026-09-30' }, false, true],
+  ['starts the day after the month', { started_on: '2026-10-01' }, false, false],
+  ['starts next month', { started_on: '2026-10-07' }, false, false],
+  ['no start date', { started_on: null }, false, true],
+  ['cancelled mid-month', { status: 'cancelled', ended_on: '2026-09-15' }, false, true],
+  ['ended on the first day', { status: 'former', ended_on: '2026-09-01' }, false, true],
+  ['ended the day before the month', { status: 'former', ended_on: '2026-08-31' }, false, false],
+  ['ended in a later month', { status: 'cancelled', ended_on: '2026-11-30' }, false, true],
+  ['paused, nothing saved', { status: 'paused' }, false, false],
+  ['paused, check-in saved', { status: 'paused' }, true, true],
+  ['ended before the month, check-in saved', { status: 'former', ended_on: '2026-08-31' }, true, true],
+  ['starts next month, check-in saved', { started_on: '2026-10-07' }, true, true],
+  ['unknown status', { status: 'archived' }, false, false],
 ]
 
-describe('what counts as on the board', () => {
-  it('is active, and nothing else', () => {
-    expect(CLIENT_STATUSES.filter(isOnBoard)).toEqual(['active'])
+describe('isOnBoardFor', () => {
+  it.each(CASES)('%s', (_why, overrides, hasCheckin, expected) => {
+    expect(isOnBoardFor(client(overrides), SEPT, hasCheckin)).toBe(expected)
   })
 
-  it('treats a status it does not recognise as off the board', () => {
-    // Closed by default, for the same reason can() is: an unknown status is a
-    // row written outside this app, and putting it on the working roster would
-    // add a client nobody chose to the month's check-in count.
-    expect(isOnBoard('archived')).toBe(false)
-    expect(isOnBoard('')).toBe(false)
+  it('takes the month end from the period, not a fixed day', () => {
+    // A 31-day month: the 31st is inside it. Hard-coding 30 fails here.
+    expect(isOnBoardFor(client({ started_on: '2026-10-31' }), '2026-10-01', false)).toBe(true)
+    // February: the 29th of a non-leap year does not exist, the 1st of March is outside.
+    expect(isOnBoardFor(client({ started_on: '2026-03-01' }), '2026-02-01', false)).toBe(false)
+    expect(isOnBoardFor(client({ started_on: '2026-02-28' }), '2026-02-01', false)).toBe(true)
   })
 })
 
-describe('the two counts', () => {
-  it('counts active and archived separately, and they total the roster', () => {
-    expect(activeCount(ROSTER)).toBe(2)
-    expect(archivedCount(ROSTER)).toBe(3)
-    expect(activeCount(ROSTER) + archivedCount(ROSTER)).toBe(ROSTER.length)
+describe('boardMembers', () => {
+  it('agrees with isOnBoardFor on every case', () => {
+    const roster = CASES.map(([, overrides], index) => client({ id: index + 1, ...overrides }))
+    const checkins = new Map(CASES.flatMap(([, , has], index) => (has ? [[index + 1, {}]] : [])))
+    const members = boardMembers(roster, SEPT, checkins)
+    CASES.forEach(([why, , , expected], index) => {
+      expect([why, members.has(index + 1)]).toEqual([why, expected])
+    })
   })
 
-  it('counts nothing in an empty roster without throwing', () => {
-    expect(activeCount([])).toBe(0)
-    expect(archivedCount([])).toBe(0)
+  it('counts a check-in only if it is in the map, whatever it holds', () => {
+    const paused = client({ id: 9, status: 'paused' })
+    expect(boardMembers([paused], SEPT, new Map()).has(9)).toBe(false)
+    expect(boardMembers([paused], SEPT, new Map([[9, null]])).has(9)).toBe(true)
   })
 })
 
 describe('what the board shows', () => {
-  it('shows only active clients while the toggle is off', () => {
-    expect(visibleClients(ROSTER, false).map((c) => c.name)).toEqual(['Acme', 'Zinc'])
+  const ROSTER = [
+    client({ id: 1, name: 'Zinc' }),
+    client({ id: 2, name: 'Acme' }),
+    client({ id: 3, name: 'Bellwether', status: 'paused' }),
+    client({ id: 4, name: 'Cinder', status: 'cancelled', ended_on: '2026-09-30' }),
+    client({ id: 5, name: 'Dune', status: 'former', ended_on: '2026-06-30' }),
+    client({ id: 6, name: 'Early', started_on: '2026-10-07' }),
+  ]
+  const members = boardMembers(ROSTER, SEPT, new Map())
+
+  it('shows only members while the toggle is off, by status then name', () => {
+    expect(visibleClients(ROSTER, members, false).map((c) => c.name)).toEqual(['Acme', 'Zinc', 'Cinder'])
   })
 
-  it('shows everything while the toggle is on, active roster first', () => {
-    // Active before paused before cancelled before former, alphabetical inside
-    // each. Name order alone would put Bellwether between Acme and Zinc and the
-    // working roster would stop reading as a block.
-    expect(visibleClients(ROSTER, true).map((c) => c.name)).toEqual([
-      'Acme',
-      'Zinc',
-      'Bellwether',
-      'Cinder',
-      'Test Client',
+  it('shows members first, then the rest, while the toggle is on', () => {
+    expect(visibleClients(ROSTER, members, true).map((c) => c.name)).toEqual([
+      'Acme', 'Zinc', 'Cinder', 'Early', 'Bellwether', 'Dune',
     ])
   })
 
-  it('does not mutate its input', () => {
-    const input = [...ROSTER]
-    visibleClients(input, true)
-    expect(input.map((c) => c.id)).toEqual([1, 2, 3, 4, 5])
+  it('counts everyone who is not a member as archived', () => {
+    expect(archivedCount(ROSTER, members)).toBe(3)
+    // 3 and 3 above, so an inverted count would also pass. This one differs.
+    expect(archivedCount([client({ id: 7 })], new Set())).toBe(1)
   })
 
-  it('keeps every field of the row it was given', () => {
-    // Generic over the row type, so the board's real rows keep their check-in
-    // columns rather than being narrowed to ScopedClient on the way through.
-    const rows = [{ id: 1, name: 'Acme', status: 'active', extra: 'kept' }]
-    expect(visibleClients(rows, false)[0].extra).toBe('kept')
+  it('does not sort the array it was given', () => {
+    const before = ROSTER.map((c) => c.id)
+    visibleClients(ROSTER, members, true)
+    expect(ROSTER.map((c) => c.id)).toEqual(before)
+  })
+})
+
+describe('notOpenableReason', () => {
+  it('says a paused client is coming back', () => {
+    expect(notOpenableReason(client({ status: 'paused' }), SEPT)).toMatch(/paused/)
+  })
+  it('names the start date of a client who had not started', () => {
+    expect(notOpenableReason(client({ started_on: '2026-10-07' }), SEPT)).toBe(
+      'This client starts on October 7, 2026, after September 2026, so there is nothing to score yet.',
+    )
+  })
+  it('names the end date of a client who had already left', () => {
+    expect(notOpenableReason(client({ status: 'former', ended_on: '2026-06-30' }), SEPT)).toBe(
+      'This client is former and ended on June 30, 2026, before September 2026. Their past check-ins are unchanged.',
+    )
+  })
+  it('says what it found for a status it does not know', () => {
+    expect(notOpenableReason(client({ status: 'archived' }), SEPT)).toMatch(/"archived"/)
   })
 })
 
@@ -99,29 +137,5 @@ describe('what the toggle says', () => {
       expect(toggleLabel(count, false).length).toBeGreaterThan(0)
       expect(toggleLabel(count, true).length).toBeGreaterThan(0)
     }
-  })
-})
-
-describe('whether a card can be opened', () => {
-  it('opens an active client and refuses every other status', () => {
-    expect(CLIENT_STATUSES.filter(isOpenable)).toEqual(['active'])
-    expect(isOpenable('archived')).toBe(false)
-  })
-
-  it('says why, in words, for every status it refuses', () => {
-    // The reason is shown on the card. checkins_insert_edit_scores has no
-    // status predicate, so the database would accept a check-in for a client
-    // who left -- this sentence is the only thing that explains why the app
-    // will not offer it.
-    for (const status of CLIENT_STATUSES.filter((s) => !isOpenable(s))) {
-      expect(notOpenableReason(status).length).toBeGreaterThan(0)
-    }
-  })
-
-  it('distinguishes a paused client from one that has left', () => {
-    // Different facts deserve different sentences: a paused client is coming
-    // back, a former one is not.
-    expect(notOpenableReason('paused')).not.toBe(notOpenableReason('former'))
-    expect(notOpenableReason('paused')).toContain('paused')
   })
 })
