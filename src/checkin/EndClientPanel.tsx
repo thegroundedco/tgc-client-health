@@ -30,7 +30,10 @@ export function EndClientPanel({ client, period, hasCheckin, onPaused }: Props) 
   const [cancelledOn, setCancelledOn] = useState<string | null>(null)
 
   const canPause = client.status === 'active'
-  const canCancel = client.status === 'active' || client.status === 'paused'
+  // A client who started after the month (admitted by a check-in) has inverted
+  // bounds: no end date can satisfy them, so the form would never submit.
+  const canCancelInMonth = bounds.min <= bounds.max
+  const canCancel = (client.status === 'active' || client.status === 'paused') && canCancelInMonth
   if (!canPause && !canCancel) return null
 
   const saving = state.kind === 'saving'
@@ -55,9 +58,11 @@ export function EndClientPanel({ client, period, hasCheckin, onPaused }: Props) 
               Paused this month
             </button>
           )}
-          <button className="button button--quiet" onClick={() => setOpen('cancel')} type="button">
-            Cancelled this month
-          </button>
+          {canCancel && (
+            <button className="button button--quiet" onClick={() => setOpen('cancel')} type="button">
+              Cancelled this month
+            </button>
+          )}
         </div>
       )}
 

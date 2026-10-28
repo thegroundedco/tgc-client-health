@@ -103,6 +103,22 @@ describe('EndClientPanel', () => {
     expect(screen.getByRole('button', { name: 'Mark cancelled' })).toBeTruthy()
   })
 
+  // A check-in can admit a client to a month they started after (the board
+  // keeps anyone with a check-in). Then the end date's bounds invert and no date
+  // satisfies them, so the form would be impossible to submit: do not offer it.
+  it('offers no cancel when the client started after the month being scored', () => {
+    renderPanel({ client: { ...ACTIVE, started_on: '2026-10-07' }, hasCheckin: true })
+    expect(screen.queryByRole('button', { name: 'Cancelled this month' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Paused this month' })).toBeTruthy()
+  })
+
+  it('renders nothing for a paused client who started after the month being scored', () => {
+    const { container } = render(
+      <EndClientPanel client={{ ...ACTIVE, status: 'paused', started_on: '2026-10-07' }} hasCheckin onPaused={vi.fn()} period="2026-09-01" />,
+    )
+    expect(container.textContent).toBe('')
+  })
+
   it('shows the failure the hook reports', () => {
     hook.state = { kind: 'failed', message: 'Nope. Nothing was changed.' }
     renderPanel()

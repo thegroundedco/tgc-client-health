@@ -5,6 +5,7 @@ import {
   CLIENT_COLUMNS,
   UPDATE_MATCHED_NOTHING_TEXT,
   draftFromRow,
+  isChurned,
   formProblems,
   updatePayload,
   writeFailureText,
@@ -14,6 +15,8 @@ import { draftWithChange } from './statusChange'
 import type { StatusChange } from './statusChange'
 
 const READ_FAILED_TEXT = 'This client could not be read, so nothing was changed. Try again in a moment.'
+const ALREADY_LEFT_TEXT =
+  'This client has already left, so it was not paused. Nothing was changed. Use Edit client to change a cancelled or former client.'
 
 // Pause or cancel one client from the check-in screen (spec §3). Reads the row
 // first because updatePayload sends EVERY column: writing from the check-in's
@@ -33,6 +36,12 @@ export function useStatusChange(clientId: number) {
         const read = await supabase.from('clients').select(CLIENT_COLUMNS).eq('id', clientId).maybeSingle()
         if (read.error || read.data === null) {
           setState({ kind: 'failed', message: READ_FAILED_TEXT })
+          return false
+        }
+        // The panel's client prop can be stale; the fresh read decides. Pausing a
+        // client who has since left would clear their end date and reason.
+        if (change.kind === 'pause' && isChurned(read.data.status)) {
+          setState({ kind: 'failed', message: ALREADY_LEFT_TEXT })
           return false
         }
         const draft = draftWithChange(draftFromRow(read.data as AdminClient), change)

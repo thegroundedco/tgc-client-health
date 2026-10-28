@@ -70,6 +70,23 @@ describe('useStatusChange', () => {
     expect(result.current.state).toMatchObject({ kind: 'saved' })
   })
 
+  // The panel hides Pause for a cancelled or former client, but the row it was
+  // drawn from can be stale: somebody else may have cancelled them since. Pausing
+  // then would clear their end date and reason, so the fresh read decides.
+  it.each(['cancelled', 'former'])('refuses to pause a client the fresh read shows is %s', async (status) => {
+    db.read = async () => ({ data: { ...ROW, status, ended_on: '2026-09-30', end_reason_code: 'price' }, error: null })
+    const { result } = renderHook(() => useStatusChange(7))
+    let ok = true
+    await act(async () => { ok = await result.current.apply({ kind: 'pause' }) })
+    expect(ok).toBe(false)
+    expect(db.updates).toBe(0)
+    expect(result.current.state).toEqual({
+      kind: 'failed',
+      message:
+        'This client has already left, so it was not paused. Nothing was changed. Use Edit client to change a cancelled or former client.',
+    })
+  })
+
   it('cancels with the date and reason given', async () => {
     const { result } = renderHook(() => useStatusChange(7))
     await act(async () => {
