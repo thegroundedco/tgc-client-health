@@ -13,6 +13,8 @@ type Result = { data: unknown; error: unknown }
 const db = vi.hoisted(() => ({
   // Every filter the client query applied, in order. The point of the file.
   clientFilters: [] as [string, unknown][],
+  // The column list the client query passed to .select().
+  clientSelect: undefined as string | undefined,
   clients: async (): Promise<Result> => ({ data: [], error: null }),
   // Both take the `.eq('period', …)` value, ignored by every test except the
   // stale-response one below, which needs it to tell an old run's request
@@ -28,7 +30,8 @@ vi.mock('../lib/supabase', () => ({
     from: (table: string) => {
       if (table === 'clients') {
         return {
-          select: () => {
+          select: (columns?: string) => {
+            db.clientSelect = columns
             const chain = {
               eq: (column: string, value: unknown) => {
                 db.clientFilters.push([column, value])
@@ -60,14 +63,16 @@ vi.mock('../lib/supabase', () => ({
 import { useBoard } from './useBoard'
 
 const ROSTER = [
-  { id: 1, name: 'Zinc', status: 'active' },
-  { id: 2, name: 'Acme', status: 'active' },
-  { id: 3, name: 'Bellwether', status: 'paused' },
-  { id: 4, name: 'Test Client', status: 'former' },
+  { id: 1, name: 'Zinc', status: 'active', ended_on: null },
+  { id: 2, name: 'Acme', status: 'active', ended_on: null },
+  { id: 3, name: 'Bellwether', status: 'paused', ended_on: null },
+  // clients_lifecycle_coherent makes a former client without an end date impossible in the database.
+  { id: 4, name: 'Test Client', status: 'former', ended_on: '2026-03-31' },
 ]
 
 beforeEach(() => {
   db.clientFilters = []
+  db.clientSelect = undefined
   db.clients = async () => ({ data: ROSTER, error: null })
   db.checkins = async () => ({ data: [], error: null })
   db.scores = async () => ({ data: [], error: null })
@@ -137,9 +142,8 @@ describe('the board hook', () => {
     expect(result.current.activeTotal).toBe(2)
   })
 
-  it('counts a submitted check-in for an archived client as neither submitted nor owed', async () => {
-    // A former client can hold a check-in from when they were active. It must
-    // not inflate either half of the progress line.
+  it("counts a former client's submitted check-in for the month as both submitted and owed", async () => {
+    // Spec §2 rule 1: a check-in for the month makes the client a member, whatever their status.
     db.checkins = async () => ({
       data: [
         { client_id: 1, total_score: 20, submitted_at: '2026-08-01T00:00:00.000Z', submitted_by: null },
@@ -149,8 +153,34 @@ describe('the board hook', () => {
     })
 
     const { result } = await ready()
-    expect(result.current.submitted).toBe(1)
+    expect(result.current.submitted).toBe(2)
+    expect(result.current.activeTotal).toBe(3)
+  })
+
+  it('selects ended_on, because membership needs it', async () => {
+    await ready()
+    expect(db.clientSelect).toContain('ended_on')
+  })
+
+  it('counts a cancelled client in their final month, and not a paused one without a check-in', async () => {
+    db.clients = async () => ({
+      data: [
+        { id: 1, name: 'Active', status: 'active', started_on: '2026-01-01', ended_on: null },
+        { id: 2, name: 'Cancelled', status: 'cancelled', started_on: '2026-01-01', ended_on: '2026-09-30' },
+        { id: 3, name: 'Paused', status: 'paused', started_on: '2026-01-01', ended_on: null },
+        { id: 4, name: 'Later', status: 'active', started_on: '2026-10-07', ended_on: null },
+      ],
+      error: null,
+    })
+    db.checkins = async () => ({
+      data: [{ client_id: 2, total_score: 20, submitted_at: '2026-09-30T12:00:00Z', submitted_by: null }],
+      error: null,
+    })
+    const { result } = renderHook(() => useBoard('2026-09-01'))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.activeTotal).toBe(2)
+    expect(result.current.submitted).toBe(1)
+    expect([...result.current.members].sort()).toEqual([1, 2])
   })
 
   it('reports a failed client read and writes no clients', async () => {
@@ -165,7 +195,7 @@ describe('the board hook', () => {
 
   it('exposes a score row per client, keyed by client_id', async () => {
     const { result } = renderUseBoard({
-      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01' }],
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null }],
       checkins: [{ client_id: 1, submitted_at: null, submitted_by: null, comm_score: 4 }],
       scores: [{ client_id: 1, overall_score: 3.5, advocacy_applies: true }],
     })
@@ -178,7 +208,7 @@ describe('the board hook', () => {
   // must not invent an entry.
   it('has no score entry for a client with no check-in', async () => {
     const { result } = renderUseBoard({
-      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null }],
       checkins: [],
       scores: [],
     })
@@ -190,7 +220,7 @@ describe('the board hook', () => {
   // not leave a board rendering cards with no scores and no message.
   it('reports an error when the view read fails', async () => {
     const { result } = renderUseBoard({
-      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null }],
+      clients: [{ id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null }],
       checkins: [],
       scoresError: { message: 'permission denied for view checkin_scores' },
     })
@@ -247,7 +277,7 @@ describe('the board hook', () => {
     rerender({ period: NEW_PERIOD })
 
     // Resolve the NEWER period's chain fully, in order.
-    newClients.resolve({ data: [{ id: 1, name: 'Acme', status: 'active', started_on: null }], error: null })
+    newClients.resolve({ data: [{ id: 1, name: 'Acme', status: 'active', started_on: null, ended_on: null }], error: null })
     await Promise.resolve()
     newCheckins.resolve({ data: [], error: null })
     await Promise.resolve()
@@ -259,7 +289,7 @@ describe('the board hook', () => {
     // Only now resolve the OLDER period's chain -- last, and with a different
     // roster and score. A guard that worked would have already marked this
     // run cancelled, so none of this should reach state.
-    oldClients.resolve({ data: [{ id: 2, name: 'Zombie', status: 'active', started_on: null }], error: null })
+    oldClients.resolve({ data: [{ id: 2, name: 'Zombie', status: 'active', started_on: null, ended_on: null }], error: null })
     await Promise.resolve()
     oldCheckins.resolve({ data: [], error: null })
     await Promise.resolve()
