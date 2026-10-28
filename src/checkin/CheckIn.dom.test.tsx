@@ -22,6 +22,13 @@ vi.mock('./useCheckin', () => ({
   useCheckin: () => hookState.current,
 }))
 
+// The end-client panel mounted in CheckIn pulls in useStatusChange and, through
+// it, lib/supabase, which throws at module scope with no VITE_ env. This file
+// is about the check-in screen, not the panel, so the hook is stubbed idle.
+vi.mock('../clients/useStatusChange', () => ({
+  useStatusChange: () => ({ state: { kind: 'idle' }, apply: async () => true }),
+}))
+
 const { CheckIn } = await import('./CheckIn')
 
 afterEach(() => {
@@ -32,7 +39,7 @@ const PERIOD = '2026-08-01'
 // Long clear of the gate, so a test not about the gate itself gets every
 // question enabled or disabled purely by role, with no Advocacy-shaped
 // surprise mixed in.
-const CLIENT = { id: 1, name: 'Acme', started_on: '2020-01-01' }
+const CLIENT = { id: 1, name: 'Acme', status: 'active', started_on: '2020-01-01' }
 
 function profile(role: Profile['role']): Profile {
   return {
@@ -300,5 +307,26 @@ describe('CheckIn, the question controls per kind', () => {
       expect(legend.textContent).toContain('strongly disagree')
       expect(legend.textContent).toContain('strongly agree')
     }
+  })
+})
+
+// Spec §3: the pause/cancel panel is a manage_clients control on the READY
+// screen only. useStatusChange is real here (supabase is not touched until
+// apply runs), so this proves the mount, not the panel's behaviour -- that is
+// EndClientPanel.dom.test.tsx's.
+describe('CheckIn, the end-client panel', () => {
+  it('offers it to someone who can manage clients', () => {
+    renderAs('account_manager')
+    expect(screen.getByRole('button', { name: 'Cancelled this month' })).toBeTruthy()
+  })
+
+  it('does not offer it to a viewer', () => {
+    renderAs('viewer')
+    expect(screen.queryByRole('button', { name: 'Cancelled this month' })).toBeNull()
+  })
+
+  it('does not offer it while the check-in is still loading', () => {
+    renderAs('account_manager', { status: 'loading' })
+    expect(screen.queryByRole('button', { name: 'Cancelled this month' })).toBeNull()
   })
 })

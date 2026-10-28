@@ -9,12 +9,13 @@ import { useCheckin } from './useCheckin'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
+import { EndClientPanel } from './EndClientPanel'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
 
 type Props = {
-  client: { id: number; name: string; started_on: string | null }
+  client: { id: number; name: string; status: string; started_on: string | null }
   period: string
   profile: Profile
   onBack: () => void
@@ -194,6 +195,12 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     <section className={styles.screen}>
       {back}
       {masthead}
+      {can(profile.role, 'manage_clients') && (
+        // Spec §3: pausing or cancelling for this month, beside Edit client
+        // rather than a trip to the roster. Ready branch only -- an action that
+        // changes who is scored has no business beside an unread check-in.
+        <EndClientPanel client={client} hasCheckin={stored != null} onPaused={onBack} period={period} />
+      )}
 
       <div className={styles.totals}>
         <div className={styles.total}>

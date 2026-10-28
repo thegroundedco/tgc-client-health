@@ -25,6 +25,13 @@ vi.mock('./useCheckin', () => ({
   useCheckin: () => hookState.current,
 }))
 
+// The end-client panel mounted in CheckIn pulls in useStatusChange and, through
+// it, lib/supabase, which throws at module scope with no VITE_ env. This file
+// is about the check-in screen, not the panel, so the hook is stubbed idle.
+vi.mock('../clients/useStatusChange', () => ({
+  useStatusChange: () => ({ state: { kind: 'idle' }, apply: async () => true }),
+}))
+
 // Imported dynamically, after the mock above is registered, rather than with
 // a static `import` at the top of the file: CheckIn.tsx's own import of
 // useCheckin has to resolve against the mock, and a dynamic import here makes
@@ -48,7 +55,7 @@ const PERIOD = '2026-08-01'
 // (advocacyGate, driven by this date) from the hook's own advocacyApplies
 // field, and a test not about the gate itself should not have the two
 // disagree by accident.
-const CLIENT = { id: 1, name: 'Acme', started_on: '2020-01-01' }
+const CLIENT = { id: 1, name: 'Acme', status: 'active', started_on: '2020-01-01' }
 
 function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
   return {
