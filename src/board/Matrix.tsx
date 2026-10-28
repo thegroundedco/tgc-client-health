@@ -74,7 +74,7 @@ export function Matrix({ clients, members, checkins, scores, period, onOpen }: P
   // the list the CARDS are showing. Said outright rather than left as an empty
   // table, which reads as a failed load.
   if (rows.length === 0) {
-    return <p className="t-body prose">No active clients to show.</p>
+    return <p className="t-body prose">Nobody is on the board for {formatPeriod(period)}.</p>
   }
 
   // Computed once: the footer cells need them, and so does the decision about

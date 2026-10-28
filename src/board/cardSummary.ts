@@ -122,8 +122,8 @@ export function cardFooter(
 // "July 2026", while all ten August check-ins were in fact submitted. A count
 // that names the wrong month is worse than no count, because it is actionable.
 export function progressLine(submitted: number, total: number, period: string): string {
-  if (total === 0) return 'No active clients'
   const month = formatPeriod(period)
+  if (total === 0) return `Nobody is on the board for ${month}`
   if (submitted === total) return `All ${total} check-ins submitted for ${month}`
   return `${submitted} of ${total} check-ins submitted for ${month}`
 }

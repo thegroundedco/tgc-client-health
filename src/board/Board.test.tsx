@@ -321,7 +321,7 @@ describe('the board', () => {
 
   it('says the roster is empty, and how to fix it, rather than rendering nothing', () => {
     given({ clients: [], activeTotal: 0 })
-    expect(screen.getByText('No active clients')).toBeTruthy()
+    expect(screen.getByText(`Nobody is on the board for ${formatPeriod(defaultPeriod())}`)).toBeTruthy()
     expect(screen.getByText('Add one to see it here.')).toBeTruthy()
     expect(clientList()).toBeNull()
   })
@@ -446,16 +446,14 @@ describe('the show-archived toggle', () => {
     })
     render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
-    expect(screen.getByText('No active clients')).toBeTruthy()
+    expect(screen.getByText(`Nobody is on the board for ${formatPeriod(defaultPeriod())}`)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 archived' }))
     expect(cardNames()).toEqual(['Test Client'])
   })
 
-  it('still tells the reader how to add a client when the empty roster also offers the toggle', () => {
-    // The empty branch used to be one ternary: the toggle OR the instruction,
-    // never both. That left the exact moment somebody retires their last
-    // client -- when the toggle first appears -- as the moment the sentence
-    // telling them how to get a working roster back disappeared.
+  it('does not tell somebody to add a client when the roster has clients and the month has none', () => {
+    // Clients exist, nobody is a member of this month. "Add one" would be wrong:
+    // the roster is not empty, the month is.
     vi.mocked(useBoard).mockReturnValue({
       ...MIXED,
       clients: [{ id: 3, name: 'Test Client', status: 'former', started_on: null, ended_on: null }],
@@ -465,8 +463,10 @@ describe('the show-archived toggle', () => {
     })
     render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
-    expect(screen.getByText('No active clients')).toBeTruthy()
-    expect(screen.getByText('Add one to see it here.')).toBeTruthy()
+    expect(
+      screen.getByRole('heading', { name: `Nobody is on the board for ${formatPeriod(defaultPeriod())}` }),
+    ).toBeTruthy()
+    expect(screen.queryByText('Add one to see it here.')).toBeNull()
     expect(screen.getByRole('button', { name: 'Show 1 archived' })).toBeTruthy()
   })
 

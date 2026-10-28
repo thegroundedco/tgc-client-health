@@ -173,8 +173,8 @@ describe('cardFooter', () => {
 })
 
 describe('progressLine', () => {
-  it('says no active clients when there are none', () => {
-    expect(progressLine(0, 0, '2026-07-01')).toBe('No active clients')
+  it('says nobody is on the board for the month when there are no members', () => {
+    expect(progressLine(0, 0, '2026-07-01')).toBe('Nobody is on the board for July 2026')
   })
 
   it('says all submitted when they are', () => {

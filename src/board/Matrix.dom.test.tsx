@@ -320,12 +320,12 @@ describe('the matrix table', () => {
     expect(onOpen.mock.calls[0][0].id).toBe(7)
   })
 
-  it('says so plainly when there is no active client to show', () => {
+  it('says so plainly when there is no member to show', () => {
     // Reachable with the archive toggle on and every client archived: Board's
     // empty-roster branch does not fire, because `visible` is not empty.
     renderMatrix({ clients: [client(1, 'Gone', { status: 'churned' })] })
     expect(screen.queryByTestId('matrix-table')).toBeNull()
-    expect(screen.getByText(/No active clients/)).toBeTruthy()
+    expect(screen.getByText('Nobody is on the board for August 2026.')).toBeTruthy()
   })
 
   describe("Advocacy's context cell", () => {

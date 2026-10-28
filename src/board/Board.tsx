@@ -223,11 +223,12 @@ export function Board({ profile, onEditClient }: Props) {
             visible.length: this line is about the roster, not about what the
             toggle happens to be showing. */}
         <h2 className="t-header">{progressLine(board.submitted, board.activeTotal, period)}</h2>
-        {/* Always rendered, not one arm of a ternary with the toggle below:
-            the sentence is how to get a working roster back, and that is
-            exactly what somebody needs the moment they retire their last
-            client -- whether or not there is anything archived to reveal. */}
-        <p className="t-body prose">Add one to see it here.</p>
+        {/* Only when the roster itself is empty. With clients on the roster
+            and none on this month's board, "add one" is wrong: the month is
+            empty, not the roster, and the archive toggle below is the way to
+            the rest. Not one arm of a ternary with the toggle: an empty roster
+            still needs both the sentence and the add button. */}
+        {board.clients.length === 0 && <p className="t-body prose">Add one to see it here.</p>}
         {/* Bare, without .addBar's auto margin: .state is a column aligned to
             flex-start, so pushing the button to the inline end would strand it
             away from the sentence that just told somebody to press it. */}
