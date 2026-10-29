@@ -283,3 +283,14 @@ describe('a choice row in a real DOM', () => {
     expect(focusedValue()).toBe('1')
   })
 })
+
+describe('ChoiceRow, the hint', () => {
+  it('renders the hint as a caption when given one', () => {
+    render(<ChoiceRow question={QUESTION} value={undefined} lastValue={null} hint="From revenue: up 10%" disabled={false} onChange={() => {}} onClear={() => {}} />)
+    expect(screen.getByTestId('answer-hint').textContent).toBe('From revenue: up 10%')
+  })
+  it('renders nothing without one', () => {
+    render(<ChoiceRow question={QUESTION} value={undefined} lastValue={null} disabled={false} onChange={() => {}} onClear={() => {}} />)
+    expect(screen.queryByTestId('answer-hint')).toBeNull()
+  })
+})

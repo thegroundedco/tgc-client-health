@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, questionsFor } from '../lib/buckets'
 import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
@@ -6,6 +7,7 @@ import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
+import { useFinanceSuggestion } from './useFinanceSuggestion'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
@@ -94,6 +96,32 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     draftPersisted,
     unsavedFromEarlierVisit,
   } = checkin
+
+  const finance = useFinanceSuggestion(
+    client.id,
+    period,
+    can(profile.role, 'view_revenue'),
+    can(profile.role, 'manage_clients'),
+  )
+
+  // Spec 2026-10-29: fill the two finance answers from revenue once per visit,
+  // and only where neither the database nor the form holds an answer. Once,
+  // because a person who clears a filled answer has decided -- refilling it on
+  // the next render would overrule them.
+  const prefilled = useRef<string | null>(null)
+  useEffect(() => {
+    if (status !== 'ready' || finance === null) return
+    const visit = `${client.id}:${period}`
+    if (prefilled.current === visit) return
+    prefilled.current = visit
+    const values: Record<string, number> = {}
+    for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
+      const answer = finance[key]
+      const storedValue = stored?.[key] ?? null
+      if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
+    }
+    if (Object.keys(values).length > 0) checkin.setAnswers(values)
+  }, [status, finance, client.id, period, stored, draft.answers, checkin])
 
   const readFailed = status === 'error'
   const label = submitLabel(scored, required)
@@ -348,6 +376,11 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                     value={draft.answers[question.key] as number | undefined}
                     lastValue={
                       (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
+                    }
+                    hint={
+                      question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
+                        ? finance?.[question.key]?.reason
+                        : undefined
                     }
                     disabled={saving || !canEdit || shut}
                     onChange={(value) => checkin.setAnswer(question.key, value)}

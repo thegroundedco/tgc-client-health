@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
@@ -39,9 +39,16 @@ vi.mock('./useConfirmSuggestion', () => ({
   useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
 }))
 
+// Finance suggestion reads Supabase; stubbed, controllable per test.
+const finance = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('./useFinanceSuggestion', () => ({
+  useFinanceSuggestion: () => finance.current,
+}))
+
 const { CheckIn } = await import('./CheckIn')
 
 afterEach(() => {
+  finance.current = null
   document.body.innerHTML = ''
   statusChange.apply.mockReset()
   statusChange.apply.mockResolvedValue(true)
@@ -394,5 +401,92 @@ describe('CheckIn, the suggestion banner', () => {
     renderAs('viewer', { stored: flagged })
     expect(screen.getByText(/Suggested by AI on Oct 29/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+  })
+})
+
+describe('CheckIn, finance answers from revenue', () => {
+  const SUGGESTION = {
+    fin_rack_rate: { value: 1, reason: 'R1' },
+    fin_rate_increased: { value: 3, reason: 'R2' },
+  }
+  const blank = { answers: {}, notes: '' }
+
+  function props(role: Profile['role'] = 'account_manager') {
+    return { client: CLIENT, period: PERIOD, profile: profile(role), onBack: () => {}, onEditClient: () => {} }
+  }
+
+  it('fills both blank answers in ONE setAnswers call and shows both reasons', () => {
+    renderAs('account_manager', { draft: blank })
+    const hook = hookState.current as UseCheckin
+    expect(hook.setAnswers).not.toHaveBeenCalled()
+    cleanup()
+    finance.current = SUGGESTION
+    renderAs('account_manager', { draft: blank })
+    const h = hookState.current as UseCheckin
+    expect(h.setAnswers).toHaveBeenCalledTimes(1)
+    expect(h.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1, fin_rate_increased: 3 })
+    expect(h.setAnswer).not.toHaveBeenCalled()
+    const hints = screen.getAllByTestId('answer-hint')
+    expect(hints.map((n) => n.textContent)).toEqual(['R1', 'R2'])
+    expect(within(screen.getByText('Paying rack rate.').closest('section') as HTMLElement).getByText('R1')).toBeTruthy()
+  })
+
+  it('skips an answer the database already holds', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', {
+      draft: blank,
+      stored: { fin_rack_rate: 5 } as unknown as UseCheckin['stored'],
+    })
+    expect((hookState.current as UseCheckin).setAnswers).toHaveBeenCalledTimes(1)
+    expect((hookState.current as UseCheckin).setAnswers).toHaveBeenCalledWith({ fin_rate_increased: 3 })
+  })
+
+  it('skips an answer the form already holds', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', { draft: { answers: { fin_rack_rate: 3 }, notes: '' } })
+    expect((hookState.current as UseCheckin).setAnswers).toHaveBeenCalledWith({ fin_rate_increased: 3 })
+  })
+
+  it('does not refill after the person clears; a new period or client fills again', () => {
+    finance.current = SUGGESTION
+    hookState.current = mockCheckin({ draft: blank })
+    const first = hookState.current
+    const { rerender } = render(<CheckIn {...props()} />)
+    expect(first.setAnswers).toHaveBeenCalledTimes(1)
+
+    // Same visit, draft still blank (as if cleared), same finance object.
+    const cleared = mockCheckin({ draft: { answers: {}, notes: '' } })
+    hookState.current = cleared
+    rerender(<CheckIn {...props()} />)
+    expect(cleared.setAnswers).not.toHaveBeenCalled()
+    expect(first.setAnswers).toHaveBeenCalledTimes(1)
+
+    const nextPeriod = mockCheckin({ draft: blank })
+    hookState.current = nextPeriod
+    rerender(<CheckIn {...props()} period="2026-09-01" />)
+    expect(nextPeriod.setAnswers).toHaveBeenCalledTimes(1)
+
+    const otherClient = mockCheckin({ draft: blank })
+    hookState.current = otherClient
+    rerender(<CheckIn {...props()} client={{ ...CLIENT, id: 2 }} period="2026-09-01" />)
+    expect(otherClient.setAnswers).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing without a suggestion', () => {
+    renderAs('account_manager', { draft: blank })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    expect(screen.queryAllByTestId('answer-hint')).toHaveLength(0)
+  })
+
+  it('does nothing while loading', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', { status: 'loading', draft: blank })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
+  it('puts a hint on no other question', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', { draft: blank })
+    expect(screen.getAllByTestId('answer-hint')).toHaveLength(2)
   })
 })
