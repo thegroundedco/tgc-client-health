@@ -15,8 +15,8 @@ import { SuggestionBanner } from './SuggestionBanner'
 
 const LINE = 'Suggested by AI on Oct 29. Check the answers, then Confirm — or change anything and save.'
 
-function ui(canConfirm = true) {
-  return <SuggestionBanner canConfirm={canConfirm} clientId={7} period="2026-10-01" suggestedAt="2026-10-29T15:00:00Z" />
+function ui(canConfirm = true, hasUnsavedChanges = false) {
+  return <SuggestionBanner canConfirm={canConfirm} hasUnsavedChanges={hasUnsavedChanges} clientId={7} period="2026-10-01" suggestedAt="2026-10-29T15:00:00Z" />
 }
 
 describe('SuggestionBanner', () => {
@@ -42,6 +42,21 @@ describe('SuggestionBanner', () => {
     rerender(ui())
     expect(screen.queryByText(/Suggested by AI/)).toBeNull()
     expect(screen.getByRole('status').textContent?.startsWith('Confirmed ')).toBe(true)
+  })
+
+  it('disables Confirm and says why while the form has unsaved changes', () => {
+    render(ui(true, true))
+    const button = screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByText('You have unsaved changes. Save them instead — saving also clears the suggestion.')).toBeTruthy()
+    fireEvent.click(button)
+    expect(hook.confirm).not.toHaveBeenCalled()
+  })
+
+  it('does not show the unsaved-changes sentence when the form is clean', () => {
+    render(ui(true, false))
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByText(/You have unsaved changes/)).toBeNull()
   })
 
   it('shows the failure and keeps the line when Confirm fails', () => {

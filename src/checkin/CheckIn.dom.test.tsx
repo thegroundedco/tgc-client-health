@@ -372,10 +372,21 @@ describe('CheckIn, the end-client panel', () => {
 describe('CheckIn, the suggestion banner', () => {
   const flagged = { id: 'c1', suggested_at: '2026-10-29T15:00:00Z' } as unknown as UseCheckin['stored']
 
-  it('offers Confirm to someone who may score', () => {
-    renderAs('account_manager', { stored: flagged })
+  it('offers an enabled Confirm to someone who may score, when the form matches the stored row', () => {
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' } })
     expect(screen.getByText(/Suggested by AI on Oct 29/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('disables Confirm once an answer has been changed', () => {
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'dirty' } })
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/You have unsaved changes\./)).toBeTruthy()
+  })
+
+  it('disables Confirm when the form opened with an unsaved draft from an earlier visit', () => {
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' }, unsavedFromEarlierVisit: true })
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows the line but no Confirm to a viewer', () => {

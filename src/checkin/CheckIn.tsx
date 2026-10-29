@@ -134,6 +134,16 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     storedUpdatedAt: stored?.updated_at ?? null,
   })
   const saving = saveState.kind === 'saving'
+  // "The form differs from the stored row": the same set of save states
+  // displayedOverall treats as formDiffers (dirty, saving, failed), OR a local
+  // draft restored from an earlier visit (the draft wins over the stored row).
+  // Confirm clears suggested_at on the stored row, so it must not be offered
+  // while the screen shows anything else.
+  const hasUnsavedChanges =
+    saveState.kind === 'dirty' ||
+    saveState.kind === 'saving' ||
+    saveState.kind === 'failed' ||
+    unsavedFromEarlierVisit
 
   const back = (
     <nav className={styles.nav}>
@@ -206,6 +216,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         <SuggestionBanner
           canConfirm={can(profile.role, 'edit_scores')}
           clientId={client.id}
+          hasUnsavedChanges={hasUnsavedChanges}
           period={period}
           suggestedAt={stored.suggested_at}
         />
