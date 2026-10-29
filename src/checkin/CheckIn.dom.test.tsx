@@ -370,7 +370,7 @@ describe('CheckIn, the end-client panel', () => {
 })
 
 describe('CheckIn, the suggestion banner', () => {
-  const flagged = { id: 'c1', suggested_at: '2026-10-29T15:00:00Z' } as unknown as UseCheckin['stored']
+  const flagged = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z' } as unknown as UseCheckin['stored']
 
   it('offers an enabled Confirm to someone who may score, when the form matches the stored row', () => {
     renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' } })

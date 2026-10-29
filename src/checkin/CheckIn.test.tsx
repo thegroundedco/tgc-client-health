@@ -394,14 +394,14 @@ describe('CheckIn', () => {
   describe('the suggestion banner', () => {
     const LINE = 'Suggested by AI on Oct 29.'
     it('shows the suggestion line for a stored row still flagged', () => {
-      const markup = render({ stored: storedRow({ suggested_at: '2026-10-29T15:00:00Z' }) })
+      const markup = render({ stored: storedRow({ suggested_at: '2026-10-29T12:00:00Z' }) })
       expect(markup).toContain(LINE)
     })
     it('shows nothing for a stored row that is not flagged', () => {
       expect(render({ stored: storedRow({ suggested_at: null }) })).not.toContain('Suggested by AI')
     })
     it('shows nothing while loading, even with a flagged stored row', () => {
-      const markup = render({ status: 'loading', stored: storedRow({ suggested_at: '2026-10-29T15:00:00Z' }) })
+      const markup = render({ status: 'loading', stored: storedRow({ suggested_at: '2026-10-29T12:00:00Z' }) })
       expect(markup).not.toContain('Suggested by AI')
     })
   })

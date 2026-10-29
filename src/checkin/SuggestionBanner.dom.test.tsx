@@ -17,7 +17,7 @@ import { SuggestionBanner } from './SuggestionBanner'
 const LINE = 'Suggested by AI on Oct 29. Check the answers, then Confirm — or change anything and save.'
 
 function ui(canConfirm = true, hasUnsavedChanges = false) {
-  return <SuggestionBanner canConfirm={canConfirm} hasUnsavedChanges={hasUnsavedChanges} clientId={7} period="2026-10-01" suggestedAt="2026-10-29T15:00:00Z" />
+  return <SuggestionBanner canConfirm={canConfirm} hasUnsavedChanges={hasUnsavedChanges} clientId={7} period="2026-10-01" suggestedAt="2026-10-29T12:00:00Z" />
 }
 
 describe('SuggestionBanner', () => {

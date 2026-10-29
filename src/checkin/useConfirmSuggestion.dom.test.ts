@@ -77,4 +77,21 @@ describe('useConfirmSuggestion', () => {
     await act(async () => { await Promise.all([result.current.confirm(), result.current.confirm()]) })
     expect(db.updates).toBe(1)
   })
+
+  it('can be retried after a failed confirm, sending a second update that can succeed', async () => {
+    db.write = async () => ({ data: null, error: { message: 'boom' } })
+    const { result } = renderHook(() => useConfirmSuggestion(7, '2026-10-01'))
+    let first = true
+    await act(async () => { first = await result.current.confirm() })
+    expect(first).toBe(false)
+    expect(result.current.state.kind).toBe('failed')
+    expect(db.updates).toBe(1)
+
+    db.write = async () => ({ data: { updated_at: '2026-10-29T16:00:00Z' }, error: null })
+    let second = false
+    await act(async () => { second = await result.current.confirm() })
+    expect(second).toBe(true)
+    expect(db.updates).toBe(2)
+    expect(result.current.state).toEqual({ kind: 'confirmed', at: '2026-10-29T16:00:00Z' })
+  })
 })
