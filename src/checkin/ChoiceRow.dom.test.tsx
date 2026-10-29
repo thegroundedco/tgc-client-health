@@ -289,6 +289,12 @@ describe('ChoiceRow, the hint', () => {
     render(<ChoiceRow question={QUESTION} value={undefined} lastValue={null} hint="From revenue: up 10%" disabled={false} onChange={() => {}} onClear={() => {}} />)
     expect(screen.getByTestId('answer-hint').textContent).toBe('From revenue: up 10%')
   })
+  it('is announced: the radiogroup describes itself by the hint', () => {
+    render(<ChoiceRow question={QUESTION} value={undefined} lastValue={null} hint="From revenue: up 10%" disabled={false} onChange={() => {}} onClear={() => {}} />)
+    const id = screen.getByTestId('answer-hint').id
+    expect(id).not.toBe('')
+    expect(screen.getByRole('radiogroup').getAttribute('aria-describedby')?.split(' ')).toContain(id)
+  })
   it('renders nothing without one', () => {
     render(<ChoiceRow question={QUESTION} value={undefined} lastValue={null} disabled={false} onChange={() => {}} onClear={() => {}} />)
     expect(screen.queryByTestId('answer-hint')).toBeNull()

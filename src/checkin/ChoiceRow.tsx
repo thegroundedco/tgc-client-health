@@ -22,6 +22,7 @@ export function ChoiceRow({ question, value, lastValue, hint, disabled, onChange
   // Derived from the question key so they are unique on a page rendering
   // several of these, and stable across renders.
   const labelId = `question-${question.key}-label`
+  const hintId = `question-${question.key}-hint`
 
   // The question's own three words where it has them, No/Unsure/Yes otherwise.
   // Read once here rather than at each of the four use sites below, so the
@@ -66,7 +67,10 @@ export function ChoiceRow({ question, value, lastValue, hint, disabled, onChange
         {question.prompt}
       </p>
 
-      <div className={styles.scale} role="radiogroup" aria-labelledby={labelId}>
+      <div className={styles.scale} role="radiogroup"
+        aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
+      >
         <div className={styles.options}>
           {options.map((option) => (
             <label className={styles.option} key={option.value}>
@@ -129,7 +133,7 @@ export function ChoiceRow({ question, value, lastValue, hint, disabled, onChange
           )}
         </p>
         {hint && (
-          <p className="t-caption" data-testid="answer-hint">
+          <p className="t-caption" id={hintId} data-testid="answer-hint">
             {hint}
           </p>
         )}
