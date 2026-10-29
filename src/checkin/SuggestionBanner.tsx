@@ -27,40 +27,47 @@ function shortDay(iso: string): string {
 export function SuggestionBanner({ clientId, period, suggestedAt, canConfirm, hasUnsavedChanges }: Props) {
   const { state, confirm } = useConfirmSuggestion(clientId, period)
 
-  if (state.kind === 'confirmed') {
-    return (
-      <p className="t-body prose" role="status">
-        Confirmed {formatSavedAt(state.at)}.
-      </p>
-    )
-  }
+  // One wrapper and one status element in a fixed position, whatever the
+  // state: many screen readers do not announce a live region that mounts with
+  // its text already in it, so the element must outlive the Confirm press and
+  // only its text changes. The suggestion line and button go once confirmed.
+  const confirmed = state.kind === 'confirmed'
 
   return (
     <div className="prose">
-      <p className="t-body" data-testid="suggestion-line">
-        Suggested by AI on {shortDay(suggestedAt)}. Check the answers, then Confirm — or change anything and save.
+      <p className="t-body prose" role="status">
+        {state.kind === 'confirmed' ? `Confirmed ${formatSavedAt(state.at)}.` : ''}
       </p>
-      {canConfirm && (
+      {!confirmed && (
         <>
-          <button
-            className="button"
-            disabled={state.kind === 'saving' || hasUnsavedChanges}
-            onClick={() => void confirm()}
-            type="button"
-          >
-            Confirm
-          </button>
-          {hasUnsavedChanges && (
-            <p className="t-caption">
-              You have unsaved changes. Save them instead — saving also clears the suggestion.
+          <p className="t-body" data-testid="suggestion-line">
+            {canConfirm
+              ? `Suggested by AI on ${shortDay(suggestedAt)}. Check the answers, then Confirm — or change anything and save.`
+              : `Suggested by AI on ${shortDay(suggestedAt)}; not yet reviewed.`}
+          </p>
+          {canConfirm && (
+            <>
+              <button
+                className="button"
+                disabled={state.kind === 'saving' || hasUnsavedChanges}
+                onClick={() => void confirm()}
+                type="button"
+              >
+                Confirm
+              </button>
+              {hasUnsavedChanges && (
+                <p className="t-caption">
+                  You have unsaved changes. Save them instead — saving also clears the suggestion.
+                </p>
+              )}
+            </>
+          )}
+          {state.kind === 'failed' && (
+            <p className="alert prose" role="alert">
+              {state.message}
             </p>
           )}
         </>
-      )}
-      {state.kind === 'failed' && (
-        <p className="alert prose" role="alert">
-          {state.message}
-        </p>
       )}
     </div>
   )

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { formatSavedAt } from '../lib/month'
 import type { ConfirmState } from './useConfirmSuggestion'
 
 const hook = vi.hoisted(() => ({
@@ -31,17 +32,25 @@ describe('SuggestionBanner', () => {
   it('offers Confirm only to someone who may score', () => {
     render(ui(false))
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
-    expect(screen.getByText(LINE)).toBeTruthy()
+    expect(screen.getByText('Suggested by AI on Oct 29; not yet reviewed.')).toBeTruthy()
+    expect(screen.queryByText(LINE)).toBeNull()
   })
 
   it('confirms, then replaces the line with the confirmation', () => {
+    const at = '2026-10-29T16:00:00Z'
     const { rerender } = render(ui())
+    // The live region is in the DOM, empty, before anything is confirmed, so a
+    // screen reader is already watching it when the text arrives.
+    const region = screen.getByRole('status')
+    expect(region.textContent).toBe('')
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(hook.confirm).toHaveBeenCalledTimes(1)
-    hook.state = { kind: 'confirmed', at: '2026-10-29T16:00:00Z' }
+    hook.state = { kind: 'confirmed', at }
     rerender(ui())
     expect(screen.queryByText(/Suggested by AI/)).toBeNull()
-    expect(screen.getByRole('status').textContent?.startsWith('Confirmed ')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region.textContent).toBe(`Confirmed ${formatSavedAt(at)}.`)
   })
 
   it('disables Confirm and says why while the form has unsaved changes', () => {
