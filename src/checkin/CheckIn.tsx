@@ -110,7 +110,9 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // the next render would overrule them.
   const prefilled = useRef<string | null>(null)
   useEffect(() => {
-    if (status !== 'ready' || finance === null) return
+    // Edit rights too: a viewer's form is read-only, so a fill would only mark
+    // it unsaved with no way to save. (canEdit is declared below this effect.)
+    if (status !== 'ready' || finance === null || !can(profile.role, 'edit_scores')) return
     const visit = `${client.id}:${period}`
     if (prefilled.current === visit) return
     prefilled.current = visit
@@ -121,7 +123,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
     }
     if (Object.keys(values).length > 0) checkin.setAnswers(values)
-  }, [status, finance, client.id, period, stored, draft.answers, checkin])
+  }, [status, finance, client.id, period, stored, draft.answers, checkin, profile.role])
 
   const readFailed = status === 'error'
   const label = submitLabel(scored, required)

@@ -468,6 +468,12 @@ describe('CheckIn, finance answers from revenue', () => {
     expect(otherClient.setAnswers).toHaveBeenCalledTimes(1)
   })
 
+  it('does not fill for a viewer, who cannot edit, though the hint may show', () => {
+    finance.current = SUGGESTION
+    renderAs('viewer', { draft: blank })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
   it('does nothing without a suggestion', () => {
     renderAs('account_manager', { draft: blank })
     expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
