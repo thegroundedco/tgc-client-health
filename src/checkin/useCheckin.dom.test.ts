@@ -310,6 +310,20 @@ describe('useCheckin: submit', () => {
     expect(upsert.mock.calls[0][0].submitted_at).not.toBeNull()
   })
 
+  // Any save by a person is a review, so it clears the AI suggestion flag. The
+  // key must be PRESENT and null: a missing key would leave suggested_at set in
+  // the database, so absence fails this test on purpose.
+  it('clears the AI suggestion flag on save by sending suggested_at as null', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    const capturedUpsert = upsert.mock.calls.at(-1)?.[0]
+    expect(Object.prototype.hasOwnProperty.call(capturedUpsert, 'suggested_at')).toBe(true)
+    expect(capturedUpsert.suggested_at).toBeNull()
+  })
+
   // The confirmation survives the score refresh. An earlier draft of this hook
   // called load() here, which dispatches 'loaded' and resets the reducer to
   // `clean` -- erasing the sentence that says the save happened, which is the

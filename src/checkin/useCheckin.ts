@@ -293,6 +293,10 @@ export function useCheckin(
               // that no longer exists.
               submitted_at: complete ? now : null,
               submitted_by: complete ? profile.id : null,
+              // Any save by a person is a review (spec 2026-10-29): an AI
+              // suggestion that has been opened, judged and saved -- changed or
+              // not -- is no longer waiting for anybody.
+              suggested_at: null,
             },
             { onConflict: 'client_id,period' },
           )
