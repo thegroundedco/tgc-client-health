@@ -90,4 +90,19 @@ describe('useFinanceSuggestion', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(result.current).toBeNull()
   })
+
+  it('keeps the rate when the packages read errors, and gives no rack rate', async () => {
+    db.revenue = async () => ({
+      data: [
+        { period: '2026-09-01', retainer_cents: 400000, project_cents: 0 },
+        { period: OCT, retainer_cents: 400000, project_cents: 0 },
+      ],
+      error: null,
+    })
+    db.packages = async () => ({ data: null, error: { message: 'nope' } })
+    const { result } = renderHook(() => useFinanceSuggestion(7, OCT, true, true))
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current?.fin_rate_increased?.value).toBe(3)
+    expect(result.current?.fin_rack_rate).toBeUndefined()
+  })
 })

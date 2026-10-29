@@ -44,8 +44,9 @@ export function useFinanceSuggestion(
             .select('package_code, started_on')
             .eq('client_id', clientId)
           if (isCancelled()) return
-          if (packages.error) return
-          stints = (packages.data ?? []) as Stint[]
+          // A failed packages read costs only the rack-rate answer: the rate
+          // change needs revenue alone, so carry on with no stints.
+          if (!packages.error) stints = (packages.data ?? []) as Stint[]
         }
 
         setSuggestion(
