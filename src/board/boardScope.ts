@@ -69,9 +69,14 @@ export function archivedCount(clients: readonly ScopedClient[], members: Readonl
   return clients.filter((client) => !members.has(client.id)).length
 }
 
-// Members first, then status rank, then name. A cancelled client still in their
-// final month is a member and sorts with the month's work, after the active
-// ones; everything behind the toggle follows.
+// Members first, alphabetically whatever their status; then everything behind
+// the toggle, grouped by status rank, then name.
+//
+// Status does NOT reorder the month's members. The owner, 2026-10-29: a client
+// cancelled in the month being scored keeps their place in the alphabet that
+// month, beside the clients they were scored with -- dropping them to the end
+// read as though the cancellation had demoted the score. Status rank still
+// groups the archived list, where it says why each card is there.
 export function visibleClients<T extends ScopedClient>(
   clients: readonly T[],
   members: ReadonlySet<number>,
@@ -79,11 +84,12 @@ export function visibleClients<T extends ScopedClient>(
 ): T[] {
   const shown = showArchived ? clients : clients.filter((client) => members.has(client.id))
   const memberRank = (client: T) => (members.has(client.id) ? 0 : 1)
+  const archivedRank = (client: T) => (members.has(client.id) ? 0 : statusRank(client.status))
   // Copied before sorting: the array belongs to the hook's state.
   return [...shown].sort(
     (a, b) =>
       memberRank(a) - memberRank(b) ||
-      statusRank(a.status) - statusRank(b.status) ||
+      archivedRank(a) - archivedRank(b) ||
       a.name.localeCompare(b.name),
   )
 }

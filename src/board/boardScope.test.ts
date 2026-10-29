@@ -78,14 +78,28 @@ describe('what the board shows', () => {
   ]
   const members = boardMembers(ROSTER, SEPT, new Map())
 
-  it('shows only members while the toggle is off, by status then name', () => {
-    expect(visibleClients(ROSTER, members, false).map((c) => c.name)).toEqual(['Acme', 'Zinc', 'Cinder'])
+  // Owner, 2026-10-29: a client cancelled in the month being scored keeps their
+  // place in the alphabet that month -- status does not reorder the month's work.
+  it('shows only members while the toggle is off, alphabetically whatever their status', () => {
+    expect(visibleClients(ROSTER, members, false).map((c) => c.name)).toEqual(['Acme', 'Cinder', 'Zinc'])
   })
 
-  it('shows members first, then the rest, while the toggle is on', () => {
+  it('shows members alphabetically, then the rest by status then name, while the toggle is on', () => {
     expect(visibleClients(ROSTER, members, true).map((c) => c.name)).toEqual([
-      'Acme', 'Zinc', 'Cinder', 'Early', 'Bellwether', 'Dune',
+      'Acme', 'Cinder', 'Zinc', 'Early', 'Bellwether', 'Dune',
     ])
+  })
+
+  it('keeps a client cancelled in October on October, in order, and off November', () => {
+    const roster = [
+      client({ id: 1, name: 'Colorfil' }),
+      client({ id: 2, name: 'Babaloo', status: 'cancelled', ended_on: '2026-10-31' }),
+      client({ id: 3, name: 'Acme' }),
+    ]
+    const october = boardMembers(roster, '2026-10-01', new Map([[2, {}]]))
+    expect(visibleClients(roster, october, false).map((c) => c.name)).toEqual(['Acme', 'Babaloo', 'Colorfil'])
+    const november = boardMembers(roster, '2026-11-01', new Map())
+    expect(visibleClients(roster, november, false).map((c) => c.name)).toEqual(['Acme', 'Colorfil'])
   })
 
   it('counts everyone who is not a member as archived', () => {
