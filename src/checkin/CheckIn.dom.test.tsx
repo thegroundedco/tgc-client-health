@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
@@ -416,10 +416,6 @@ describe('CheckIn, finance answers from revenue', () => {
   }
 
   it('fills both blank answers in ONE setAnswers call and shows both reasons', () => {
-    renderAs('account_manager', { draft: blank })
-    const hook = hookState.current as UseCheckin
-    expect(hook.setAnswers).not.toHaveBeenCalled()
-    cleanup()
     finance.current = SUGGESTION
     renderAs('account_manager', { draft: blank })
     const h = hookState.current as UseCheckin
@@ -488,5 +484,32 @@ describe('CheckIn, finance answers from revenue', () => {
     finance.current = SUGGESTION
     renderAs('account_manager', { draft: blank })
     expect(screen.getAllByTestId('answer-hint')).toHaveLength(2)
+  })
+
+  // The seam with suggested check-ins: Confirm is only offered while the form
+  // matches the stored row, so a fill over a stored answer would disable it.
+  it('does not fill, and leaves Confirm enabled, on a suggested row that already holds both answers', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', {
+      stored: { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', fin_rack_rate: 5, fin_rate_increased: 1 } as unknown as UseCheckin['stored'],
+      // Draft deliberately lacks the keys: the draft guard alone would not
+      // catch this, so the test isolates the stored-row guard.
+      draft: blank,
+      saveState: { kind: 'clean' },
+    })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('fills both keys once on a suggested row whose finance answers are null', () => {
+    finance.current = SUGGESTION
+    renderAs('account_manager', {
+      stored: { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', fin_rack_rate: null, fin_rate_increased: null } as unknown as UseCheckin['stored'],
+      draft: blank,
+      saveState: { kind: 'clean' },
+    })
+    const h = hookState.current as UseCheckin
+    expect(h.setAnswers).toHaveBeenCalledTimes(1)
+    expect(h.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1, fin_rate_increased: 3 })
   })
 })
