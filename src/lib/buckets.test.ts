@@ -103,7 +103,7 @@ describe('the rate question', () => {
     // the key alone no longer says what the question asks. This is the only
     // place that does.
     const question = questionsFor('finances').find((q) => q.key === 'fin_rate_increased')
-    expect(question?.prompt).toBe('Rate over the last 90 days.')
+    expect(question?.prompt).toBe('Rate vs last month.')
     expect(question?.options).toBe(RATE_OPTIONS)
   })
 })
@@ -118,8 +118,8 @@ describe('one answer type', () => {
   })
 
   it('writes the same 1 / 3 / 5 whatever the three words are', () => {
-    // THE load-bearing assertion of the 2026-09-01 relabelling. "Rate over the
-    // last 90 days." reads Decreased / Break even / Increased instead of
+    // THE load-bearing assertion of the 2026-09-01 relabelling. "Rate vs last
+    // month." reads Decreased / No change / Increased instead of
     // No / Unsure / Yes, and that is a copy change ONLY because both sets write
     // the same three values into the same column. The moment an option set
     // picks different numbers, the same column holds two incompatible scales,
@@ -133,7 +133,7 @@ describe('one answer type', () => {
   it('labels the rate question by direction, worse-left to better-right', () => {
     expect(RATE_OPTIONS.map((option) => option.label)).toEqual([
       'Decreased',
-      'Break even',
+      'No change',
       'Increased',
     ])
   })
@@ -150,12 +150,12 @@ describe('one answer type', () => {
   })
 
   it('reads a stored value against the question that stored it', () => {
-    // The same 3 is "Unsure" on six questions and "Break even" on the seventh.
+    // The same 3 is "Unsure" on six questions and "No change" on the seventh.
     // choiceLabel defaulting to CHOICE_OPTIONS is what the other six rely on;
     // passing the set is what stops the seventh printing the wrong word on its
     // "last month" line -- wrong being worse than absent.
     expect(choiceLabel(3)).toBe('Unsure')
-    expect(choiceLabel(3, RATE_OPTIONS)).toBe('Break even')
+    expect(choiceLabel(3, RATE_OPTIONS)).toBe('No change')
     expect(choiceLabel(1, RATE_OPTIONS)).toBe('Decreased')
     // A legacy 2 or 4 is real August 2026 data and belongs to no option.
     expect(choiceLabel(4, RATE_OPTIONS)).toBeUndefined()

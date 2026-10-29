@@ -38,6 +38,12 @@ vi.mock('./useConfirmSuggestion', () => ({
   useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
 }))
 
+// Finance suggestion reads Supabase; stubbed, controllable per test.
+const finance = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('./useFinanceSuggestion', () => ({
+  useFinanceSuggestion: () => finance.current,
+}))
+
 // Imported dynamically, after the mock above is registered, rather than with
 // a static `import` at the top of the file: CheckIn.tsx's own import of
 // useCheckin has to resolve against the mock, and a dynamic import here makes
@@ -135,6 +141,7 @@ function defaultHook(): UseCheckin {
     draftPersisted: true,
     unsavedFromEarlierVisit: false,
     setAnswer: () => {},
+    setAnswers: () => {},
     setNotes: () => {},
     reload: () => {},
     submit: () => {},

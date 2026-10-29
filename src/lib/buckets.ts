@@ -89,26 +89,27 @@ export const CHOICE_OPTIONS: readonly ChoiceOption[] = [
 // bare 5 wherever an answer is tested for being affirmative.
 export const CHOICE_YES = 5
 
-// "Rate over the last 90 days." is a direction, not a yes/no, so No/Unsure/Yes
-// were the wrong three words for it (owner, 2026-09-01). Break even is the case
-// he named: a client who paid more one month and went back to the regular rate,
-// so the ninety days net out.
+// The rate question is a direction, not a yes/no, so No/Unsure/Yes were the
+// wrong three words for it (owner, 2026-09-01). Its prompt is now "Rate vs last
+// month." (owner, 2026-10-29): the comparison is this month against last month,
+// and the middle answer, formerly "Break even", is now "No change".
 //
 // SAME VALUES, different words. 1/3/5 in the same column, so no score moves, no
-// constraint changes and there is no migration -- which is the whole reason the
-// options are labels over a fixed scale rather than a set of their own.
+// constraint changes, no stored answer moves and there is no migration -- which
+// is the whole reason the options are labels over a fixed scale rather than a
+// set of their own.
 //
 // Worse-left to better-right, like every other control on the screen: a rate
 // that fell is the bad end.
 export const RATE_OPTIONS: readonly ChoiceOption[] = [
   { label: 'Decreased', value: 1 },
-  { label: 'Break even', value: 3 },
+  { label: 'No change', value: 3 },
   { label: 'Increased', value: 5 },
 ]
 
 // The label a `choice` answer reads as, for the "last month" line. Takes the
 // question's own option set, because the same stored 3 reads as "Unsure" on six
-// questions and "Break even" on the seventh -- a lookup against one global list
+// questions and "No change" on the seventh -- a lookup against one global list
 // would print the wrong word rather than no word, which is worse.
 //
 // Undefined for a value no control can write -- a legacy 2 or 4 in a Finance
@@ -149,10 +150,11 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
       // The key is historical and deliberately not renamed: it is the column
       // name on public.checkins, and renaming it would be a migration to buy
       // nothing. The question stopped being "did it increase, yes or no?" on
-      // 2026-09-01 and became a direction with three answers.
+      // 2026-09-01 and became a direction with three answers; on 2026-10-29 it
+      // was reworded to compare this month with last month.
       {
         key: 'fin_rate_increased',
-        prompt: 'Rate over the last 90 days.',
+        prompt: 'Rate vs last month.',
         kind: 'choice',
         options: RATE_OPTIONS,
       },

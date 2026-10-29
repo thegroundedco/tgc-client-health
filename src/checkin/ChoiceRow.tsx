@@ -8,6 +8,8 @@ type Props = {
   question: Question
   value: number | undefined
   lastValue: number | null
+  // Why the answer was pre-filled (finance from revenue). Absent for most questions.
+  hint?: string
   disabled: boolean
   onChange: (value: number) => void
   onClear: () => void
@@ -16,10 +18,11 @@ type Props = {
 // QuestionRow's three-option sibling, for Finances' and Advocacy's seven
 // choice questions. A radio group is the smallest control that can leave
 // every option unchecked, which is exactly the unanswered state this needs.
-export function ChoiceRow({ question, value, lastValue, disabled, onChange, onClear }: Props) {
+export function ChoiceRow({ question, value, lastValue, hint, disabled, onChange, onClear }: Props) {
   // Derived from the question key so they are unique on a page rendering
   // several of these, and stable across renders.
   const labelId = `question-${question.key}-label`
+  const hintId = `question-${question.key}-hint`
 
   // The question's own three words where it has them, No/Unsure/Yes otherwise.
   // Read once here rather than at each of the four use sites below, so the
@@ -64,7 +67,10 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
         {question.prompt}
       </p>
 
-      <div className={styles.scale} role="radiogroup" aria-labelledby={labelId}>
+      <div className={styles.scale} role="radiogroup"
+        aria-labelledby={labelId}
+        aria-describedby={hint ? hintId : undefined}
+      >
         <div className={styles.options}>
           {options.map((option) => (
             <label className={styles.option} key={option.value}>
@@ -126,6 +132,11 @@ export function ChoiceRow({ question, value, lastValue, disabled, onChange, onCl
             </>
           )}
         </p>
+        {hint && (
+          <p className="t-caption" id={hintId} data-testid="answer-hint">
+            {hint}
+          </p>
+        )}
       </div>
     </section>
   )

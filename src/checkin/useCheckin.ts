@@ -44,6 +44,7 @@ export type UseCheckin = {
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
   setAnswer: (key: string, value: number | null) => void
+  setAnswers: (values: Record<string, number>) => void
   setNotes: (notes: string) => void
   reload: () => void
   submit: () => void
@@ -242,6 +243,36 @@ export function useCheckin(
     [draft, applyEdit],
   )
 
+  // Several answers in ONE edit (spec 2026-10-29, finances from revenue). Two
+  // setAnswer calls in the same tick would each start from the same `draft`
+  // and the second would drop the first. Only fills keys the form does not
+  // already hold, so it can never overwrite what a person chose.
+  const setAnswers = useCallback(
+    (values: Record<string, number>) => {
+      const answers: QuestionScores = { ...draft.answers }
+      let changed = false
+      for (const [key, value] of Object.entries(values)) {
+        if (answers[key] === undefined) {
+          answers[key] = value
+          changed = true
+        }
+      }
+      if (!changed) return
+      // NOT applyEdit: no writeDraft and no setDraftPersisted. A fill is not
+      // something the person typed. Persisting it on mere open would leave a
+      // local draft that differs from the database, win on the next load, claim
+      // "earlier visit" changes nobody made, and let Save overwrite newer
+      // database answers. The first real click or keystroke persists the whole
+      // form through applyEdit, as before; leaving untouched discards the fill
+      // and the next visit fills again from current data. 'edited' still
+      // dispatches so the screen reads as unsaved.
+      setDraft({ ...draft, answers })
+      dispatch({ type: 'edited' })
+      setUnsavedFromEarlierVisit(false)
+    },
+    [draft],
+  )
+
   const setNotes = useCallback(
     (notes: string) => applyEdit({ ...draft, notes }),
     [draft, applyEdit],
@@ -394,6 +425,7 @@ export function useCheckin(
     draftPersisted,
     unsavedFromEarlierVisit,
     setAnswer,
+    setAnswers,
     setNotes,
     reload: () => void load(),
     submit,
