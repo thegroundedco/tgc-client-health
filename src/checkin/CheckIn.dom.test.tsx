@@ -33,6 +33,12 @@ vi.mock('../clients/useStatusChange', () => ({
   useStatusChange: () => ({ state: statusChange.state, apply: statusChange.apply }),
 }))
 
+// The suggestion banner mounted in CheckIn pulls in useConfirmSuggestion and,
+// through it, lib/supabase, which throws at module scope with no VITE_ env.
+vi.mock('./useConfirmSuggestion', () => ({
+  useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
+}))
+
 const { CheckIn } = await import('./CheckIn')
 
 afterEach(() => {
@@ -360,5 +366,21 @@ describe('CheckIn, the end-client panel', () => {
     renderAs('account_manager', { stored: null })
     fireEvent.click(screen.getByRole('button', { name: 'Paused this month' }))
     expect(screen.queryByText(/already have a check-in/)).toBeNull()
+  })
+})
+
+describe('CheckIn, the suggestion banner', () => {
+  const flagged = { id: 'c1', suggested_at: '2026-10-29T15:00:00Z' } as unknown as UseCheckin['stored']
+
+  it('offers Confirm to someone who may score', () => {
+    renderAs('account_manager', { stored: flagged })
+    expect(screen.getByText(/Suggested by AI on Oct 29/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
+  })
+
+  it('shows the line but no Confirm to a viewer', () => {
+    renderAs('viewer', { stored: flagged })
+    expect(screen.getByText(/Suggested by AI on Oct 29/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
   })
 })

@@ -10,6 +10,7 @@ import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
 import { EndClientPanel } from './EndClientPanel'
+import { SuggestionBanner } from './SuggestionBanner'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
@@ -200,6 +201,14 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         // rather than a trip to the roster. Ready branch only -- an action that
         // changes who is scored has no business beside an unread check-in.
         <EndClientPanel client={client} hasCheckin={stored != null} onPaused={onBack} period={period} />
+      )}
+      {stored?.suggested_at != null && (
+        <SuggestionBanner
+          canConfirm={can(profile.role, 'edit_scores')}
+          clientId={client.id}
+          period={period}
+          suggestedAt={stored.suggested_at}
+        />
       )}
 
       <div className={styles.totals}>

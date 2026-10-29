@@ -32,6 +32,12 @@ vi.mock('../clients/useStatusChange', () => ({
   useStatusChange: () => ({ state: { kind: 'idle' }, apply: async () => true }),
 }))
 
+// The suggestion banner mounted in CheckIn pulls in useConfirmSuggestion and,
+// through it, lib/supabase, which throws at module scope with no VITE_ env.
+vi.mock('./useConfirmSuggestion', () => ({
+  useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
+}))
+
 // Imported dynamically, after the mock above is registered, rather than with
 // a static `import` at the top of the file: CheckIn.tsx's own import of
 // useCheckin has to resolve against the mock, and a dynamic import here makes
@@ -383,6 +389,21 @@ describe('CheckIn', () => {
     })
     expect(markup).toContain('Last submitted')
     expect(markup).toMatch(/by\s*you/)
+  })
+
+  describe('the suggestion banner', () => {
+    const LINE = 'Suggested by AI on Oct 29.'
+    it('shows the suggestion line for a stored row still flagged', () => {
+      const markup = render({ stored: storedRow({ suggested_at: '2026-10-29T15:00:00Z' }) })
+      expect(markup).toContain(LINE)
+    })
+    it('shows nothing for a stored row that is not flagged', () => {
+      expect(render({ stored: storedRow({ suggested_at: null }) })).not.toContain('Suggested by AI')
+    })
+    it('shows nothing while loading, even with a flagged stored row', () => {
+      const markup = render({ status: 'loading', stored: storedRow({ suggested_at: '2026-10-29T15:00:00Z' }) })
+      expect(markup).not.toContain('Suggested by AI')
+    })
   })
 
   it("renders all six buckets as headings, in the boss's order", () => {
