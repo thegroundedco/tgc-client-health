@@ -59,6 +59,7 @@ function given(
     checkins: new Map(),
     scores: new Map(),
     submitted: 0,
+    toReview: 0,
     activeTotal: 0,
     reload: vi.fn(),
     ...(over.board as object),

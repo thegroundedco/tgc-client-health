@@ -231,6 +231,12 @@ export function Matrix({ clients, members, checkins, scores, period, onOpen }: P
                       ) : (
                         <span data-testid="matrix-name">{row.client.name}</span>
                       )}
+                      {row.checkin?.suggested_at != null && (
+                        <span className="status-pill" data-testid="matrix-suggested">
+                          <span aria-hidden="true">Suggested</span>
+                          <span className={styles.hidden}>Suggested, not yet reviewed</span>
+                        </span>
+                      )}
                       {/* The band reads beside the name rather than in a column
                           of its own -- owner's call, 2026-09-01. It stays
                           OUTSIDE the button so the control's accessible name is

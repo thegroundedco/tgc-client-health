@@ -4,6 +4,10 @@ import { BUCKET_SCORE_KEY, CHECKIN_COLUMNS, cardFooter, progressLine } from './c
 import type { CardCheckin } from './cardSummary'
 
 describe('CHECKIN_COLUMNS', () => {
+  it('reads suggested_at with the other check-in columns', () => {
+    expect(CHECKIN_COLUMNS.split(', ')).toContain('suggested_at')
+  })
+
   // The literal is typed by supabase-js, so a mistyped column fails the build
   // rather than surfacing at runtime -- but only the build knows that. This
   // test is what catches the literal drifting from the rubric.
@@ -72,7 +76,7 @@ function seventeenAnswered(): Record<string, number> {
 
 // A row with no answers at all -- the shape of a check-in nobody has touched.
 function blankCheckin(): CardCheckin {
-  return { client_id: 1, submitted_at: null, submitted_by: null }
+  return { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null }
 }
 
 describe('cardFooter', () => {
@@ -83,20 +87,20 @@ describe('cardFooter', () => {
   })
 
   it('says Not started when a row exists with no answers', () => {
-    const row = { client_id: 1, submitted_at: null, submitted_by: null }
+    const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null }
     expect(cardFooter(row, VIEWER, true)).toBe('Not started')
   })
 
   // Gate open: the denominator is 21, not 17. This is the number that decides
   // whether the person thinks they are finished.
   it('counts against 21 when the gate is open', () => {
-    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...seventeenAnswered() }
+    const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
     expect(cardFooter(row, VIEWER, true)).toBe('Draft, 17 of 21 scored')
   })
 
   // Same row, gate shut: the same seventeen answers are a COMPLETE check-in.
   it('counts against 17 when the gate is shut', () => {
-    const row = { client_id: 1, submitted_at: null, submitted_by: null, ...seventeenAnswered() }
+    const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
     expect(cardFooter(row, VIEWER, false)).toBe('Draft, 17 of 17 scored')
   })
 
@@ -104,7 +108,7 @@ describe('cardFooter', () => {
   // permanently one short for the client most likely to answer No.
   it('counts a No Advocacy answer as scored', () => {
     const row = {
-      client_id: 1, submitted_at: null, submitted_by: null,
+      client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null,
       ...seventeenAnswered(), adv_left_review: 1,
     }
     expect(cardFooter(row, VIEWER, true)).toBe('Draft, 18 of 21 scored')
@@ -126,14 +130,14 @@ describe('cardFooter', () => {
   })
 
   it('names you when you submitted it, with the "Submitted" prefix', () => {
-    const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: VIEWER }
+    const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: VIEWER, suggested_at: null }
     const text = cardFooter(row, VIEWER, true)
     expect(text).toContain('by you')
     expect(text.startsWith('Submitted ')).toBe(true)
   })
 
   it('names another account manager when someone else did', () => {
-    const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: 'someone-else' }
+    const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: 'someone-else', suggested_at: null }
     expect(cardFooter(row, VIEWER, true)).toContain('by another account manager')
   })
 
@@ -158,6 +162,7 @@ describe('cardFooter', () => {
               client_id: 1,
               submitted_at,
               submitted_by,
+              suggested_at: null,
               ...answeredPrefix(count),
             }
             const text = cardFooter(row, VIEWER, advocacyApplies)
@@ -193,5 +198,15 @@ describe('progressLine', () => {
     // than no number, because somebody acts on it.
     expect(progressLine(0, 10, '2026-07-01')).toBe('0 of 10 check-ins submitted for July 2026')
     expect(progressLine(0, 10, '2026-12-01')).toBe('0 of 10 check-ins submitted for December 2026')
+  })
+})
+
+describe('progressLine with suggestions', () => {
+  it('says nothing about review when there is nothing to review', () => {
+    expect(progressLine(14, 14, '2026-10-01', 0)).toBe('All 14 check-ins submitted for October 2026')
+  })
+  it('names how many are waiting for review', () => {
+    expect(progressLine(14, 14, '2026-10-01', 12)).toBe('All 14 check-ins submitted for October 2026 \u00b7 12 to review')
+    expect(progressLine(3, 14, '2026-10-01', 1)).toBe('3 of 14 check-ins submitted for October 2026 \u00b7 1 to review')
   })
 })

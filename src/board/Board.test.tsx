@@ -99,6 +99,7 @@ const SUBMITTED: CardCheckin = {
   rel_score: 4,
   del_score: 4,
   adv_score: 4,
+  suggested_at: null,
 }
 
 function board(overrides: Partial<UseBoard> = {}): UseBoard {
@@ -118,6 +119,7 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
     // below replaces it exactly as it already does for the other fields.
     scores: new Map(),
     submitted: 0,
+    toReview: 0,
     // All three of CLIENTS are active, so this is the same number as
     // clients.length here -- but it is a separate field, and overrides below
     // that shrink clients must shrink this too.
@@ -154,6 +156,7 @@ const READY = {
   // this fixture is a second place it must exist for the file to typecheck.
   scores: new Map(),
   submitted: 0,
+  toReview: 0,
   activeTotal: 1,
   reload: vi.fn(),
 }
@@ -413,6 +416,15 @@ describe('the show-archived toggle', () => {
     expect(screen.queryByRole('button', { name: /archived/ })).toBeNull()
   })
 
+  it('appends how many check-ins are waiting for review to the progress line', () => {
+    vi.mocked(useBoard).mockReturnValue({ ...MIXED, submitted: 1, toReview: 2 })
+    render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
+
+    expect(screen.getByRole('status').textContent).toBe(
+      `All 1 check-ins submitted for ${formatPeriod(defaultPeriod())} \u00b7 2 to review`,
+    )
+  })
+
   it('never counts an archived client in the progress line', async () => {
     // The sharpest requirement in this step. "1 of 3" would tell the reader
     // that three check-ins are owed this month, two of them for a paused
@@ -443,6 +455,7 @@ describe('the show-archived toggle', () => {
       members: new Set<number>(),
       activeTotal: 0,
       submitted: 0,
+      toReview: 0,
     })
     render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 
@@ -460,6 +473,7 @@ describe('the show-archived toggle', () => {
       members: new Set<number>(),
       activeTotal: 0,
       submitted: 0,
+      toReview: 0,
     })
     render(<Board onEditClient={NOOP_EDIT_CLIENT} profile={PROFILE} />)
 

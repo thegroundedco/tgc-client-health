@@ -157,6 +157,27 @@ describe('the board hook', () => {
     expect(result.current.activeTotal).toBe(3)
   })
 
+  it('counts the members whose check-in is an unreviewed suggestion', async () => {
+    db.clients = async () => ({
+      data: [
+        { id: 1, name: 'A', status: 'active', started_on: '2026-01-01', ended_on: null },
+        { id: 2, name: 'B', status: 'active', started_on: '2026-01-01', ended_on: null },
+        { id: 3, name: 'C', status: 'active', started_on: '2026-01-01', ended_on: null },
+      ],
+      error: null,
+    })
+    db.checkins = async () => ({
+      data: [
+        { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: '2026-10-29T10:00:00Z' },
+        { client_id: 2, submitted_at: null, submitted_by: null, suggested_at: null },
+      ],
+      error: null,
+    })
+    const { result } = await ready()
+    expect(result.current.activeTotal).toBe(3)
+    expect(result.current.toReview).toBe(1)
+  })
+
   it('selects ended_on, because membership needs it', async () => {
     await ready()
     expect(db.clientSelect).toContain('ended_on')

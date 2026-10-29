@@ -95,6 +95,7 @@ const BOARD: UseBoard = {
   checkins: new Map(),
   scores: new Map(),
   submitted: 0,
+  toReview: 0,
   activeTotal: 1,
   reload: () => {},
 }

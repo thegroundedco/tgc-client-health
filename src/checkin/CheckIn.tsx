@@ -10,6 +10,7 @@ import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
 import { EndClientPanel } from './EndClientPanel'
+import { SuggestionBanner } from './SuggestionBanner'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
@@ -133,6 +134,16 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     storedUpdatedAt: stored?.updated_at ?? null,
   })
   const saving = saveState.kind === 'saving'
+  // "The form differs from the stored row": the same set of save states
+  // displayedOverall treats as formDiffers (dirty, saving, failed), OR a local
+  // draft restored from an earlier visit (the draft wins over the stored row).
+  // Confirm clears suggested_at on the stored row, so it must not be offered
+  // while the screen shows anything else.
+  const hasUnsavedChanges =
+    saveState.kind === 'dirty' ||
+    saveState.kind === 'saving' ||
+    saveState.kind === 'failed' ||
+    unsavedFromEarlierVisit
 
   const back = (
     <nav className={styles.nav}>
@@ -200,6 +211,15 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         // rather than a trip to the roster. Ready branch only -- an action that
         // changes who is scored has no business beside an unread check-in.
         <EndClientPanel client={client} hasCheckin={stored != null} onPaused={onBack} period={period} />
+      )}
+      {stored?.suggested_at != null && (
+        <SuggestionBanner
+          canConfirm={can(profile.role, 'edit_scores')}
+          clientId={client.id}
+          hasUnsavedChanges={hasUnsavedChanges}
+          period={period}
+          suggestedAt={stored.suggested_at}
+        />
       )}
 
       <div className={styles.totals}>

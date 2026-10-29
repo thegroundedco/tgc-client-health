@@ -43,6 +43,9 @@ export type UseBoard = {
   scores: Map<number, BoardScore>
   // Members of the month who have submitted: the N of the progress line.
   submitted: number
+  // Members of the month whose check-in is an unreviewed AI suggestion; counted
+  // over the same set as submitted, so the two numbers on one line agree.
+  toReview: number
   // The denominator of the progress line, and deliberately NOT clients.length:
   // it is the count of the month's members. See the count below.
   activeTotal: number
@@ -189,12 +192,15 @@ export function useBoard(period: string): UseBoard {
   // nothing else -- M is the check-ins owed this month, N the ones submitted.
   const members = boardMembers(clients, period, checkins)
   let submitted = 0
+  let toReview = 0
   for (const client of clients) {
     if (!members.has(client.id)) continue
-    if (checkins.get(client.id)?.submitted_at != null) submitted += 1
+    const checkin = checkins.get(client.id)
+    if (checkin?.submitted_at != null) submitted += 1
+    if (checkin?.suggested_at != null) toReview += 1
   }
   const activeTotal = members.size
 
   // A manual reload has nothing to be cancelled by, so it uses the default.
-  return { status, loadError, clients, checkins, scores, submitted, activeTotal, members, reload: () => void load() }
+  return { status, loadError, clients, checkins, scores, submitted, toReview, activeTotal, members, reload: () => void load() }
 }

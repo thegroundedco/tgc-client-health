@@ -59,6 +59,36 @@ const bars = () => screen.getAllByTestId('bucket-bar')
 const nameButton = () => screen.getByRole('button', { name: /Polar Divide/ })
 
 describe('a client card', () => {
+  const SUGGESTED_ROW = {
+    client_id: 7,
+    submitted_at: '2026-08-21T17:04:00.000Z',
+    submitted_by: ME,
+    suggested_at: null as string | null,
+    comm_score: 4,
+    growth_score: 4,
+    fin_score: 4,
+    rel_score: 4,
+    del_score: 4,
+    adv_score: 4,
+  }
+
+  it('marks a suggested check-in for review, and still shows its score', () => {
+    renderCard({
+      checkin: { ...SUGGESTED_ROW, suggested_at: '2026-10-29T10:00:00Z' },
+      score: { client_id: 7, overall_score: 4, advocacy_applies: true },
+    })
+    expect(screen.getByText('Suggested \u2014 review')).toBeTruthy()
+    expect(screen.getByTestId('total').textContent).toBe('4.00')
+  })
+
+  it('does not mark a reviewed check-in', () => {
+    renderCard({
+      checkin: { ...SUGGESTED_ROW, suggested_at: null },
+      score: { client_id: 7, overall_score: 4, advocacy_applies: true },
+    })
+    expect(screen.queryByText('Suggested \u2014 review')).toBeNull()
+  })
+
   it('shows an em dash for the total when there is no check-in', () => {
     renderCard({ checkin: null, score: null })
 
@@ -74,7 +104,7 @@ describe('a client card', () => {
       checkin: {
         client_id: 7,
         submitted_at: '2026-08-21T17:04:00.000Z',
-        submitted_by: ME,
+        submitted_by: ME, suggested_at: null,
         comm_score: 5,
         growth_score: 4,
         fin_score: 4,
@@ -99,7 +129,7 @@ describe('a client card', () => {
       checkin: {
         client_id: 7,
         submitted_at: null,
-        submitted_by: null,
+        submitted_by: null, suggested_at: null,
         comm_score: 5,
         growth_score: 1,
         fin_score: null,
@@ -133,7 +163,7 @@ describe('a client card', () => {
         rel_score: 5,
         client_id: 7,
         submitted_at: null,
-        submitted_by: null,
+        submitted_by: null, suggested_at: null,
       },
       score: { client_id: 7, overall_score: null, advocacy_applies: true },
     })
@@ -233,7 +263,7 @@ describe('a client card', () => {
     // why Score all 3s needed a stacking rule, and why nothing should need one
     // again.
     renderCard({
-      checkin: { client_id: 7, submitted_at: null, submitted_by: null, comm_score: 3 },
+      checkin: { client_id: 7, submitted_at: null, submitted_by: null, suggested_at: null, comm_score: 3 },
       score: { client_id: 7, overall_score: null, advocacy_applies: true },
     })
     expect(screen.getAllByRole('button')).toHaveLength(1)
@@ -247,7 +277,7 @@ describe('a client card', () => {
       checkin: {
         client_id: 1,
         submitted_at: null,
-        submitted_by: null,
+        submitted_by: null, suggested_at: null,
         comm_score: 4,
         growth_score: 3,
         fin_score: 5,
@@ -265,7 +295,7 @@ describe('a client card', () => {
   it('draws five bars and a note for a client inside 90 days', () => {
     renderCard({
       client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-08-01', ended_on: null },
-      checkin: { client_id: 1, submitted_at: null, submitted_by: null, comm_score: 4 },
+      checkin: { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, comm_score: 4 },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: false },
     })
     expect(screen.getAllByTestId('bucket-bar')).toHaveLength(5)
@@ -278,7 +308,7 @@ describe('a client card', () => {
       checkin: {
         client_id: 1,
         submitted_at: null,
-        submitted_by: null,
+        submitted_by: null, suggested_at: null,
         comm_score: 4,
         growth_score: 3,
         fin_score: 5,
@@ -296,7 +326,7 @@ describe('a client card', () => {
   it('draws a bar for an Advocacy score of 1', () => {
     renderCard({
       client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
-      checkin: { client_id: 1, submitted_at: null, submitted_by: null, adv_score: 1 },
+      checkin: { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, adv_score: 1 },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: true },
     })
     const advocacy = screen.getAllByTestId('bucket-bar')[5]
@@ -308,7 +338,7 @@ describe('a client card', () => {
   it('says not scored for a null bucket', () => {
     renderCard({
       client: { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
-      checkin: { client_id: 1, submitted_at: null, submitted_by: null, adv_score: null },
+      checkin: { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, adv_score: null },
       score: { client_id: 1, overall_score: 3.5, advocacy_applies: true },
     })
     const advocacy = screen.getAllByTestId('bucket-bar')[5]
@@ -317,7 +347,7 @@ describe('a client card', () => {
 
   it('shows the overall from the view, to two decimals, out of 5', () => {
     renderCard({
-      checkin: { client_id: 7, submitted_at: null, submitted_by: null },
+      checkin: { client_id: 7, submitted_at: null, submitted_by: null, suggested_at: null },
       score: { client_id: 7, overall_score: 3.5, advocacy_applies: true },
     })
     expect(screen.getByTestId('total').textContent).toBe('3.50')
@@ -339,7 +369,7 @@ describe('a client card', () => {
   // out of 25. A card reading the old thresholds would call 3.50 healthy.
   it('bands on the 1-5 thresholds', () => {
     renderCard({
-      checkin: { client_id: 7, submitted_at: null, submitted_by: null },
+      checkin: { client_id: 7, submitted_at: null, submitted_by: null, suggested_at: null },
       score: { client_id: 7, overall_score: 3.5, advocacy_applies: true },
     })
     expect(screen.getByText('Watch')).not.toBeNull()
@@ -424,7 +454,7 @@ describe('an archived client card', () => {
       checkin: {
         client_id: 8,
         submitted_at: '2026-08-21T17:04:00.000Z',
-        submitted_by: ME,
+        submitted_by: ME, suggested_at: null,
         comm_score: 5,
         growth_score: 4,
         fin_score: 4,
