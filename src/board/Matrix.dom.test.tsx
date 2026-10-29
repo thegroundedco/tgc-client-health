@@ -23,6 +23,7 @@ function checkin(id: number, scores: Partial<CardCheckin> = {}): CardCheckin {
     client_id: id,
     submitted_at: null,
     submitted_by: null,
+    suggested_at: null,
     comm_score: null,
     growth_score: null,
     fin_score: null,
@@ -64,6 +65,28 @@ function renderMatrix(given: Given = {}) {
 
 const cells = () => screen.getAllByTestId('matrix-cell')
 const averages = () => screen.getAllByTestId('matrix-average')
+
+describe('suggested check-ins in the matrix', () => {
+  it('marks a row whose check-in is an unreviewed suggestion, with a full sentence for assistive tech', () => {
+    renderMatrix({
+      clients: [client(1, 'Babaloo'), client(2, 'Colorfil')],
+      checkins: [
+        [1, checkin(1, { suggested_at: '2026-10-29T10:00:00Z' })],
+        [2, checkin(2, { suggested_at: null })],
+      ],
+    })
+    const marks = screen.getAllByTestId('matrix-suggested')
+    expect(marks).toHaveLength(1)
+    expect(marks[0].textContent).toContain('Suggested, not yet reviewed')
+    const row = marks[0].closest('tr')
+    expect(row?.textContent).toContain('Babaloo')
+  })
+
+  it('shows no mark when nothing is suggested', () => {
+    renderMatrix({ checkins: [[1, checkin(1)]] })
+    expect(screen.queryByTestId('matrix-suggested')).toBeNull()
+  })
+})
 
 describe('the matrix table', () => {
   it('is a real table with a caption naming the month', () => {

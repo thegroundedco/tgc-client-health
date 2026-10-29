@@ -33,6 +33,7 @@ function checkin(id: number, scores: Partial<CardCheckin> = {}): CardCheckin {
     client_id: id,
     submitted_at: null,
     submitted_by: null,
+    suggested_at: null,
     comm_score: null,
     growth_score: null,
     fin_score: null,

@@ -65,6 +65,13 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
             signal: teal against warm red measures 1.76:1, so any two bands are
             indistinguishable to a colour-blind viewer. Parent spec §9.3. */}
         <span className={bandClassName(band)}>{BAND_LABELS[band]}</span>
+        {/* Spec 2026-10-29: an AI suggestion nobody has reviewed. The score
+            still shows and counts; this says nobody has looked yet. */}
+        {checkin?.suggested_at != null && (
+          <span className="status-pill" data-testid="card-suggested">
+            Suggested — review
+          </span>
+        )}
         {/* Only when it is not active. Eleven identical pills reading ACTIVE
             would be noise on the screen whose whole job is the active roster,
             so the default case is the unmarked one. */}

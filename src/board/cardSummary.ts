@@ -45,6 +45,8 @@ export type CardCheckin = {
   client_id: number
   submitted_at: string | null
   submitted_by: string | null
+  // Spec 2026-10-29: set while an AI suggestion awaits review.
+  suggested_at: string | null
   comm_score?: number | null
   growth_score?: number | null
   fin_score?: number | null
@@ -68,6 +70,7 @@ export const CHECKIN_COLUMNS = [
   'client_id',
   'submitted_at',
   'submitted_by',
+  'suggested_at',
   ...ALL_QUESTIONS,
   ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket]),
 ].join(', ')
@@ -121,9 +124,10 @@ export function cardFooter(
 // read "0 of 10 check-ins submitted this month" directly under the heading
 // "July 2026", while all ten August check-ins were in fact submitted. A count
 // that names the wrong month is worse than no count, because it is actionable.
-export function progressLine(submitted: number, total: number, period: string): string {
+export function progressLine(submitted: number, total: number, period: string, toReview = 0): string {
   const month = formatPeriod(period)
   if (total === 0) return `Nobody is on the board for ${month}`
-  if (submitted === total) return `All ${total} check-ins submitted for ${month}`
-  return `${submitted} of ${total} check-ins submitted for ${month}`
+  const review = toReview > 0 ? ` · ${toReview} to review` : ''
+  if (submitted === total) return `All ${total} check-ins submitted for ${month}${review}`
+  return `${submitted} of ${total} check-ins submitted for ${month}${review}`
 }

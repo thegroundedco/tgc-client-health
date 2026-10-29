@@ -222,7 +222,7 @@ export function Board({ profile, onEditClient }: Props) {
             empty states cannot drift apart in wording. activeTotal, not
             visible.length: this line is about the roster, not about what the
             toggle happens to be showing. */}
-        <h2 className="t-header">{progressLine(board.submitted, board.activeTotal, period)}</h2>
+        <h2 className="t-header">{progressLine(board.submitted, board.activeTotal, period, board.toReview)}</h2>
         {/* Only when the roster itself is empty. With clients on the roster
             and none on this month's board, "add one" is wrong: the month is
             empty, not the roster, and the archive toggle below is the way to
@@ -279,7 +279,7 @@ export function Board({ profile, onEditClient }: Props) {
             check-in, so counting one here would make this sentence false, and
             pressing the toggle must not change what it says. */}
         <p className="t-caption" role="status">
-          {progressLine(board.submitted, board.activeTotal, period)}
+          {progressLine(board.submitted, board.activeTotal, period, board.toReview)}
         </p>
         {archiveToggle}
         {viewToggle}
