@@ -257,9 +257,20 @@ export function useCheckin(
           changed = true
         }
       }
-      if (changed) applyEdit({ ...draft, answers })
+      if (!changed) return
+      // NOT applyEdit: no writeDraft and no setDraftPersisted. A fill is not
+      // something the person typed. Persisting it on mere open would leave a
+      // local draft that differs from the database, win on the next load, claim
+      // "earlier visit" changes nobody made, and let Save overwrite newer
+      // database answers. The first real click or keystroke persists the whole
+      // form through applyEdit, as before; leaving untouched discards the fill
+      // and the next visit fills again from current data. 'edited' still
+      // dispatches so the screen reads as unsaved.
+      setDraft({ ...draft, answers })
+      dispatch({ type: 'edited' })
+      setUnsavedFromEarlierVisit(false)
     },
-    [draft, applyEdit],
+    [draft],
   )
 
   const setNotes = useCallback(

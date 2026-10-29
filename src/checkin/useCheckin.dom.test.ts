@@ -59,6 +59,7 @@ vi.mock('../lib/supabase', () => ({
 }))
 
 import { useCheckin } from './useCheckin'
+import { readDraft } from './draftCache'
 
 const PROFILE: Profile = {
   id: 'profile-1',
@@ -424,5 +425,39 @@ describe('useCheckin: setAnswers', () => {
     expect(result.current.saveState.kind).toBe('clean')
     act(() => result.current.setAnswers({}))
     expect(result.current.saveState.kind).toBe('clean')
+  })
+
+  // F1/F2 (final review): a fill is not something the person typed.
+  it('marks the form dirty but writes no local draft', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswers({ fin_rack_rate: 1, fin_rate_increased: 3 }))
+    expect(result.current.saveState.kind).toBe('dirty')
+    expect(readDraft(1, '2026-08-01')).toBeNull()
+  })
+
+  it('a fill-only visit leaves no "earlier visit" claim on the next open', async () => {
+    const client = { id: 1, name: 'Acme', started_on: null }
+    const first = renderCheckin({ client })
+    await waitFor(() => expect(first.result.current.status).toBe('ready'))
+    act(() => first.result.current.setAnswers({ fin_rack_rate: 1 }))
+    first.unmount()
+    const second = renderCheckin({ client })
+    await waitFor(() => expect(second.result.current.status).toBe('ready'))
+    expect(second.result.current.unsavedFromEarlierVisit).toBe(false)
+    expect(second.result.current.draft.answers.fin_rack_rate).toBeUndefined()
+  })
+
+  it('a fill plus one real edit persists the whole form', async () => {
+    const client = { id: 1, name: 'Acme', started_on: null }
+    const first = renderCheckin({ client })
+    await waitFor(() => expect(first.result.current.status).toBe('ready'))
+    act(() => first.result.current.setAnswers({ fin_rack_rate: 1 }))
+    act(() => first.result.current.setAnswer('fin_rate_increased', 5))
+    first.unmount()
+    const second = renderCheckin({ client })
+    await waitFor(() => expect(second.result.current.status).toBe('ready'))
+    expect(second.result.current.unsavedFromEarlierVisit).toBe(true)
+    expect(second.result.current.draft.answers.fin_rack_rate).toBe(1)
   })
 })
