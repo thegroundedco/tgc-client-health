@@ -96,7 +96,7 @@ describe('a choice row in a real DOM', () => {
   describe('a question carrying its own three words', () => {
     const RATE: Question = {
       key: 'fin_rate_increased',
-      prompt: 'Rate over the last 90 days.',
+      prompt: 'Rate vs last month.',
       kind: 'choice',
       options: RATE_OPTIONS,
     }
@@ -107,7 +107,7 @@ describe('a choice row in a real DOM', () => {
         ['1', '3', '5'],
       )
       expect(screen.getByLabelText('Decreased')).toBeTruthy()
-      expect(screen.getByLabelText('Break even')).toBeTruthy()
+      expect(screen.getByLabelText('No change')).toBeTruthy()
       expect(screen.getByLabelText('Increased')).toBeTruthy()
       // The default words must not leak onto it.
       expect(screen.queryByLabelText('Unsure')).toBeNull()
@@ -115,13 +115,13 @@ describe('a choice row in a real DOM', () => {
 
     it('reads last month in the question\'s own words', () => {
       // The failure this prevents is a wrong word, not a missing one: a stored
-      // 3 printed as "Unsure" on a question whose 3 means "Break even" is a
+      // 3 printed as "Unsure" on a question whose 3 means "No change" is a
       // sentence that looks fine and says something else.
       render(<ChoiceRow {...props({ question: RATE, lastValue: 3 })} />)
       // Read off the "Last month:" line itself. A page-wide text query would
-      // find "Break even" on the radio too and pass without the line ever
+      // find "No change" on the radio too and pass without the line ever
       // rendering.
-      expect(screen.getByText('Last month:').textContent).toBe('Last month: Break even')
+      expect(screen.getByText('Last month:').textContent).toBe('Last month: No change')
     })
 
     it('anchors Clear\'s focus to THIS question\'s first option', () => {
