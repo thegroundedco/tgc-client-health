@@ -35,10 +35,13 @@ describe('the suggested check-ins migration', () => {
   })
 
   it('backfills only untouched AI rows, from their creation time', () => {
-    const update = statement(sql, /update public\.checkins/)
-    expect(update).toContain('set suggested_at = created_at')
-    expect(update).toContain("notes like 'AI-suggested:%'")
-    expect(update).toContain("updated_at <= created_at + interval '1 minute'")
+    expect(statement(sql, /update public\.checkins/)).toBe(
+      "update public.checkins set suggested_at = created_at where notes like 'AI-suggested:%' and updated_at <= created_at + interval '1 minute';",
+    )
+  })
+
+  it('contains exactly one update of public.checkins', () => {
+    expect(sql.match(/update public\.checkins/gi)?.length ?? 0).toBe(1)
   })
 
   it('adds no policy, grant or constraint', () => {
