@@ -392,3 +392,37 @@ describe('useCheckin: submit', () => {
     expect(result.current.saveState.kind).toBe('saved')
   })
 })
+
+describe('useCheckin: setAnswers', () => {
+  // Both keys in ONE act(): were this two sequential setAnswer calls, each would
+  // start from the same `draft` and the second would drop the first.
+  it('fills several blank answers in one edit, and both survive', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswers({ fin_rack_rate: 1, fin_rate_increased: 3 }))
+    expect(result.current.draft.answers.fin_rack_rate).toBe(1)
+    expect(result.current.draft.answers.fin_rate_increased).toBe(3)
+  })
+
+  it('never overwrites an answer already in the form, and dispatches no edit when nothing changes', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('fin_rack_rate', 5))
+    // Back to a clean save state is not reachable from here, so compare the
+    // draft and save state before and after instead.
+    const before = result.current.saveState
+    const draftBefore = result.current.draft
+    act(() => result.current.setAnswers({ fin_rack_rate: 1 }))
+    expect(result.current.draft.answers.fin_rack_rate).toBe(5)
+    expect(result.current.draft).toBe(draftBefore)
+    expect(result.current.saveState).toBe(before)
+  })
+
+  it('leaves saveState clean when there is nothing to fill', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.saveState.kind).toBe('clean')
+    act(() => result.current.setAnswers({}))
+    expect(result.current.saveState.kind).toBe('clean')
+  })
+})

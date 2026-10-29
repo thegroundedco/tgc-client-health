@@ -91,6 +91,7 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
     draftPersisted: true,
     unsavedFromEarlierVisit: false,
     setAnswer: vi.fn(),
+    setAnswers: vi.fn(),
     setNotes: vi.fn(),
     reload: vi.fn(),
     submit: vi.fn(),

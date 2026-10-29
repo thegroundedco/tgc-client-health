@@ -135,6 +135,7 @@ function defaultHook(): UseCheckin {
     draftPersisted: true,
     unsavedFromEarlierVisit: false,
     setAnswer: () => {},
+    setAnswers: () => {},
     setNotes: () => {},
     reload: () => {},
     submit: () => {},
