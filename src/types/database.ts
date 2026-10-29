@@ -89,6 +89,7 @@ export type Database = {
           rel_score: number | null
           submitted_at: string | null
           submitted_by: string | null
+          suggested_at: string | null
           updated_at: string
         }
         Insert: {
@@ -132,6 +133,7 @@ export type Database = {
           rel_score?: number | null
           submitted_at?: string | null
           submitted_by?: string | null
+          suggested_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -175,6 +177,7 @@ export type Database = {
           rel_score?: number | null
           submitted_at?: string | null
           submitted_by?: string | null
+          suggested_at?: string | null
           updated_at?: string
         }
         Relationships: [
