@@ -17,6 +17,7 @@ describe('runState', () => {
   })
   it('requested is running until 30 minutes, then failed', () => {
     expect(runState(base({}), at(15, 10, 59))).toBe('running') // 29:59
+    expect(runState(base({}), at(15, 11, 0))).toBe('failed') // exactly 30:00
     expect(runState(base({}), at(15, 11, 1))).toBe('failed') // 30:01
   })
 })

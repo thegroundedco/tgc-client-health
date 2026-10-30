@@ -6,6 +6,8 @@ import type { AiRun } from './runLine'
 const db = vi.hoisted(() => ({
   rows: {} as Record<string, unknown[]>,
   selects: 0,
+  failLoads: false,
+  gate: null as null | Promise<void>,
   periods: [] as unknown[],
   order: null as unknown,
   limit: null as unknown,
@@ -21,7 +23,14 @@ vi.mock('../lib/supabase', () => ({
         select: () => chain,
         eq: (_c: string, v: string) => { period = v; db.periods.push(v); return chain },
         order: (...a: unknown[]) => { db.order = a; return chain },
-        limit: async (n: number) => { db.limit = n; db.selects += 1; return { data: db.rows[period] ?? [], error: null } },
+        limit: async (n: number) => {
+          db.limit = n; db.selects += 1
+          const gate = db.gate
+          db.gate = null
+          if (gate) await gate
+          if (db.failLoads) return { data: null, error: { message: 'down' } }
+          return { data: db.rows[period] ?? [], error: null }
+        },
       }
       return chain
     },
@@ -42,7 +51,7 @@ const body = { period: '2026-10-01', client_ids: null, overwrite_client_ids: [],
 describe('useAiRun', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    db.rows = {}; db.selects = 0; db.periods = []
+    db.rows = {}; db.selects = 0; db.failLoads = false; db.gate = null; db.periods = []
     db.invoke = async () => ({ data: { run_id: 1 }, error: null })
   })
   afterEach(() => vi.useRealTimers())
@@ -161,5 +170,51 @@ describe('useAiRun', () => {
     await act(async () => { r = await result.current.start(body) })
     expect(r).toMatchObject({ ok: false })
     expect((r as { message: string }).message).toMatch(/try again/i)
+  })
+
+  it('a failed reload after a successful start still shows running and polls', async () => {
+    const { result } = renderHook(() => useAiRun('2026-10-01', () => {}))
+    await flush()
+    db.failLoads = true
+    let r: unknown
+    await act(async () => { r = await result.current.start(body) })
+    expect(r).toEqual({ ok: true })
+    expect(result.current.state).toBe('running')
+    db.failLoads = false
+    db.rows['2026-10-01'] = [run({ id: 9, status: 'done', summary: 'ok' })]
+    const onSelects = db.selects
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(db.selects).toBeGreaterThan(onSelects)
+    expect(result.current.run?.id).toBe(9)
+    expect(result.current.state).toBe('done')
+  })
+
+  it.each([false, true])('a run crossing 30 minutes goes failed with unchanged rows (polls failing: %s)', async (fail) => {
+    db.rows['2026-10-01'] = [run({ requested_at: new Date(Date.now() - 29 * 60_000).toISOString() })]
+    const onFinished = vi.fn()
+    const { result } = renderHook(() => useAiRun('2026-10-01', onFinished))
+    await flush()
+    expect(result.current.state).toBe('running')
+    db.failLoads = fail
+    await act(async () => { await vi.advanceTimersByTimeAsync(61_000) })
+    expect(result.current.state).toBe('failed')
+    expect(onFinished).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(120_000) })
+    expect(onFinished).toHaveBeenCalledTimes(1)
+  })
+
+  it('a slow response for the old period does not overwrite the new one', async () => {
+    db.rows['2026-10-01'] = [run({ id: 1 })]
+    db.rows['2026-09-01'] = [run({ id: 2, period: '2026-09-01', status: 'done', summary: 'b' })]
+    let release!: () => void
+    db.gate = new Promise<void>((r) => { release = r })
+    const { result, rerender } = renderHook(({ p }) => useAiRun(p, () => {}), { initialProps: { p: '2026-10-01' } })
+    rerender({ p: '2026-09-01' })
+    await flush()
+    expect(result.current.run?.id).toBe(2)
+    release()
+    await flush()
+    expect(result.current.run?.id).toBe(2)
+    expect(result.current.run?.period).toBe('2026-09-01')
   })
 })

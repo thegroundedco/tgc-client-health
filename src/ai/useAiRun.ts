@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatRunTime, runState, type AiRun } from './runLine'
+import { formatRunTime, runState, STALE_AFTER_MS, type AiRun } from './runLine'
 
 export type { AiRun }
 
@@ -40,6 +40,7 @@ async function failureMessage(error: unknown): Promise<string> {
 export function useAiRun(period: string, onFinished: () => void) {
   const [loaded, setLoaded] = useState<{ period: string; run: AiRun | null } | null>(null)
   const [starting, setStarting] = useState(false)
+  const [, setTick] = useState(0)
   const onFinishedRef = useRef(onFinished)
   useEffect(() => {
     onFinishedRef.current = onFinished
@@ -49,15 +50,17 @@ export function useAiRun(period: string, onFinished: () => void) {
     periodRef.current = period
   })
 
-  const load = useCallback(async (forPeriod: string) => {
+  const load = useCallback(async (forPeriod: string): Promise<boolean> => {
     const { data, error } = await supabase
       .from('ai_runs')
       .select('*')
       .eq('period', forPeriod)
       .order('requested_at', { ascending: false })
       .limit(1)
-    if (error || periodRef.current !== forPeriod) return
+    if (error) return false
+    if (periodRef.current !== forPeriod) return true
     setLoaded({ period: forPeriod, run: (data?.[0] as AiRun | undefined) ?? null })
+    return true
   }, [])
 
   useEffect(() => {
@@ -83,13 +86,37 @@ export function useAiRun(period: string, onFinished: () => void) {
     return () => clearInterval(id)
   }, [state, period, load])
 
+  // A run that is still 'requested' goes stale by the clock, not by a row
+  // change, so re-evaluate once when it crosses the threshold.
+  const requestedAt = run?.requested_at
+  useEffect(() => {
+    if (state !== 'running' || !requestedAt) return
+    const wait = new Date(requestedAt).getTime() + STALE_AFTER_MS - Date.now()
+    const id = setTimeout(() => setTick((t) => t + 1), Math.max(0, wait))
+    return () => clearTimeout(id)
+  }, [state, requestedAt])
+
   const start = useCallback(
     async (body: StartBody): Promise<StartResult> => {
       setStarting(true)
       try {
         const { error } = await supabase.functions.invoke('run-ai-suggestions', { body })
         if (error) return { ok: false, message: await failureMessage(error) }
-        await load(body.period)
+        const reloaded = await load(body.period)
+        if (!reloaded && periodRef.current === body.period) {
+          // The server accepted the run but we cannot see it yet. Show it as
+          // running so polling starts; the next successful load replaces it.
+          setLoaded({
+            period: body.period,
+            run: {
+              id: -1, period: body.period, client_ids: body.client_ids,
+              overwrite_client_ids: body.overwrite_client_ids, source: body.source,
+              requested_by: null, requested_by_name: null,
+              requested_at: new Date().toISOString(), session_url: null,
+              finished_at: null, status: 'requested', summary: null,
+            },
+          })
+        }
         return { ok: true }
       } catch {
         return { ok: false, message: GENERIC }

@@ -2,14 +2,14 @@ import type { Database } from '../types/database'
 
 export type AiRun = Database['public']['Tables']['ai_runs']['Row']
 
-const STALE_AFTER_MS = 30 * 60 * 1000
+export const STALE_AFTER_MS = 30 * 60 * 1000
 
 export function runState(run: AiRun | null, now: Date): 'idle' | 'running' | 'failed' | 'done' {
   if (!run) return 'idle'
   if (run.status === 'done') return 'done'
   if (run.status === 'failed') return 'failed'
   const age = now.getTime() - new Date(run.requested_at).getTime()
-  return age > STALE_AFTER_MS ? 'failed' : 'running'
+  return age >= STALE_AFTER_MS ? 'failed' : 'running'
 }
 
 export function formatRunTime(iso: string): string {
