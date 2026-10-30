@@ -16,6 +16,7 @@ import { SuggestionBanner } from './SuggestionBanner'
 import { RevertButton } from './RevertButton'
 import { RunClientButton } from '../ai/RunClientButton'
 import { parseAiSuggestion } from './aiSuggestion'
+import { clearDraft } from './draftCache'
 import type { Answers } from '../lib/scoreV2'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
@@ -179,6 +180,20 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     saveState.kind === 'failed' ||
     unsavedFromEarlierVisit
 
+  // A run or revert rewrites the stored row. A local draft that matched the OLD
+  // row (edited and edited back) would otherwise win on reload and show the old
+  // scores as "unsaved from an earlier visit", hiding the suggestion banner.
+  const reloadFresh = () => {
+    clearDraft(client.id, period)
+    checkin.reload()
+  }
+  // A run that finishes while the person has unsaved edits must not reload over
+  // them; the run line still shows the summary.
+  const onRunFinished = () => {
+    if (hasUnsavedChanges) return
+    reloadFresh()
+  }
+
   const back = (
     <nav className={styles.nav}>
       <button className="button button--quiet" type="button" onClick={onBack}>
@@ -262,7 +277,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           clientId={client.id}
           hasUnsavedChanges={hasUnsavedChanges}
           manual={stored != null && stored.suggested_at == null}
-          onFinished={checkin.reload}
+          onFinished={onRunFinished}
           period={period}
         />
       )}
@@ -273,7 +288,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         clientId={client.id}
         current={(stored ?? {}) as Answers}
         hasUnsavedChanges={hasUnsavedChanges}
-        onReverted={checkin.reload}
+        onReverted={reloadFresh}
         period={period}
         profileId={profile.id}
         suggestedAt={stored ? stored.suggested_at : null}

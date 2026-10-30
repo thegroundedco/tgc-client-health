@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
+import { readDraft, writeDraft } from './draftCache'
 
 // The defect this file exists to catch, stated as the scenario the owner hit:
 // a viewer opened a check-in, changed every score, pressed submit, and only
@@ -41,12 +42,32 @@ vi.mock('./useConfirmSuggestion', () => ({
 
 // The run and revert controls mounted in CheckIn pull in lib/supabase through
 // useAiRun and useRevertSuggestion; stubbed idle here, tested in their own files.
+const runs = vi.hoisted(() => ({ onFinished: (() => {}) as () => void }))
 vi.mock('../ai/useAiRun', () => ({
-  useAiRun: () => ({ run: null, state: 'idle', start: async () => ({ ok: true }), starting: false }),
+  useAiRun: (_period: string, onFinished: () => void) => {
+    runs.onFinished = onFinished
+    return { run: null, state: 'idle', start: async () => ({ ok: true }), starting: false }
+  },
 }))
-vi.mock('./useRevertSuggestion', () => ({
-  useRevertSuggestion: () => ({ state: { kind: 'idle' }, revert: async () => {} }),
+const reverts = vi.hoisted(() => ({
+  revert: vi.fn(async (_args: unknown) => {}),
+  onSuccess: null as null | (() => void),
 }))
+vi.mock('./useRevertSuggestion', async () => {
+  const { useState } = await import('react')
+  return {
+    useRevertSuggestion: () => {
+      const [state, setState] = useState<{ kind: string }>({ kind: 'idle' })
+      return {
+        state,
+        revert: async (args: unknown) => {
+          await reverts.revert(args)
+          setState({ kind: 'reverted' })
+        },
+      }
+    },
+  }
+})
 
 // Finance suggestion reads Supabase; stubbed, controllable per test.
 const finance = vi.hoisted(() => ({ current: null as unknown }))
@@ -562,5 +583,65 @@ describe('CheckIn, run and revert controls', () => {
     const flagged = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
     renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' } })
     expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
+  })
+
+  it('revert receives the STORED row answers as current, not the draft', async () => {
+    const stored = { id: 'c1', suggested_at: null, ai_suggestion: ai, fin_rack_rate: 5 } as unknown as UseCheckin['stored']
+    renderAs('account_manager', {
+      stored,
+      saveState: { kind: 'clean' },
+      draft: { answers: { fin_rack_rate: 1 }, notes: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Revert to AI suggested scores' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+    await waitFor(() => expect(reverts.revert).toHaveBeenCalledTimes(1))
+    expect((reverts.revert.mock.calls[0][0] as { current: unknown }).current).toBe(stored)
+  })
+
+  describe('reloading after the stored row is rewritten', () => {
+    const seedDraft = () => {
+      // A draft that matches the old row: edited, then edited back, never saved.
+      writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'old' })
+      expect(readDraft(CLIENT.id, PERIOD)).not.toBeNull()
+    }
+    const reloadSeesDraft = (overrides: Partial<UseCheckin>) => {
+      let seen: unknown = 'unset'
+      const reload = vi.fn(() => {
+        seen = readDraft(CLIENT.id, PERIOD)
+      })
+      renderAs('account_manager', { ...overrides, reload })
+      return { reload, seen: () => seen }
+    }
+    afterEach(() => {
+      window.localStorage.clear()
+    })
+
+    it('a successful revert clears the local draft before reloading', async () => {
+      seedDraft()
+      const stored = { id: 'c1', suggested_at: null, ai_suggestion: ai } as unknown as UseCheckin['stored']
+      const r = reloadSeesDraft({ stored, saveState: { kind: 'clean' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Revert to AI suggested scores' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+      await waitFor(() => expect(r.reload).toHaveBeenCalledTimes(1))
+      expect(r.seen()).toBeNull()
+    })
+
+    it('a finished run clears the local draft before reloading', () => {
+      seedDraft()
+      const stored = { id: 'c1', suggested_at: null } as unknown as UseCheckin['stored']
+      const r = reloadSeesDraft({ stored, saveState: { kind: 'clean' } })
+      act(() => runs.onFinished())
+      expect(r.reload).toHaveBeenCalledTimes(1)
+      expect(r.seen()).toBeNull()
+    })
+
+    it('a run that finishes over unsaved edits neither reloads nor clears the draft', () => {
+      seedDraft()
+      const stored = { id: 'c1', suggested_at: null } as unknown as UseCheckin['stored']
+      const r = reloadSeesDraft({ stored, saveState: { kind: 'dirty' } })
+      act(() => runs.onFinished())
+      expect(r.reload).not.toHaveBeenCalled()
+      expect(readDraft(CLIENT.id, PERIOD)).not.toBeNull()
+    })
   })
 })
