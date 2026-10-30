@@ -84,6 +84,7 @@ function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
     submitted_at: null,
     submitted_by: null,
     suggested_at: null,
+    ai_suggestion: null,
     created_at: '2026-08-01T00:00:00.000Z',
     updated_at: '2026-08-21T15:42:00.000Z',
     comm_constructive: null,

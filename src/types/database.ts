@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_runs: {
+        Row: {
+          client_ids: number[] | null
+          finished_at: string | null
+          id: number
+          overwrite_client_ids: number[]
+          period: string
+          requested_at: string
+          requested_by: string | null
+          requested_by_name: string | null
+          session_url: string | null
+          source: string
+          status: string
+          summary: string | null
+        }
+        Insert: {
+          client_ids?: number[] | null
+          finished_at?: string | null
+          id?: never
+          overwrite_client_ids?: number[]
+          period: string
+          requested_at?: string
+          requested_by?: string | null
+          requested_by_name?: string | null
+          session_url?: string | null
+          source: string
+          status?: string
+          summary?: string | null
+        }
+        Update: {
+          client_ids?: number[] | null
+          finished_at?: string | null
+          id?: never
+          overwrite_client_ids?: number[]
+          period?: string
+          requested_at?: string
+          requested_by?: string | null
+          requested_by_name?: string | null
+          session_url?: string | null
+          source?: string
+          status?: string
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_runs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       allowed_emails: {
         Row: {
           created_at: string
@@ -54,6 +107,7 @@ export type Database = {
           adv_reference_check: number | null
           adv_score: number | null
           adv_would_refer: number | null
+          ai_suggestion: Json | null
           client_id: number
           comm_consistent: number | null
           comm_constructive: number | null
@@ -98,6 +152,7 @@ export type Database = {
           adv_reference_check?: number | null
           adv_score?: number | null
           adv_would_refer?: number | null
+          ai_suggestion?: Json | null
           client_id: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -142,6 +197,7 @@ export type Database = {
           adv_reference_check?: number | null
           adv_score?: number | null
           adv_would_refer?: number | null
+          ai_suggestion?: Json | null
           client_id?: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -391,7 +447,7 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      can_run_ai_suggestions: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
