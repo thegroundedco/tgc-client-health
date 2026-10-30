@@ -34,6 +34,41 @@ export function RunMonthDialog({ period, clients, manual, onRun, onCancel }: Pro
   const [allClients, setAllClients] = useState(true)
   const [overwriting, setOverwriting] = useState<Set<number>>(() => new Set())
 
+  // Document-level, so Escape and Tab behave the same wherever focus is -- a
+  // click on the heading or padding must not strand the keyboard on <body>.
+  const cancelRef = useRef(onCancel)
+  useEffect(() => {
+    cancelRef.current = onCancel
+  })
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        cancelRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = ref.current
+      if (!dialog) return
+      const items = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')]
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (!dialog.contains(active) || (active === dialog && event.shiftKey)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+      } else if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
   }, [step])
@@ -64,13 +99,8 @@ export function RunMonthDialog({ period, clients, manual, onRun, onCancel }: Pro
         aria-labelledby={headingId}
         aria-modal="true"
         className={styles.dialog}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.stopPropagation()
-            onCancel()
-          }
-        }}
         ref={ref}
+        tabIndex={-1}
         role="dialog"
       >
         {step === 'scope' && (

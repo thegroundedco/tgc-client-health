@@ -114,11 +114,47 @@ describe('RunMonthDialog', () => {
     expect(onRun).not.toHaveBeenCalled()
   })
 
-  it('focus moves to the first button of each new step', async () => {
+  it('focus moves to the first button of each step, by name', async () => {
     const { user } = setup([1])
-    await user.click(screen.getByRole('button', { name: 'Yes, all clients' }))
-    const dialog = screen.getByRole('dialog')
-    expect(dialog.contains(document.activeElement)).toBe(true)
-    expect(document.activeElement?.tagName).toBe('BUTTON')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Yes, all clients' }))
+    await user.click(screen.getByRole('button', { name: 'No, let me choose' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Run' }))
+  })
+
+  it('Escape works after clicking the heading or the dialog padding', async () => {
+    const { onCancel, user } = setup()
+    await user.click(screen.getByRole('heading'))
+    await user.keyboard('{Escape}')
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('dialog'))
+    await user.keyboard('{Escape}')
+    expect(onCancel).toHaveBeenCalledTimes(2)
+  })
+
+  it('Escape works even when focus has gone to the page body', async () => {
+    const { onCancel, user } = setup()
+    ;(document.activeElement as HTMLElement).blur()
+    await user.keyboard('{Escape}')
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('Tab wraps last to first and Shift+Tab first to last', async () => {
+    const { user } = setup()
+    const yes = screen.getByRole('button', { name: 'Yes, all clients' })
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    cancel.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(yes)
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(cancel)
+  })
+
+  it('Tab cannot leave the dialog from the body either', async () => {
+    const { user } = setup()
+    ;(document.activeElement as HTMLElement).blur()
+    await user.tab()
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
   })
 })

@@ -898,6 +898,22 @@ describe('the Run AI suggested scores control', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('passes the board month and reload to the run hook, and follows the month select', async () => {
+    const reload = vi.fn()
+    givenAs('account_manager', { reload })
+    const calls = vi.mocked(useAiRun).mock.calls
+    expect(calls.at(-1)![0]).toBe(defaultPeriod())
+    expect(reload).not.toHaveBeenCalled()
+    calls.at(-1)![1]()
+    expect(reload).toHaveBeenCalledTimes(1)
+    const user = userEvent.setup()
+    const other = periodOptions().find((p) => p !== defaultPeriod())!
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Month' }), other)
+    expect(vi.mocked(useAiRun).mock.calls.at(-1)![0]).toBe(other)
+    vi.mocked(useAiRun).mock.calls.at(-1)![1]()
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
   it('offers the overwrite step for a manually scored member', async () => {
     vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
     givenAs('account_manager', { checkins: new Map([[2, SUBMITTED]]) })

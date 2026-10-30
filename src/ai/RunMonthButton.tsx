@@ -19,7 +19,9 @@ type Props = {
 export function RunMonthButton({ period, clients, manual, onFinished }: Props) {
   const { run, state, start, starting } = useAiRun(period, onFinished)
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Keyed by period so a message about one month never shows under another.
+  const [failure, setFailure] = useState<{ period: string; message: string } | null>(null)
+  const error = failure && failure.period === period ? failure.message : null
   const line = run ? runLine(run, new Date()) : null
 
   return (
@@ -29,7 +31,6 @@ export function RunMonthButton({ period, clients, manual, onFinished }: Props) {
           className="button"
           disabled={starting || clients.length === 0}
           onClick={() => {
-            setError(null)
             setOpen(true)
           }}
           type="button"
@@ -55,7 +56,7 @@ export function RunMonthButton({ period, clients, manual, onFinished }: Props) {
           onRun={(body) => {
             setOpen(false)
             void start(body).then((result) => {
-              if (!result.ok) setError(result.message)
+              setFailure(result.ok ? null : { period: body.period, message: result.message })
             })
           }}
           period={period}
