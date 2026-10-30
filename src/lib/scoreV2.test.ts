@@ -4,6 +4,7 @@ import {
   answeredCount,
   bandFor,
   bucketScore,
+  isComplete,
   overallScore,
   requiredQuestions,
   type Answers,
@@ -307,5 +308,26 @@ describe('the mean replaces yesNoScore without changing a number', () => {
 
   it('exports the choice values the control writes', () => {
     expect(CHOICE_OPTIONS.map((option) => option.value)).toEqual([NO, UNSURE, YES])
+  })
+})
+
+describe('isComplete', () => {
+  // First n required questions answered, so the count is exactly n.
+  function answered(n: number, applies: boolean): Answers {
+    return Object.fromEntries(requiredQuestions(applies).slice(0, n).map((key) => [key, 3]))
+  }
+
+  it('gate shut: true at 17, false at 16', () => {
+    expect(isComplete(answered(17, false), false)).toBe(true)
+    expect(isComplete(answered(16, false), false)).toBe(false)
+  })
+
+  it('gate open: true at 21, false at 20', () => {
+    expect(isComplete(answered(21, true), true)).toBe(true)
+    expect(isComplete(answered(20, true), true)).toBe(false)
+  })
+
+  it('gate open: 17 is not complete', () => {
+    expect(isComplete(answered(17, true), true)).toBe(false)
   })
 })

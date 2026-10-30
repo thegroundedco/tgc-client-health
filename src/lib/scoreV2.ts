@@ -72,3 +72,9 @@ export function answeredCount(answers: Answers, advocacyApplies: boolean): numbe
   }
   return count
 }
+
+// THE completeness rule: every required question answered. One definition so
+// submit and revert cannot disagree about what "complete" means.
+export function isComplete(answers: Answers, advocacyApplies: boolean): boolean {
+  return answeredCount(answers, advocacyApplies) === requiredQuestions(advocacyApplies).length
+}

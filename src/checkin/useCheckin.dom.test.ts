@@ -282,6 +282,17 @@ describe('useCheckin: submit', () => {
     expect(payload.adv_left_review).toBeNull()
   })
 
+  // ai_suggestion is written only by the AI routine; a DB trigger rejects any
+  // app write of it, so a save that included the key (even as null) would fail.
+  it('never sends ai_suggestion on save', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 5))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    expect(upsert.mock.calls[0][0]).not.toHaveProperty('ai_suggestion')
+  })
+
   // The smallest valid value is the one most at risk of being coerced away.
   // `1 ?? null` and `1 || null` happen to agree, but a stray `if (value)`
   // guard anywhere upstream of the payload would not: it would treat this No

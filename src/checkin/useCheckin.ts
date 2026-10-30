@@ -4,7 +4,7 @@ import { describeError } from '../lib/errorText'
 import { previousPeriod } from '../lib/month'
 import { ALL_QUESTIONS } from '../lib/buckets'
 import { advocacyApplies as gateApplies } from '../lib/gate'
-import { answeredCount, overallScore, requiredQuestions } from '../lib/scoreV2'
+import { answeredCount, isComplete, overallScore, requiredQuestions } from '../lib/scoreV2'
 import type { Profile } from '../auth/useProfile'
 import type { Database } from '../types/database'
 import { INITIAL_SAVE_STATE, saveReducer } from './saveState'
@@ -295,7 +295,7 @@ export function useCheckin(
       // Against the REQUIRED count, not 21. A gated-out check-in is complete at
       // 17, and marking it submitted only at 21 would make a complete check-in
       // permanently unsubmittable for every client inside their first 90 days.
-      const complete = answeredCount(draft.answers, applies) === required
+      const complete = isComplete(draft.answers, applies)
       const now = new Date().toISOString()
 
       // Every answer column is sent, including the unanswered ones as null, and
@@ -403,7 +403,7 @@ export function useCheckin(
     // things it actually reads -- clientId, period, lastPeriod (read by the
     // post-save score refresh above), the draft, applies, required and the
     // account -- change.
-  }, [clientId, period, lastPeriod, draft, profile.id, applies, required])
+  }, [clientId, period, lastPeriod, draft, profile.id, applies])
 
   return {
     status,
