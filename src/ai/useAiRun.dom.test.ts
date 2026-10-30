@@ -39,6 +39,7 @@ vi.mock('../lib/supabase', () => ({
 }))
 
 import { useAiRun } from './useAiRun'
+import { runLine } from './runLine'
 
 const run = (o: Partial<AiRun> = {}): AiRun => ({
   id: 1, period: '2026-10-01', client_ids: null, overwrite_client_ids: [], source: 'board',
@@ -180,6 +181,7 @@ describe('useAiRun', () => {
     await act(async () => { r = await result.current.start(body) })
     expect(r).toEqual({ ok: true })
     expect(result.current.state).toBe('running')
+    expect(runLine(result.current.run!, new Date())).toMatch(/started by you at /)
     db.failLoads = false
     db.rows['2026-10-01'] = [run({ id: 9, status: 'done', summary: 'ok' })]
     const onSelects = db.selects

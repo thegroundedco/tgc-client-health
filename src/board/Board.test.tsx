@@ -30,6 +30,11 @@ import styles from './Board.module.css'
 // the stubbed supabase client is what an unmocked useClients would call.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useBoard', () => ({ useBoard: vi.fn() }))
+// The run hook reads ai_runs through the (stubbed) client; the board's tests
+// only care what the button does with the state it is handed.
+vi.mock('../ai/useAiRun', () => ({
+  useAiRun: vi.fn(() => ({ run: null, state: 'idle', start: vi.fn(), starting: false })),
+}))
 
 // Mocked alongside useBoard, for the same reason: the board's revenue read
 // needs a seam so a test can assert what argument it was called with, without
@@ -58,6 +63,7 @@ vi.mock('../clients/useClients', () => ({
 import { Board } from './Board'
 import { useBoard } from './useBoard'
 import { useClientRates } from './useClientRates'
+import { useAiRun } from '../ai/useAiRun'
 import type { ClientRate } from './rateMath'
 import type { Role } from '../lib/capabilities'
 
@@ -167,8 +173,13 @@ const READY = {
 // would destructure `undefined` if that override survived into it.
 const NO_RATES = () => ({ status: 'ready' as const, rates: new Map<number, ClientRate>() })
 
+const IDLE_RUN = () =>
+  ({ run: null, state: 'idle', start: vi.fn(), starting: false }) as unknown as ReturnType<typeof useAiRun>
+
 afterEach(() => {
   document.body.innerHTML = ''
+  vi.mocked(useAiRun).mockReset()
+  vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
   vi.mocked(useBoard).mockReset()
   vi.mocked(useClientRates).mockReset()
   vi.mocked(useClientRates).mockImplementation(NO_RATES)
@@ -832,5 +843,68 @@ describe('when the revenue read fails', () => {
     givenAs('viewer')
 
     expect(screen.queryByTestId('rates-error')).toBeNull()
+  })
+})
+
+describe('the Run AI suggested scores control', () => {
+  const RUN_BUTTON = { name: 'Run AI suggested scores' }
+
+  it('is hidden from a viewer', () => {
+    vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
+    givenAs('viewer')
+    expect(screen.queryByRole('button', RUN_BUTTON)).toBeNull()
+  })
+
+  it.each(['account_manager', 'admin'] as const)('is shown to %s', (role) => {
+    vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
+    givenAs(role)
+    expect(screen.getByRole('button', RUN_BUTTON)).toBeTruthy()
+  })
+
+  it('is replaced by the running line while a run is in flight', () => {
+    const run = {
+      id: 1, period: defaultPeriod(), client_ids: null, overwrite_client_ids: [], source: 'board',
+      requested_by: 'u', requested_by_name: 'Josh', requested_at: new Date().toISOString(),
+      session_url: null, finished_at: null, status: 'requested', summary: null,
+    }
+    vi.mocked(useAiRun).mockReturnValue({ run, state: 'running', start: vi.fn(), starting: false } as unknown as ReturnType<typeof useAiRun>)
+    givenAs('account_manager')
+    expect(screen.queryByRole('button', RUN_BUTTON)).toBeNull()
+    expect(screen.getByText(/AI scoring running — started by Josh at /)).toBeTruthy()
+  })
+
+  it('keeps the button and shows the latest finished summary under it', () => {
+    const run = {
+      id: 1, period: defaultPeriod(), client_ids: null, overwrite_client_ids: [], source: 'board',
+      requested_by: 'u', requested_by_name: 'Josh', requested_at: new Date().toISOString(),
+      session_url: null, finished_at: new Date().toISOString(), status: 'done', summary: 'Scored 3 clients.',
+    }
+    vi.mocked(useAiRun).mockReturnValue({ run, state: 'done', start: vi.fn(), starting: false } as unknown as ReturnType<typeof useAiRun>)
+    givenAs('account_manager')
+    expect(screen.getByRole('button', RUN_BUTTON)).toBeTruthy()
+    expect(screen.getByText('Scored 3 clients.')).toBeTruthy()
+  })
+
+  it('asks the scope question for the members, and a failed start shows its message as an alert', async () => {
+    const start = vi.fn().mockResolvedValue({ ok: false, message: 'Nope, already running.' })
+    vi.mocked(useAiRun).mockReturnValue({ run: null, state: 'idle', start, starting: false } as unknown as ReturnType<typeof useAiRun>)
+    givenAs('account_manager')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', RUN_BUTTON))
+    expect(screen.getByRole('dialog', { name: `Run AI suggested scores for all 3 clients in ${formatPeriod(defaultPeriod())}?` })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Yes, all clients' }))
+    expect(start).toHaveBeenCalledWith({ period: defaultPeriod(), client_ids: null, overwrite_client_ids: [], source: 'board' })
+    expect((await screen.findByRole('alert')).textContent).toBe('Nope, already running.')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('offers the overwrite step for a manually scored member', async () => {
+    vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
+    givenAs('account_manager', { checkins: new Map([[2, SUBMITTED]]) })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', RUN_BUTTON))
+    await user.click(screen.getByRole('button', { name: 'Yes, all clients' }))
+    expect(screen.getByRole('checkbox', { name: 'Colorfil' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: 'Babaloo' })).toBeNull()
   })
 })

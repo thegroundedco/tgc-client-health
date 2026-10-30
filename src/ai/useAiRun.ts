@@ -111,7 +111,7 @@ export function useAiRun(period: string, onFinished: () => void) {
             run: {
               id: -1, period: body.period, client_ids: body.client_ids,
               overwrite_client_ids: body.overwrite_client_ids, source: body.source,
-              requested_by: null, requested_by_name: null,
+              requested_by: null, requested_by_name: 'you',
               requested_at: new Date().toISOString(), session_url: null,
               finished_at: null, status: 'requested', summary: null,
             },

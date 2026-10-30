@@ -4,6 +4,8 @@ import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
 import { CheckIn } from '../checkin/CheckIn'
 import { AddClientPanel } from '../clients/AddClientPanel'
+import { RunMonthButton } from '../ai/RunMonthButton'
+import { manualScored } from '../ai/manualScored'
 import { ClientCard } from './ClientCard'
 import { Matrix } from './Matrix'
 import { progressLine } from './cardSummary'
@@ -79,6 +81,7 @@ export function Board({ profile, onEditClient }: Props) {
   // `canSeeRates`, two names for one identical expression -- which reads as two
   // rules that happen to agree today and invites somebody to change one of them.
   const canManageClients = can(profile.role, 'manage_clients')
+  const canEditScores = can(profile.role, 'edit_scores')
   const { rates, status: ratesStatus } = useClientRates(canManageClients)
 
   // Split into a button and a panel on 2026-09-02, and the split is the point.
@@ -283,6 +286,14 @@ export function Board({ profile, onEditClient }: Props) {
         </p>
         {archiveToggle}
         {viewToggle}
+        {canEditScores && (
+          <RunMonthButton
+            clients={board.clients.filter((c) => board.members.has(c.id))}
+            manual={manualScored(board.members, board.checkins)}
+            onFinished={board.reload}
+            period={period}
+          />
+        )}
         {addClientButton && <div className={styles.addBar}>{addClientButton}</div>}
       </div>
 

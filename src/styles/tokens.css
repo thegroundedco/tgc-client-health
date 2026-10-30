@@ -427,6 +427,8 @@
      falls on instead of tinting it. It does not flip for dark: a shadow on a
      dark ground reads as depth there too, and a lighter one would glow. */
   --shadow-floating: 0 2px 12px rgb(0 0 0 / 0.18);
+  /* Behind a modal dialog. Black at 45% dims either theme's page. */
+  --scrim: rgb(0 0 0 / 0.45);
 }
 
 /* ============================================================================

@@ -44,6 +44,11 @@ vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../board/useClientRates', () => ({
   useClientRates: vi.fn(() => ({ status: 'ready' as const, rates: new Map() })),
 }))
+// The real Board now mounts the run button for edit_scores roles, and its hook
+// reads ai_runs; stubbed for the same reason as useClientRates above.
+vi.mock('../ai/useAiRun', () => ({
+  useAiRun: vi.fn(() => ({ run: null, state: 'idle', start: vi.fn(), starting: false })),
+}))
 // Mocks for Overview's dependencies. Overview does not gate the at-risk list
 // by role -- every role sees it if they have access to read the data via RLS.
 vi.mock('../revenue/useRetention', () => ({ useRetention: vi.fn() }))
