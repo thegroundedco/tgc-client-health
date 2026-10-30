@@ -18,7 +18,8 @@ Two gaps remain, both raised by the owner on 2026-10-30:
 - **Revert to AI suggested scores** exists on a check-in, for a check-in someone has already saved.
 - After a revert the check-in **shows "Suggested — review" again**: it needs signing off like any
   other suggestion.
-- **"Run AI suggested scores" on the board** runs for every client on the board for that month.
+- **"Run AI suggested scores" on the board** runs for that month. A confirmation first asks whether
+  to run it for the entire month for all clients; if not, the person ticks which clients to run.
 - **"Run AI score for this client" inside a client's check-in** runs for that one client and month.
 - If clients in a run have **already been manually scored**, a notice says *"These clients have
   already been manually scored – overwrite their data?"*, lists them, and lets the person choose to
@@ -189,12 +190,23 @@ project ref and the owner's calibration notes) gains:
 ### 5.1 Board: "Run AI suggested scores"
 
 - Shown to `edit_scores` users, for the month the board is showing.
-- Click → the tool lists the month's **manually scored** clients: on the board for the month, with a
-  check-in whose `suggested_at` is null.
+- Click → **step 1, confirm the scope** (owner, 2026-10-30): a confirmation asks whether to run AI
+  suggested scores for the entire month for all clients, naming the month and the number of
+  clients (e.g. "Run AI suggested scores for all 14 clients in October 2026?"). Two answers:
+  - **Yes, all clients** → go to step 2 with every client on the board.
+  - **No, let me choose** → a checklist of every client on the board for the month; the person
+    ticks the ones to run. Every box starts **ticked** (Claude's call: "all" was the button's
+    promise, so choosing means taking clients out). Continuing with none ticked is not allowed.
+  - Cancelling at either point runs nothing.
+- **Step 2, manual scores:** of the clients chosen, the tool finds the **manually scored** ones: on
+  the board for the month, with a check-in whose `suggested_at` is null.
   - None → run straight away.
   - Some → the notice: **"These clients have already been manually scored – overwrite their
     data?"**, one checkbox per client, **all unticked by default** (Claude's call: overwriting is
     the destructive choice), and two buttons: run (overwriting the ticked ones) and cancel.
+  - A manually scored client left unticked is still part of the run: its AI copy is refreshed (so
+    revert has the latest), but its answers are not touched.
+- The run's `client_ids` is null when step 1 was "Yes, all clients", and the chosen ids otherwise.
 - While a run for the month is in progress, the button is replaced by a line such as "AI scoring
   running — started by Josh at 2:41pm." The board polls `ai_runs` (about every 30 seconds) and
   reloads the month when the run finishes, then shows the run's `summary` once.
