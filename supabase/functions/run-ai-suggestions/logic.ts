@@ -36,7 +36,7 @@ export const FORBIDDEN_ERROR = 'You need permission to edit scores.'
 // The function deploys only its own folder, so it cannot import src/. These
 // are copies of src/clients/clientForm.ts CLIENT_STATUSES, src/lib/month.ts
 // lastDayOf and src/board/boardScope.ts isOnBoardFor;
-// tests/runAiBoardParity.test.ts runs both over the same table.
+// src/board/runAiBoardParity.test.ts runs both over the same table.
 
 export const KNOWN_STATUSES: readonly string[] = ['active', 'paused', 'cancelled', 'former']
 
@@ -191,9 +191,28 @@ export function conflictBody(
 
 const FIRE_DETAIL_LIMIT = 500
 
+// Every non-empty secret, as literal text, replaced with [redacted]. A fetch
+// transport error's message contains the URL it was sending to, and ai_runs.summary
+// is readable by every view_scores user, so the routine URL and token must never
+// reach it. split/join, not a RegExp: a URL is full of pattern characters.
+export function redact(detail: string, secrets: readonly string[]): string {
+  let out = detail
+  for (const secret of secrets) {
+    if (secret !== '') out = out.split(secret).join('[redacted]')
+  }
+  return out
+}
+
 // The summary stored on a run whose fire call failed, and the 502's error.
-// status is null for a network failure, which never got a response.
-export function fireFailure(status: number | null, detail: string): string {
+// status is null for a network failure, which never got a response. Redacted
+// BEFORE truncating, so a secret straddling the cut cannot leave a prefix.
+export function fireFailure(status: number | null, detail: string, secrets: readonly string[]): string {
   const head = status === null ? 'Routine fire failed' : `Routine fire failed: HTTP ${status}`
-  return `${head}: ${detail.slice(0, FIRE_DETAIL_LIMIT)}`
+  return `${head}: ${redact(detail, secrets).slice(0, FIRE_DETAIL_LIMIT)}`
+}
+
+// The 502's error. When the run could not be marked failed it is still
+// 'requested' and will hold the month until it goes stale; the app says so.
+export function failedFireError(failure: string, markedFailed: boolean): string {
+  return markedFailed ? failure : `${failure}, and the run could not be marked failed.`
 }

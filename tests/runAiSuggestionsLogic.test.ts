@@ -3,10 +3,12 @@ import {
   STALE_SUMMARY,
   boardSets,
   conflictBody,
+  failedFireError,
   fireFailure,
   firePayload,
   isPeriod,
   parseTarget,
+  redact,
   sessionUrlFrom,
   staleBefore,
   validateRequest,
@@ -290,18 +292,67 @@ describe('isPeriod', () => {
   })
 })
 
+const FIRE_URL = 'https://fire.example.test/v1/routines/rt_SYNTHETIC/fire'
+const FIRE_TOKEN = 'tok_SYNTHETIC_secret'
+
+describe('redact', () => {
+  it('removes every occurrence of the routine URL and token', () => {
+    const detail = `error sending request for url (${FIRE_URL}): Bearer ${FIRE_TOKEN}; retry ${FIRE_URL}`
+    const out = redact(detail, [FIRE_URL, FIRE_TOKEN])
+    expect(out).not.toContain(FIRE_URL)
+    expect(out).not.toContain(FIRE_TOKEN)
+    expect(out).not.toContain('rt_SYNTHETIC')
+    expect(out).toBe('error sending request for url ([redacted]): Bearer [redacted]; retry [redacted]')
+  })
+
+  it('does not blank the string for an empty secret', () => {
+    expect(redact('connection refused', ['', FIRE_TOKEN])).toBe('connection refused')
+  })
+
+  it('treats a secret as text, not a pattern', () => {
+    expect(redact('a.b and axb', ['a.b'])).toBe('[redacted] and axb')
+  })
+})
+
 describe('fireFailure', () => {
   it('names the HTTP status and the start of the response', () => {
-    expect(fireFailure(429, 'rate limited')).toBe('Routine fire failed: HTTP 429: rate limited')
+    expect(fireFailure(429, 'rate limited', [FIRE_URL, FIRE_TOKEN])).toBe('Routine fire failed: HTTP 429: rate limited')
   })
 
   it('names a network failure, which has no status', () => {
-    expect(fireFailure(null, 'connection refused')).toBe('Routine fire failed: connection refused')
+    expect(fireFailure(null, 'connection refused', [FIRE_URL, FIRE_TOKEN])).toBe('Routine fire failed: connection refused')
+  })
+
+  it('redacts the URL from a transport error and the token from a response body', () => {
+    const transport = fireFailure(null, `error sending request for url (${FIRE_URL})`, [FIRE_URL, FIRE_TOKEN])
+    const body = fireFailure(401, `{"error":"bad token ${FIRE_TOKEN}"}`, [FIRE_URL, FIRE_TOKEN])
+    for (const message of [transport, body]) {
+      expect(message).not.toContain(FIRE_URL)
+      expect(message).not.toContain(FIRE_TOKEN)
+      expect(message).toContain('[redacted]')
+    }
+  })
+
+  it('redacts before truncating, so a secret across the cut leaves no prefix', () => {
+    const message = fireFailure(500, `${'x'.repeat(480)}${FIRE_URL}`, [FIRE_URL, FIRE_TOKEN])
+    expect(message).not.toContain('https://fire')
   })
 
   it('keeps the stored summary short', () => {
-    const message = fireFailure(500, 'x'.repeat(5000))
+    const message = fireFailure(500, 'x'.repeat(5000), [FIRE_URL, FIRE_TOKEN])
     expect(message.length).toBeLessThanOrEqual(600)
     expect(message.startsWith('Routine fire failed: HTTP 500: xxx')).toBe(true)
+  })
+})
+
+describe('failedFireError', () => {
+  it('is the failure itself when the run was marked failed', () => {
+    expect(failedFireError('Routine fire failed: HTTP 500: x', true)).toBe('Routine fire failed: HTTP 500: x')
+  })
+
+  it('says so when the run could not be marked failed', () => {
+    expect(failedFireError('Routine fire failed: HTTP 500: x', false)).toBe(
+      'Routine fire failed: HTTP 500: x, and the run could not be marked failed.',
+    )
   })
 })

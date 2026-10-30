@@ -15,10 +15,12 @@ import {
   STALE_SUMMARY,
   boardSets,
   conflictBody,
+  failedFireError,
   fireFailure,
   firePayload,
   isPeriod,
   parseTarget,
+  redact,
   sessionUrlFrom,
   staleBefore,
   validateRequest,
@@ -38,7 +40,22 @@ function json(status: number, body: unknown): Response {
   })
 }
 
+// Nothing may escape as a bare 500 without CORS headers (the browser would
+// report it as a CORS failure and hide the reason), so every throw lands here.
+// Redacted with the routine's secrets, which are the only ones a message could
+// plausibly carry; the Supabase keys never appear in error text.
 Deno.serve(async (req: Request): Promise<Response> => {
+  try {
+    return await handle(req)
+  } catch (error) {
+    const secrets = [Deno.env.get('ROUTINE_FIRE_URL') ?? '', Deno.env.get('ROUTINE_FIRE_TOKEN') ?? '']
+    const message = redact(error instanceof Error ? error.message : String(error), secrets)
+    console.error('run-ai-suggestions: unhandled', message)
+    return json(500, { error: message })
+  }
+})
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json(405, { error: 'Use POST.' })
 
@@ -48,6 +65,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const fireUrl = Deno.env.get('ROUTINE_FIRE_URL')
   const fireToken = Deno.env.get('ROUTINE_FIRE_TOKEN')
   const target = parseTarget(Deno.env.get('AI_RUN_TARGET'))
+  const secrets = [fireUrl ?? '', fireToken ?? '']
   if (!supabaseUrl || !anonKey || !serviceKey || !fireUrl || !fireToken || target === null) {
     return json(500, { error: 'The AI run function is not configured.' })
   }
@@ -149,22 +167,36 @@ Deno.serve(async (req: Request): Promise<Response> => {
       body: JSON.stringify({ text: firePayload(runId, request, target) }),
     })
     if (!response.ok) {
-      failure = fireFailure(response.status, await response.text().catch(() => ''))
+      failure = fireFailure(response.status, await response.text().catch(() => ''), secrets)
     } else {
       sessionUrl = sessionUrlFrom(await response.json().catch(() => null))
     }
   } catch (error) {
-    failure = fireFailure(null, error instanceof Error ? error.message : String(error))
+    failure = fireFailure(null, error instanceof Error ? error.message : String(error), secrets)
   }
 
   // 6. A failed fire is a failed run, never a silent no-op.
   if (failure !== null) {
-    await admin.from('ai_runs').update({ status: 'failed', summary: failure }).eq('id', runId)
-    return json(502, { error: failure })
+    let markedFailed = false
+    try {
+      const marked = await admin.from('ai_runs').update({ status: 'failed', summary: failure }).eq('id', runId)
+      if (marked.error) console.error('run-ai-suggestions: could not mark run failed', runId, marked.error.message)
+      else markedFailed = true
+    } catch (error) {
+      console.error('run-ai-suggestions: could not mark run failed', runId, redact(String(error), secrets))
+    }
+    return json(502, { error: failedFireError(failure, markedFailed) })
   }
 
+  // The routine is running; a missing session_url only costs admins a debug
+  // link, so log it rather than failing a run that has started.
   if (sessionUrl !== null) {
-    await admin.from('ai_runs').update({ session_url: sessionUrl }).eq('id', runId)
+    try {
+      const stored = await admin.from('ai_runs').update({ session_url: sessionUrl }).eq('id', runId)
+      if (stored.error) console.error('run-ai-suggestions: could not store session_url', runId, stored.error.message)
+    } catch (error) {
+      console.error('run-ai-suggestions: could not store session_url', runId, redact(String(error), secrets))
+    }
   }
   return json(200, { run_id: runId })
-})
+}
