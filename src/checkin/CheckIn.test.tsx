@@ -38,6 +38,15 @@ vi.mock('./useConfirmSuggestion', () => ({
   useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
 }))
 
+// The run and revert controls mounted in CheckIn pull in lib/supabase through
+// useAiRun and useRevertSuggestion; stubbed idle here, tested in their own files.
+vi.mock('../ai/useAiRun', () => ({
+  useAiRun: () => ({ run: null, state: 'idle', start: async () => ({ ok: true }), starting: false }),
+}))
+vi.mock('./useRevertSuggestion', () => ({
+  useRevertSuggestion: () => ({ state: { kind: 'idle' }, revert: async () => {} }),
+}))
+
 // Finance suggestion reads Supabase; stubbed, controllable per test.
 const finance = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('./useFinanceSuggestion', () => ({

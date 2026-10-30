@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import { formatPeriod } from '../lib/month'
 import type { BoardClient } from '../board/useBoard'
 import type { StartBody } from './useAiRun'
+import { DialogShell } from './DialogShell'
 import styles from './RunMonthDialog.module.css'
 
 type Props = {
@@ -27,51 +28,11 @@ function toggled(set: Set<number>, id: number): Set<number> {
 // focus lands on the first button of every step, and Escape is Cancel.
 export function RunMonthDialog({ period, clients, manual, onRun, onCancel }: Props) {
   const headingId = useId()
-  const ref = useRef<HTMLDivElement>(null)
   const [step, setStep] = useState<Step>('scope')
   // null = "all clients" (sent as client_ids: null); a set = the chosen ones.
   const [chosen, setChosen] = useState<Set<number>>(() => new Set(clients.map((c) => c.id)))
   const [allClients, setAllClients] = useState(true)
   const [overwriting, setOverwriting] = useState<Set<number>>(() => new Set())
-
-  // Document-level, so Escape and Tab behave the same wherever focus is -- a
-  // click on the heading or padding must not strand the keyboard on <body>.
-  const cancelRef = useRef(onCancel)
-  useEffect(() => {
-    cancelRef.current = onCancel
-  })
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        cancelRef.current()
-        return
-      }
-      if (event.key !== 'Tab') return
-      const dialog = ref.current
-      if (!dialog) return
-      const items = [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')]
-      if (items.length === 0) return
-      const first = items[0]
-      const last = items[items.length - 1]
-      const active = document.activeElement
-      if (!dialog.contains(active) || (active === dialog && event.shiftKey)) {
-        event.preventDefault()
-        ;(event.shiftKey ? last : first).focus()
-      } else if (event.shiftKey && (active === first || active === dialog)) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
-  }, [step])
 
   const finish = (ids: Set<number>, all: boolean, overwrite: number[]) =>
     onRun({
@@ -94,15 +55,7 @@ export function RunMonthDialog({ period, clients, manual, onRun, onCancel }: Pro
   const manualChosen = clients.filter((c) => chosen.has(c.id) && manual.has(c.id))
 
   return (
-    <div className={styles.overlay}>
-      <div
-        aria-labelledby={headingId}
-        aria-modal="true"
-        className={styles.dialog}
-        ref={ref}
-        tabIndex={-1}
-        role="dialog"
-      >
+    <DialogShell focusKey={step} headingId={headingId} onCancel={onCancel}>
         {step === 'scope' && (
           <>
             <h2 className="t-header" id={headingId}>
@@ -205,7 +158,6 @@ export function RunMonthDialog({ period, clients, manual, onRun, onCancel }: Pro
             </div>
           </>
         )}
-      </div>
-    </div>
+    </DialogShell>
   )
 }

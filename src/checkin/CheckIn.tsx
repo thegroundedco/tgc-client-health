@@ -13,6 +13,10 @@ import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
 import { EndClientPanel } from './EndClientPanel'
 import { SuggestionBanner } from './SuggestionBanner'
+import { RevertButton } from './RevertButton'
+import { RunClientButton } from '../ai/RunClientButton'
+import { parseAiSuggestion } from './aiSuggestion'
+import type { Answers } from '../lib/scoreV2'
 import { displayedOverall, saveStatus, submitBlock, submitLabel } from './saveState'
 import type { SaveStatusTone } from './saveState'
 import styles from './CheckIn.module.css'
@@ -251,6 +255,29 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           suggestedAt={stored.suggested_at}
         />
       )}
+      {canEdit && (
+        // Spec 2026-10-30 §5.2: run the AI for this one client. "Manual" is a
+        // stored row nobody has flagged as a suggestion.
+        <RunClientButton
+          clientId={client.id}
+          hasUnsavedChanges={hasUnsavedChanges}
+          manual={stored != null && stored.suggested_at == null}
+          onFinished={checkin.reload}
+          period={period}
+        />
+      )}
+      <RevertButton
+        advocacyApplies={advocacyApplies}
+        ai={parseAiSuggestion(stored?.ai_suggestion)}
+        canEdit={canEdit}
+        clientId={client.id}
+        current={(stored ?? {}) as Answers}
+        hasUnsavedChanges={hasUnsavedChanges}
+        onReverted={checkin.reload}
+        period={period}
+        profileId={profile.id}
+        suggestedAt={stored ? stored.suggested_at : null}
+      />
 
       <div className={styles.totals}>
         <div className={styles.total}>

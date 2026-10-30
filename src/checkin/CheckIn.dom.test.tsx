@@ -39,6 +39,15 @@ vi.mock('./useConfirmSuggestion', () => ({
   useConfirmSuggestion: () => ({ state: { kind: 'idle' }, confirm: async () => true }),
 }))
 
+// The run and revert controls mounted in CheckIn pull in lib/supabase through
+// useAiRun and useRevertSuggestion; stubbed idle here, tested in their own files.
+vi.mock('../ai/useAiRun', () => ({
+  useAiRun: () => ({ run: null, state: 'idle', start: async () => ({ ok: true }), starting: false }),
+}))
+vi.mock('./useRevertSuggestion', () => ({
+  useRevertSuggestion: () => ({ state: { kind: 'idle' }, revert: async () => {} }),
+}))
+
 // Finance suggestion reads Supabase; stubbed, controllable per test.
 const finance = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('./useFinanceSuggestion', () => ({
@@ -389,7 +398,7 @@ describe('CheckIn, the suggestion banner', () => {
   it('disables Confirm once an answer has been changed', () => {
     renderAs('account_manager', { stored: flagged, saveState: { kind: 'dirty' } })
     expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/You have unsaved changes\./)).toBeTruthy()
+    expect(screen.getByText(/Save them instead/)).toBeTruthy()
   })
 
   it('disables Confirm when the form opened with an unsaved draft from an earlier visit', () => {
@@ -517,5 +526,41 @@ describe('CheckIn, finance answers from revenue', () => {
     const h = hookState.current as UseCheckin
     expect(h.setAnswers).toHaveBeenCalledTimes(1)
     expect(h.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1, fin_rate_increased: 3 })
+  })
+})
+
+describe('CheckIn, run and revert controls', () => {
+  const ai = { suggested_at: '2026-10-28T12:00:00Z', run_id: 1, notes: 'n', answers: {} }
+  const manualRow = { id: 'c1', suggested_at: null, ai_suggestion: ai } as unknown as UseCheckin['stored']
+
+  it('offers both to someone who may score a reviewed row with an AI copy', () => {
+    renderAs('account_manager', { stored: manualRow, saveState: { kind: 'clean' } })
+    expect((screen.getByRole('button', { name: 'Run AI score for this client' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('a manual row asks before overwriting', () => {
+    renderAs('account_manager', { stored: manualRow, saveState: { kind: 'clean' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Run AI score for this client' }))
+    expect(screen.getByRole('button', { name: 'Overwrite' })).toBeTruthy()
+  })
+
+  it('offers neither to a viewer', () => {
+    renderAs('viewer', { stored: manualRow })
+    expect(screen.queryByRole('button', { name: 'Run AI score for this client' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
+  })
+
+  it('disables both with unsaved changes', () => {
+    renderAs('account_manager', { stored: manualRow, saveState: { kind: 'dirty' } })
+    expect((screen.getByRole('button', { name: 'Run AI score for this client' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText('You have unsaved changes. Save them first.')).toHaveLength(2)
+  })
+
+  it('hides revert on a row awaiting review', () => {
+    const flagged = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' } })
+    expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
   })
 })
