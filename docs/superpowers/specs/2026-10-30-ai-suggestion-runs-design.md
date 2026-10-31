@@ -176,7 +176,12 @@ project ref and the owner's calibration notes) gains:
   - Row with `suggested_at is null` (manually scored) → overwrite answers and note and set
     `suggested_at = now()` **only if** the client is in `overwrite_client_ids`; otherwise leave the
     row's answers, note and `suggested_at` alone.
-  - Never touch `fin_rack_rate` / `fin_rate_increased`.
+  - **Finance (owner, 2026-10-31, superseding "never touch"):** fill `fin_rack_rate` and
+    `fin_rate_increased` with the tool's own revenue rule (`src/checkin/financeFromRevenue.ts`), so
+    an AI-scored check-in is complete and shows its score on the board instead of "Not scored".
+    Where that rule has no answer (the month's revenue isn't entered yet), use 3 and say so in the
+    note; a later run replaces it once revenue exists. On a manually scored row the routine may
+    not overwrite, finance is left alone like every other answer.
   - **Submitted state** (Claude's call: behave like a save): whenever the routine writes a row's
     answers it sets `submitted_at` to now() if the check-in is complete by the same rule `useCheckin`
     uses (every required question answered, Advocacy only when its gate is open) and null otherwise,
@@ -225,15 +230,16 @@ project ref and the owner's calibration notes) gains:
 
 ### 5.3 Check-in: "Revert to AI suggested scores"
 
-- Shown to `edit_scores` users when the check-in has an `ai_suggestion` **and** is not currently
-  suggested (`suggested_at` is null). A suggested check-in already shows the AI's version.
+- Shown to `edit_scores` users when the check-in has an `ai_suggestion` **and** either the saved
+  row is not currently suggested (`suggested_at` is null) **or** the form has unsaved changes
+  (owner, 2026-10-31: "it should just pop up once any score is changed", not only after a save).
 - Click → a confirmation naming the date of the AI version ("Replace the saved scores and note with
   the AI's from Oct 30?"). Then one update: answers and note from `ai_suggestion`,
-  `suggested_at = now()`; `fin_rack_rate` / `fin_rate_increased` left as they are.
+  `suggested_at = now()`; `fin_rack_rate` / `fin_rate_increased` left as they are. Any unsaved
+  edits are discarded (the local draft is cleared before the reload).
 - **Submitted state** (Claude's call): the revert recomputes `submitted_at` with the same
   completeness rule a save uses (shared code, not a copy) and sets `submitted_by` to the person who
   reverted, exactly as if they had saved those answers.
-- Disabled while there are unsaved changes, as Confirm is.
 - Afterwards the screen shows the suggestion banner again (Confirm / edit and save).
 - Done in the app under the existing `checkins_update_edit_scores` policy, like Confirm — no new
   function needed.
