@@ -17,6 +17,7 @@ type Props = {
   /** The stored answers: revert keeps their finance answers. */
   current: Answers
   advocacyApplies: boolean
+  /** Unsaved edits also offer the button, and Revert discards them. */
   hasUnsavedChanges: boolean
   onReverted: () => void
 }
@@ -27,8 +28,8 @@ function shortDay(iso: string): string {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// "Revert to AI suggested scores" on a check-in a person has reviewed but whose
-// AI copy is still on file. Confirmed first: it replaces saved scores and note.
+// "Revert to AI suggested scores" on a check-in a person has reviewed, or is
+// editing, and whose AI copy is still on file (spec 2026-10-30 §5.3). Confirmed first: it replaces saved scores and note.
 export function RevertButton({
   clientId, period, profileId, canEdit, suggestedAt, ai, current, advocacyApplies, hasUnsavedChanges, onReverted,
 }: Props) {
@@ -44,19 +45,18 @@ export function RevertButton({
     if (state.kind === 'reverted') onRevertedRef.current()
   }, [state.kind])
 
-  if (!canEdit || suggestedAt !== null || ai === null) return null
+  if (!canEdit || ai === null || (suggestedAt !== null && !hasUnsavedChanges)) return null
 
   return (
     <div className="prose">
       <button
         className="button button--quiet"
-        disabled={hasUnsavedChanges || state.kind === 'saving'}
+        disabled={state.kind === 'saving'}
         onClick={() => setOpen(true)}
         type="button"
       >
         Revert to AI suggested scores
       </button>
-      {hasUnsavedChanges && <p className="t-caption">You have unsaved changes. Save them first.</p>}
       {state.kind === 'failed' && (
         <p className="alert prose" role="alert">
           {state.message}

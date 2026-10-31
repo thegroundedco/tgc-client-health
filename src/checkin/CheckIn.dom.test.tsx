@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
 import type { UseCheckin } from './useCheckin'
@@ -572,11 +572,71 @@ describe('CheckIn, run and revert controls', () => {
     expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
   })
 
-  it('disables both with unsaved changes', () => {
+  it('with unsaved changes, disables Run (with its caption) but leaves revert enabled and captionless', () => {
     renderAs('account_manager', { stored: manualRow, saveState: { kind: 'dirty' } })
     expect((screen.getByRole('button', { name: 'Run AI score for this client' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getAllByText('You have unsaved changes. Save them first.')).toHaveLength(2)
+    expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.getAllByText('You have unsaved changes. Save them first.')).toHaveLength(1)
+  })
+
+  it('manual row: revert shown and enabled with or without unsaved changes', () => {
+    for (const saveState of [{ kind: 'clean' }, { kind: 'dirty' }] as const) {
+      cleanup()
+      renderAs('account_manager', { stored: manualRow, saveState })
+      expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(false)
+    }
+  })
+
+  it('still-suggested row: revert hidden when clean, shown and enabled when dirty', () => {
+    const flagged = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'clean' } })
+    expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
+    cleanup()
+    renderAs('account_manager', { stored: flagged, saveState: { kind: 'dirty' } })
+    expect((screen.getByRole('button', { name: 'Revert to AI suggested scores' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('no parseable ai_suggestion: revert hidden even with unsaved changes', () => {
+    const noAi = { id: 'c1', suggested_at: null, ai_suggestion: null } as unknown as UseCheckin['stored']
+    renderAs('account_manager', { stored: noAi, saveState: { kind: 'dirty' } })
+    expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
+  })
+
+  it('viewer with unsaved changes on a still-suggested row: revert hidden', () => {
+    const flagged = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
+    renderAs('viewer', { stored: flagged, saveState: { kind: 'dirty' } })
+    expect(screen.queryByRole('button', { name: 'Revert to AI suggested scores' })).toBeNull()
+  })
+
+  it('still-suggested row with unsaved changes: Revert gets the stored row, then draft cleared and reloaded', async () => {
+    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit' })
+    reverts.revert.mockClear()
+    const stored = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
+    let seen: unknown = 'unset'
+    const reload = vi.fn(() => {
+      seen = readDraft(CLIENT.id, PERIOD)
+    })
+    renderAs('account_manager', { stored, saveState: { kind: 'dirty' }, reload })
+    fireEvent.click(screen.getByRole('button', { name: 'Revert to AI suggested scores' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
+    expect((reverts.revert.mock.calls[0][0] as { current: unknown }).current).toBe(stored)
+    expect(seen).toBeNull()
+    window.localStorage.clear()
+  })
+
+  it('Cancel with unsaved changes: no revert call, no reload, draft kept', () => {
+    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit' })
+    reverts.revert.mockClear()
+    const reload = vi.fn()
+    const stored = { id: 'c1', suggested_at: null, ai_suggestion: ai } as unknown as UseCheckin['stored']
+    renderAs('account_manager', { stored, saveState: { kind: 'dirty' }, reload })
+    fireEvent.click(screen.getByRole('button', { name: 'Revert to AI suggested scores' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(reverts.revert).not.toHaveBeenCalled()
+    expect(reload).not.toHaveBeenCalled()
+    expect(readDraft(CLIENT.id, PERIOD)).not.toBeNull()
+    window.localStorage.clear()
   })
 
   it('hides revert on a row awaiting review', () => {
