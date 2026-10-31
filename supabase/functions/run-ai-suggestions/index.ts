@@ -16,6 +16,7 @@ import {
   boardSets,
   conflictBody,
   failedFireError,
+  failedUpdate,
   fireFailure,
   firePayload,
   isPeriod,
@@ -117,7 +118,7 @@ async function handle(req: Request): Promise<Response> {
   // it so it no longer holds the month's one-at-a-time slot.
   const stale = await admin
     .from('ai_runs')
-    .update({ status: 'failed', summary: STALE_SUMMARY })
+    .update(failedUpdate(STALE_SUMMARY, new Date()))
     .eq('period', period)
     .eq('status', 'requested')
     .lt('requested_at', staleBefore(new Date()))
@@ -179,7 +180,7 @@ async function handle(req: Request): Promise<Response> {
   if (failure !== null) {
     let markedFailed = false
     try {
-      const marked = await admin.from('ai_runs').update({ status: 'failed', summary: failure }).eq('id', runId)
+      const marked = await admin.from('ai_runs').update(failedUpdate(failure, new Date())).eq('id', runId)
       if (marked.error) console.error('run-ai-suggestions: could not mark run failed', runId, marked.error.message)
       else markedFailed = true
     } catch (error) {

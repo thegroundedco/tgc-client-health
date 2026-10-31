@@ -401,7 +401,7 @@ export function useCheckin(
     // `load` is deliberately not a dependency: submit() no longer calls it, and
     // adding it would rebuild submit on every load rather than only when the
     // things it actually reads -- clientId, period, lastPeriod (read by the
-    // post-save score refresh above), the draft, applies, required and the
+    // post-save score refresh above), the draft, applies and the
     // account -- change.
   }, [clientId, period, lastPeriod, draft, profile.id, applies])
 

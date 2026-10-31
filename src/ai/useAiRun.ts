@@ -101,7 +101,15 @@ export function useAiRun(period: string, onFinished: () => void) {
       setStarting(true)
       try {
         const { error } = await supabase.functions.invoke('run-ai-suggestions', { body })
-        if (error) return { ok: false, message: await failureMessage(error) }
+        if (error) {
+          const message = await failureMessage(error)
+          // A 409 means a run is already live for this month (perhaps the
+          // schedule's): load it so it shows, polls, and refreshes the board.
+          if ((error as { context?: unknown }).context instanceof Response && (error as { context: Response }).context.status === 409) {
+            await load(body.period)
+          }
+          return { ok: false, message }
+        }
         const reloaded = await load(body.period)
         if (!reloaded && periodRef.current === body.period) {
           // The server accepted the run but we cannot see it yet. Show it as

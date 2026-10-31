@@ -75,6 +75,27 @@ describe('RunClientButton', () => {
     expect(screen.queryByRole('button', { name: BTN })).toBeNull()
     expect(screen.getByRole('status').textContent).toMatch(/AI scoring running — started by Sam/)
   })
+  const RUNNING = { source: 'board', requested_by_name: 'Sam', requested_at: new Date().toISOString(), status: 'requested' }
+  it('running -> failed leaves the failed line, and the button returns', () => {
+    hook({ state: 'running', run: RUNNING })
+    const { rerender } = render(<RunClientButton {...props} />)
+    hook({ state: 'failed', run: { ...RUNNING, status: 'failed' } })
+    rerender(<RunClientButton {...props} />)
+    expect(screen.getByRole('status').textContent).toBe("The last AI run didn't finish.")
+    expect(screen.getByRole('button', { name: BTN })).toBeTruthy()
+  })
+  it('running -> done leaves the run summary', () => {
+    hook({ state: 'running', run: RUNNING })
+    const { rerender } = render(<RunClientButton {...props} />)
+    hook({ state: 'done', run: { ...RUNNING, status: 'done', summary: 'Scored 1 client.' } })
+    rerender(<RunClientButton {...props} />)
+    expect(screen.getByRole('status').textContent).toBe('Scored 1 client.')
+  })
+  it('a run that was already failed or done when the check-in opened says nothing', () => {
+    hook({ state: 'failed', run: { ...RUNNING, status: 'failed' } })
+    render(<RunClientButton {...props} />)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
   it('passes onFinished to the run hook', () => {
     render(<RunClientButton {...props} />)
     onFinished()

@@ -169,6 +169,12 @@ export function staleBefore(now: Date): string {
   return new Date(now.getTime() - STALE_MINUTES * 60_000).toISOString()
 }
 
+// The row update that marks a run failed. finished_at is set so a failed run
+// is never left looking unfinished.
+export function failedUpdate(summary: string, now: Date) {
+  return { status: 'failed' as const, summary, finished_at: now.toISOString() }
+}
+
 export type ConflictBody = {
   error: string
   requested_by_name: string | null

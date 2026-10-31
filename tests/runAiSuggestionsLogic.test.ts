@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   STALE_SUMMARY,
   boardSets,
   conflictBody,
   failedFireError,
+  failedUpdate,
   fireFailure,
   firePayload,
   isPeriod,
@@ -354,5 +356,23 @@ describe('failedFireError', () => {
     expect(failedFireError('Routine fire failed: HTTP 500: x', false)).toBe(
       'Routine fire failed: HTTP 500: x, and the run could not be marked failed.',
     )
+  })
+})
+
+describe('failedUpdate', () => {
+  it('marks failed and stamps finished_at with now', () => {
+    expect(failedUpdate('why', new Date('2026-10-30T14:41:00.000Z'))).toEqual({
+      status: 'failed',
+      summary: 'why',
+      finished_at: '2026-10-30T14:41:00.000Z',
+    })
+  })
+
+  it('is what both failure writes in index.ts use, and neither writes status failed by hand', () => {
+    const source = readFileSync(new URL('../supabase/functions/run-ai-suggestions/index.ts', import.meta.url), 'utf8')
+    const code = source.replace(/\/\/.*$/gm, '')
+    expect(code).toContain('.update(failedUpdate(STALE_SUMMARY, new Date()))')
+    expect(code).toContain('.update(failedUpdate(failure, new Date()))')
+    expect(code).not.toMatch(/status:\s*'failed'/)
   })
 })

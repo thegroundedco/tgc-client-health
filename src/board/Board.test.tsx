@@ -914,6 +914,20 @@ describe('the Run AI suggested scores control', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 
+  it('scopes the question and the checklist to the month members, not every client', async () => {
+    vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
+    givenAs('account_manager', {
+      clients: [...CLIENTS, { id: 4, name: 'Archived Co', status: 'former', started_on: null, ended_on: null }],
+      members: new Set([1, 2, 3]),
+    })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', RUN_BUTTON))
+    expect(screen.getByRole('dialog', { name: `Run AI suggested scores for all 3 clients in ${formatPeriod(defaultPeriod())}?` })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'No, let me choose' }))
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.queryByRole('checkbox', { name: 'Archived Co' })).toBeNull()
+  })
+
   it('offers the overwrite step for a manually scored member', async () => {
     vi.mocked(useAiRun).mockImplementation(IDLE_RUN)
     givenAs('account_manager', { checkins: new Map([[2, SUBMITTED]]) })

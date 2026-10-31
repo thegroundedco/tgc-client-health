@@ -29,7 +29,14 @@ export function RunClientButton({ clientId, period, manual, hasUnsavedChanges, o
     )
   }
 
-  const line = state === 'running' && run ? runLine(run, new Date()) : null
+  // A run that ends while this check-in is open must say how it ended, never
+  // just vanish. One that was already over when the check-in opened is old news.
+  const [seenRunningFor, setSeenRunningFor] = useState<string | null>(null)
+  if (state === 'running' && seenRunningFor !== period) setSeenRunningFor(period)
+  const seenRunning = seenRunningFor === period
+  const line = run && (state === 'running' || (seenRunning && (state === 'failed' || state === 'done')))
+    ? runLine(run, new Date())
+    : null
 
   return (
     <div className="prose">

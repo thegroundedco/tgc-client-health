@@ -147,6 +147,20 @@ describe('useAiRun', () => {
     expect(r).toEqual({ ok: false, message: 'AI scoring is already running for this month — started by Josh at 2:41 PM.' })
   })
 
+  it('a 409 reloads the month so the blocking run is shown and polled', async () => {
+    const { result } = renderHook(() => useAiRun('2026-10-01', () => {}))
+    await flush()
+    expect(result.current.state).toBe('idle')
+    db.rows['2026-10-01'] = [run({ source: 'schedule', requested_by_name: null })]
+    db.invoke = async () => ({
+      data: null,
+      error: { context: new Response(JSON.stringify({ error: 'x', requested_by_name: null, requested_at: null, source: 'schedule' }), { status: 409 }) },
+    })
+    await act(async () => { await result.current.start(body) })
+    expect(result.current.state).toBe('running')
+    expect(result.current.run?.source).toBe('schedule')
+  })
+
   it('a 409 with null fields falls back to someone and omits the time', async () => {
     db.invoke = async () => ({
       data: null,

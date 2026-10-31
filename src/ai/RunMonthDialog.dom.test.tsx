@@ -153,8 +153,17 @@ describe('RunMonthDialog', () => {
 
   it('Tab cannot leave the dialog from the body either', async () => {
     const { user } = setup()
-    ;(document.activeElement as HTMLElement).blur()
-    await user.tab()
-    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+    // Focusable AND earlier in the tab order than the dialog, so an unguarded Tab from body lands on it.
+    const outside = document.createElement('button')
+    outside.textContent = 'Outside'
+    document.body.prepend(outside)
+    try {
+      ;(document.activeElement as HTMLElement).blur()
+      await user.tab()
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+      expect(document.activeElement).not.toBe(outside)
+    } finally {
+      outside.remove()
+    }
   })
 })
