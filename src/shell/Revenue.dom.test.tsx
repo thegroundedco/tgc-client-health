@@ -67,7 +67,11 @@ const GONE = {
   name: 'Delta',
   status: 'former',
   started_on: null,
-  ended_on: '2026-08-25',
+  // Ten days ago, not a fixed date: Churn lists only departures from the last
+  // three months, counted from today, so a fixed date ages out of the list
+  // (2026-08-25 did, on 2026-11-01). Ten days is far from that edge in any
+  // timezone.
+  ended_on: new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10),
   end_reason_code: 'other',
   end_reason_note: null,
 }
