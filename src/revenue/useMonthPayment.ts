@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { describeError } from '../lib/errorText'
 import { supabase } from '../lib/supabase'
 import type { MonthRow } from './paymentBox'
@@ -29,22 +29,31 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
   const [row, setRow] = useState<MonthRow | null>(null)
   const [storedRetainer, setStoredRetainer] = useState<number | null>(null)
   const [enteredByName, setEnteredByName] = useState<string | null>(null)
-  const [nonce, setNonce] = useState(0)
+  // Bumped by every refresh and by cleanup: a response belonging to an older
+  // run sees a different number and is dropped (the cancelled flag, shared).
+  const generation = useRef(0)
 
-  useEffect(() => {
-    let cancelled = false
-    const isCancelled = () => cancelled
-    setRow(null)
-    setStoredRetainer(null)
-    setEnteredByName(null)
-    setLoadError(null)
-    if (!canRead) {
-      setStatus('off')
-      return
-    }
-    setStatus('loading')
+  // fresh = the inputs changed (or first run): blank the old month and show
+  // 'loading'. Not fresh = a refresh after a save: keep the current data and
+  // 'ready' on screen, and overwrite when the new read lands, so a just-saved
+  // month never flashes ghost text or loses the box's state. A failed refresh
+  // does set 'error': showing stale figures as if confirmed is the worse lie.
+  const refresh = useCallback(
+    async (fresh: boolean) => {
+      const mine = ++generation.current
+      const isCancelled = () => generation.current !== mine
+      if (fresh) {
+        setRow(null)
+        setStoredRetainer(null)
+        setEnteredByName(null)
+        setLoadError(null)
+      }
+      if (!canRead) {
+        setStatus('off')
+        return
+      }
+      if (fresh) setStatus('loading')
 
-    void (async () => {
       try {
         const month = await supabase
           .from('client_month_revenue')
@@ -91,20 +100,25 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
         setRow(monthRow)
         setStoredRetainer(retainer.data?.monthly_cents ?? null)
         setEnteredByName(name)
+        setLoadError(null)
         setStatus('ready')
       } catch (thrown: unknown) {
         if (isCancelled()) return
         setLoadError(describeError(thrown))
         setStatus('error')
       }
-    })()
+    },
+    [clientId, period, canRead],
+  )
 
+  useEffect(() => {
+    void refresh(true)
     return () => {
-      cancelled = true
+      generation.current += 1
     }
-  }, [clientId, period, canRead, nonce])
+  }, [refresh])
 
-  const reload = useCallback(() => setNonce((n) => n + 1), [])
+  const reload = useCallback(() => void refresh(false), [refresh])
 
   const save = useCallback<UseMonthPayment['save']>(
     async ({ retainerCents, projectCents, setRetainer }) => {
@@ -117,13 +131,15 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
           p_set_retainer: setRetainer,
         })
         if (error) return { ok: false, error: describeError(error) }
-        reload()
+        // Resolve only once the refreshed read has landed (or failed), so a
+        // caller acting on success sees fresh data.
+        await refresh(false)
         return { ok: true }
       } catch (thrown: unknown) {
         return { ok: false, error: describeError(thrown) }
       }
     },
-    [clientId, period, reload],
+    [clientId, period, refresh],
   )
 
   return { status, loadError, row, storedRetainer, enteredByName, save, reload }

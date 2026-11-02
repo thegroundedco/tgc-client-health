@@ -139,6 +139,41 @@ describe('useMonthPayment', () => {
     await waitFor(() => expect(db.tables.filter((t) => t === 'client_month_revenue').length).toBe(before + 1))
   })
 
+  it('a refresh after save keeps the data and stays ready until the new read lands, and save waits for it', async () => {
+    const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    const NEW = { ...ROW, project_cents: 999 }
+    let release: () => void = () => {}
+    db.results.client_month_revenue = () =>
+      new Promise<Result>((resolve) => { release = () => resolve({ data: NEW, error: null }) })
+
+    let settled = false
+    let saving: Promise<unknown> = Promise.resolve()
+    await act(async () => {
+      saving = result.current.save({ retainerCents: 1, projectCents: 2, setRetainer: false }).then(() => { settled = true })
+    })
+    // The second read is still pending: nothing blanked, save not resolved.
+    expect(result.current.status).toBe('ready')
+    expect(result.current.row).toEqual(ROW)
+    expect(result.current.storedRetainer).toBe(500000)
+    expect(result.current.enteredByName).toBe('Dana Delta')
+    expect(settled).toBe(false)
+
+    await act(async () => { release(); await saving })
+    expect(settled).toBe(true)
+    expect(result.current.row).toEqual(NEW)
+    expect(result.current.status).toBe('ready')
+  })
+
+  it('a changed month blanks the old one and shows loading', async () => {
+    const { result, rerender } = renderHook(({ p }) => useMonthPayment(7, p, true), { initialProps: { p: '2026-10-01' } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    db.results.client_month_revenue = () => new Promise<Result>(() => {})
+    rerender({ p: '2026-11-01' })
+    expect(result.current.status).toBe('loading')
+    expect(result.current.row).toBeNull()
+  })
+
   it('a rejected rpc error object resolves to an error without reloading', async () => {
     db.rpc = async () => ({ data: null, error: { message: 'not allowed' } })
     const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
