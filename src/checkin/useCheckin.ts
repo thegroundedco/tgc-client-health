@@ -264,20 +264,28 @@ export function useCheckin(
         }
       }
       if (!changed) return
-      // NOT applyEdit, for an overwrite too: no writeDraft and no
-      // setDraftPersisted. A fill is not
-      // something the person typed. Persisting it on mere open would leave a
-      // local draft that differs from the database, win on the next load, claim
-      // "earlier visit" changes nobody made, and let Save overwrite newer
-      // database answers. The first real click or keystroke persists the whole
-      // form through applyEdit, as before; leaving untouched discards the fill
-      // and the next visit fills again from current data. 'edited' still
+      // An overwrite goes through applyEdit and persists like any edit. It
+      // follows a person's explicit payment save (spec 2026-11-02 §5: "an
+      // ordinary unsaved change"), and a local draft that kept the old value
+      // would win on the next load and let Save write the stale placeholder
+      // back over revenue that now exists.
+      if (options?.overwrite) {
+        applyEdit({ ...draft, answers })
+        return
+      }
+      // A fill is NOT applyEdit: no writeDraft and no setDraftPersisted. A fill
+      // is not something the person typed. Persisting it on mere open would
+      // leave a local draft that differs from the database, win on the next
+      // load, claim "earlier visit" changes nobody made, and let Save overwrite
+      // newer database answers. The first real click or keystroke persists the
+      // whole form through applyEdit, as before; leaving untouched discards the
+      // fill and the next visit fills again from current data. 'edited' still
       // dispatches so the screen reads as unsaved.
       setDraft({ ...draft, answers })
       dispatch({ type: 'edited' })
       setUnsavedFromEarlierVisit(false)
     },
-    [draft],
+    [draft, applyEdit],
   )
 
   const setNotes = useCallback(

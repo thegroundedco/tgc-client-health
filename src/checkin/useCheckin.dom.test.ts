@@ -475,7 +475,7 @@ describe('useCheckin: setAnswers', () => {
   // Spec 2026-11-02 §5: after a payment save the finance answers follow the
   // payment, over a stored value too. Stored, not typed: the row holds 3 and
   // the form opened clean.
-  it('setAnswers with overwrite replaces a stored answer without persisting a draft', async () => {
+  it('setAnswers with overwrite replaces a stored answer and persists it as a draft, like any edit', async () => {
     db.checkins = async () => ({
       data: [{ client_id: 1, period: '2026-08-01', fin_rate_increased: 3, comm_timely: 4, notes: null }],
       error: null,
@@ -489,7 +489,8 @@ describe('useCheckin: setAnswers', () => {
     // Only the named key: the other stored answer is untouched.
     expect(result.current.draft.answers.comm_timely).toBe(4)
     expect(result.current.saveState.kind).toBe('dirty')
-    expect(readDraft(1, '2026-08-01')).toBeNull()
+    // Fix round 1: persisted, so a reload cannot restore the old placeholder.
+    expect(readDraft(1, '2026-08-01')?.answers.fin_rate_increased).toBe(5)
   })
 
   it('setAnswers with overwrite and identical values is not an edit', async () => {
@@ -503,5 +504,6 @@ describe('useCheckin: setAnswers', () => {
     act(() => result.current.setAnswers({ fin_rate_increased: 3 }, { overwrite: true }))
     expect(result.current.draft).toBe(draftBefore)
     expect(result.current.saveState.kind).toBe('clean')
+    expect(readDraft(1, '2026-08-01')).toBeNull()
   })
 })

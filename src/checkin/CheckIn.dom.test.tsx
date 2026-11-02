@@ -789,6 +789,15 @@ describe('CheckIn, finance answers after a payment save', () => {
     await screen.findByRole('heading', { name: 'August payments' })
   }
 
+  // Leave and come back, keeping localStorage: what a reload restores.
+  async function reopenAsAdmin() {
+    cleanup()
+    render(
+      <CheckIn client={CLIENT} period={PERIOD} profile={profile('admin')} onBack={() => {}} onEditClient={() => {}} />,
+    )
+    await screen.findByRole('heading', { name: 'August payments' })
+  }
+
   async function confirmPayment() {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Confirm .* retainer/ }))
@@ -834,6 +843,38 @@ describe('CheckIn, finance answers after a payment save', () => {
     await confirmPayment()
     await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
     expect(radio('comm_timely', 2).checked).toBe(true)
+  })
+
+  // Fix round 1: the overwrite is persisted, so leaving after a payment save
+  // cannot bring the stored placeholder back as an "earlier visit" draft that
+  // Save would then write over revenue that now exists.
+  it('after a score edit and a payment save, a reload keeps the new finance value', async () => {
+    checkinRows.current = [
+      { client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, comm_timely: 4, notes: null },
+    ]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    await openAsAdmin()
+    fireEvent.click(radio('comm_timely', 2))
+    await confirmPayment()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+
+    await reopenAsAdmin()
+    await waitFor(() => expect(radio('comm_timely', 2).checked).toBe(true))
+    expect(radio('fin_rate_increased', 5).checked).toBe(true)
+  })
+
+  it('after a payment save with no typed edit, a reload restores the new value as unsaved', async () => {
+    checkinRows.current = [
+      { client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, comm_timely: 4, notes: null },
+    ]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    await openAsAdmin()
+    await confirmPayment()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+
+    await reopenAsAdmin()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+    expect(screen.getByText(/from an earlier visit on this device and have not been saved/)).toBeTruthy()
   })
 
   it('a failed payment save changes no answer', async () => {
