@@ -13,18 +13,27 @@ import type { FinanceSuggestion, RevenueRow, Stint } from './financeFromRevenue'
 // query at all: hiding rows that were already fetched is not a permission check.
 // Packages are optional -- without them the rate change still works, only the
 // rack-rate answer is missing.
+//
+// `version` (spec 2026-11-02 §5): bumped by the check-in after a payment save,
+// so the suggestion is worked out again from revenue as it now stands. The
+// result is tagged with the version it was read for, and a result for an
+// older version is never returned: from the render the version changes in,
+// the hook gives null until the new read lands. That is what lets the caller
+// treat "not null" as "the answer for this version" without tracking object
+// identity across renders.
 export function useFinanceSuggestion(
   clientId: number,
   period: string,
   canReadRevenue: boolean,
   canReadPackages: boolean,
+  version = 0,
 ): FinanceSuggestion | null {
-  const [suggestion, setSuggestion] = useState<FinanceSuggestion | null>(null)
+  const [result, setResult] = useState<{ version: number; suggestion: FinanceSuggestion } | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const isCancelled = () => cancelled
-    setSuggestion(null)
+    setResult(null)
     if (!canReadRevenue) return
 
     void (async () => {
@@ -49,9 +58,10 @@ export function useFinanceSuggestion(
           if (!packages.error) stints = (packages.data ?? []) as Stint[]
         }
 
-        setSuggestion(
-          financeFromRevenue(period, stintFor(stints, period), (revenue.data ?? []) as RevenueRow[]),
-        )
+        setResult({
+          version,
+          suggestion: financeFromRevenue(period, stintFor(stints, period), (revenue.data ?? []) as RevenueRow[]),
+        })
       } catch {
         // A rejected promise is a failed read: stay null.
       }
@@ -60,7 +70,7 @@ export function useFinanceSuggestion(
     return () => {
       cancelled = true
     }
-  }, [clientId, period, canReadRevenue, canReadPackages])
+  }, [clientId, period, canReadRevenue, canReadPackages, version])
 
-  return suggestion
+  return result !== null && result.version === version ? result.suggestion : null
 }

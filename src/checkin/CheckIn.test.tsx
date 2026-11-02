@@ -47,6 +47,15 @@ vi.mock('./useRevertSuggestion', () => ({
   useRevertSuggestion: () => ({ state: { kind: 'idle' }, revert: async () => {} }),
 }))
 
+// The payments box mounted in CheckIn pulls in lib/supabase through
+// useMonthPayment; stubbed 'off' (draws nothing), tested in CheckIn.dom.test.tsx.
+vi.mock('../revenue/useMonthPayment', () => ({
+  useMonthPayment: () => ({
+    status: 'off', loadError: null, row: null, storedRetainer: null, enteredByName: null,
+    save: async () => ({ ok: true }), reload: () => {},
+  }),
+}))
+
 // Finance suggestion reads Supabase; stubbed, controllable per test.
 const finance = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('./useFinanceSuggestion', () => ({

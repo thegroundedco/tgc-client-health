@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, questionsFor } from '../lib/buckets'
 import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
@@ -8,6 +8,8 @@ import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
 import { useCheckin } from './useCheckin'
 import { useFinanceSuggestion } from './useFinanceSuggestion'
+import { useMonthPayment } from '../revenue/useMonthPayment'
+import { PaymentsBox } from './PaymentsBox'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
@@ -102,11 +104,20 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     unsavedFromEarlierVisit,
   } = checkin
 
+  // Spec 2026-11-02 §3. Gated at the read: without view_revenue the hook is
+  // 'off', issues no query, and the box draws nothing.
+  const payment = useMonthPayment(client.id, period, can(profile.role, 'view_revenue'))
+
+  // Bumped after a payment save, so the finance suggestion is read again from
+  // revenue as it now stands (spec 2026-11-02 §5).
+  const [financeVersion, setFinanceVersion] = useState(0)
+
   const finance = useFinanceSuggestion(
     client.id,
     period,
     can(profile.role, 'view_revenue'),
     can(profile.role, 'manage_clients'),
+    financeVersion,
   )
 
   // Spec 2026-10-29: fill the two finance answers from revenue once per visit,
@@ -129,6 +140,40 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     }
     if (Object.keys(values).length > 0) checkin.setAnswers(values)
   }, [status, finance, client.id, period, stored, draft.answers, checkin, profile.role])
+
+  // Spec 2026-11-02 §5, separate from the once-per-visit prefill above: after a
+  // payment save, the two finance answers take the newly computed values, OVER
+  // a stored one too (the AI's "pending revenue" placeholder 3 is the case this
+  // exists for). Only the finance keys the data now answers are passed, and
+  // setAnswers changes only the keys it is given, so a person's unsaved score
+  // edits survive; a key the data still cannot answer is left alone. It lands
+  // as an ordinary unsaved change (no local draft, the same reasoning as the
+  // fill), which the person then saves with the rest of the check-in.
+  //
+  // `refreshFor` names the visit the save happened on, so a suggestion for
+  // some other client or month can never be applied. useFinanceSuggestion
+  // gives null until the read for the bumped version lands, so a non-null
+  // `finance` here is the post-save answer, never the one from before the save.
+  //
+  // Edit rights, as the prefill: a read-only form must not be marked unsaved.
+  const refreshFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (refreshFor.current !== `${client.id}:${period}`) return
+    if (status !== 'ready' || finance === null) return
+    refreshFor.current = null
+    if (!can(profile.role, 'edit_scores')) return
+    const values: Record<string, number> = {}
+    for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
+      const answer = finance[key]
+      if (answer) values[key] = answer.value
+    }
+    if (Object.keys(values).length > 0) checkin.setAnswers(values, { overwrite: true })
+  }, [status, finance, client.id, period, checkin, profile.role])
+
+  const onPaymentSaved = () => {
+    refreshFor.current = `${client.id}:${period}`
+    setFinanceVersion((version) => version + 1)
+  }
 
   const readFailed = status === 'error'
   const label = submitLabel(scored, required)
@@ -261,6 +306,16 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         // changes who is scored has no business beside an unread check-in.
         <EndClientPanel client={client} hasCheckin={stored != null} onPaused={onBack} period={period} />
       )}
+      {/* Spec 2026-11-02 §3: above the scores, below the client controls. The
+          box draws nothing for a role without view_revenue. */}
+      <PaymentsBox
+        canEdit={can(profile.role, 'edit_revenue')}
+        clientId={client.id}
+        clientName={client.name}
+        onSaved={onPaymentSaved}
+        payment={payment}
+        period={period}
+      />
       {stored?.suggested_at != null && (
         <SuggestionBanner
           canConfirm={can(profile.role, 'edit_scores')}

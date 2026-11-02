@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type Result = { data: unknown[] | null; error: unknown }
@@ -104,5 +104,56 @@ describe('useFinanceSuggestion', () => {
     await waitFor(() => expect(result.current).not.toBeNull())
     expect(result.current?.fin_rate_increased?.value).toBe(3)
     expect(result.current?.fin_rack_rate).toBeUndefined()
+  })
+
+  // Spec 2026-11-02 §5: a payment saved on the check-in bumps the version, and
+  // the suggestion is worked out again from the revenue as it now stands.
+  it('a new version re-reads revenue', async () => {
+    const { result, rerender } = renderHook(
+      ({ version }) => useFinanceSuggestion(7, OCT, true, false, version),
+      { initialProps: { version: 0 } },
+    )
+    await waitFor(() => expect(result.current).not.toBeNull())
+    // One row: no last month, so the rate change has no answer yet.
+    expect(result.current?.fin_rate_increased).toBeUndefined()
+    expect(tables()).toEqual(['client_month_revenue'])
+
+    db.revenue = async () => ({
+      data: [
+        { period: '2026-09-01', retainer_cents: 400000, project_cents: 0 },
+        { period: OCT, retainer_cents: 400000, project_cents: 0 },
+      ],
+      error: null,
+    })
+    rerender({ version: 1 })
+    await waitFor(() => expect(result.current?.fin_rate_increased?.value).toBe(3))
+    expect(tables()).toEqual(['client_month_revenue', 'client_month_revenue'])
+  })
+
+  // The check-in applies the first non-null answer after a payment save, so an
+  // answer from before the save must never be handed back as if it were new --
+  // not even for the one render before this hook's own effect clears it, which
+  // is the render the check-in's effect runs in. So every rendered value is
+  // recorded, not only the latest (act() would flush that render away).
+  it('gives null, not the old answer, until the new version has been read', async () => {
+    const seen: { version: number; value: unknown }[] = []
+    const { result, rerender } = renderHook(
+      ({ version }) => {
+        const value = useFinanceSuggestion(7, OCT, true, false, version)
+        seen.push({ version, value })
+        return value
+      },
+      { initialProps: { version: 0 } },
+    )
+    await waitFor(() => expect(result.current).not.toBeNull())
+    let land: null | ((r: { data: unknown[] | null; error: unknown }) => void) = null
+    db.revenue = () => new Promise((resolve) => { land = resolve })
+    rerender({ version: 1 })
+    await waitFor(() => expect(land).not.toBeNull())
+    const before = seen.filter((s) => s.version === 1)
+    expect(before.length).toBeGreaterThan(0)
+    expect(before.every((s) => s.value === null)).toBe(true)
+    act(() => land?.({ data: GROW_ROWS, error: null }))
+    await waitFor(() => expect(result.current).not.toBeNull())
   })
 })

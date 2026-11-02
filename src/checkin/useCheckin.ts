@@ -44,7 +44,7 @@ export type UseCheckin = {
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
   setAnswer: (key: string, value: number | null) => void
-  setAnswers: (values: Record<string, number>) => void
+  setAnswers: (values: Record<string, number>, options?: { overwrite?: boolean }) => void
   setNotes: (notes: string) => void
   reload: () => void
   submit: () => void
@@ -246,19 +246,26 @@ export function useCheckin(
   // Several answers in ONE edit (spec 2026-10-29, finances from revenue). Two
   // setAnswer calls in the same tick would each start from the same `draft`
   // and the second would drop the first. Only fills keys the form does not
-  // already hold, so it can never overwrite what a person chose.
+  // already hold, so it can never overwrite what a person chose -- unless
+  // `overwrite` is passed (spec 2026-11-02 §5: after a payment save the finance
+  // answers follow the payment, over a stored value too). Even then only the
+  // keys named in `values` change; every other answer, typed or stored, is
+  // kept. A key already holding the same value is no change, so a refresh that
+  // agrees with the form leaves it clean and Confirm still offered.
   const setAnswers = useCallback(
-    (values: Record<string, number>) => {
+    (values: Record<string, number>, options?: { overwrite?: boolean }) => {
       const answers: QuestionScores = { ...draft.answers }
       let changed = false
       for (const [key, value] of Object.entries(values)) {
-        if (answers[key] === undefined) {
+        const fills = options?.overwrite ? answers[key] !== value : answers[key] === undefined
+        if (fills) {
           answers[key] = value
           changed = true
         }
       }
       if (!changed) return
-      // NOT applyEdit: no writeDraft and no setDraftPersisted. A fill is not
+      // NOT applyEdit, for an overwrite too: no writeDraft and no
+      // setDraftPersisted. A fill is not
       // something the person typed. Persisting it on mere open would leave a
       // local draft that differs from the database, win on the next load, claim
       // "earlier visit" changes nobody made, and let Save overwrite newer

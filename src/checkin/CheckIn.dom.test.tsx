@@ -17,10 +17,52 @@ import { readDraft, writeDraft } from './draftCache'
 // useCheckin mocked -- same seam CheckIn.test.tsx uses -- and reads the
 // rendered DOM the way a reviewer opening the deployed page would: disabled
 // attributes and visible text, never internal props or state.
-const hookState = vi.hoisted(() => ({ current: null as UseCheckin | null }))
+const hookState = vi.hoisted(() => ({ current: null as UseCheckin | null, real: false }))
 
-vi.mock('./useCheckin', () => ({
-  useCheckin: () => hookState.current,
+// `real` switches to the actual hook, against the Supabase fake below, for the
+// tests that need the form's own state (spec 2026-11-02 §5: a payment save must
+// change the finance answers and nothing else, which a stub cannot show).
+vi.mock('./useCheckin', async () => {
+  const actual = await vi.importActual<typeof import('./useCheckin')>('./useCheckin')
+  return {
+    useCheckin: (...args: Parameters<typeof actual.useCheckin>) =>
+      hookState.real ? actual.useCheckin(...args) : hookState.current,
+  }
+})
+
+// Only the real useCheckin reaches this: the two reads its load() makes.
+const checkinRows = vi.hoisted(() => ({ current: [] as unknown[] }))
+vi.mock('../lib/supabase', () => ({
+  supabase: {
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          in: async () => ({ data: table === 'checkins' ? checkinRows.current : [], error: null }),
+        }),
+      }),
+    }),
+  },
+}))
+
+// The payments box (spec 2026-11-02 §3) reads through useMonthPayment. Stubbed
+// as a seam, honouring canRead the way the real hook does ('off', no query).
+const payments = vi.hoisted(() => ({
+  calls: [] as [number, string, boolean][],
+  save: null as null | ((p: unknown) => Promise<{ ok: true } | { ok: false; error: string }>),
+}))
+vi.mock('../revenue/useMonthPayment', () => ({
+  useMonthPayment: (clientId: number, period: string, canRead: boolean) => {
+    payments.calls.push([clientId, period, canRead])
+    return {
+      status: canRead ? 'ready' : 'off',
+      loadError: null,
+      row: null,
+      storedRetainer: 400000,
+      enteredByName: null,
+      save: async (p: unknown) => (payments.save ? payments.save(p) : { ok: true }),
+      reload: () => {},
+    }
+  },
 }))
 
 // The end-client panel mounted in CheckIn pulls in useStatusChange and, through
@@ -69,10 +111,14 @@ vi.mock('./useRevertSuggestion', async () => {
   }
 })
 
-// Finance suggestion reads Supabase; stubbed, controllable per test.
-const finance = vi.hoisted(() => ({ current: null as unknown }))
+// Finance suggestion reads Supabase; stubbed, controllable per test. `after`
+// is what the read returns once a payment save has bumped the version.
+const finance = vi.hoisted(() => ({ current: null as unknown, after: null as unknown, versions: [] as number[] }))
 vi.mock('./useFinanceSuggestion', () => ({
-  useFinanceSuggestion: () => finance.current,
+  useFinanceSuggestion: (_c: number, _p: string, _r: boolean, _k: boolean, version = 0) => {
+    finance.versions.push(version)
+    return version > 0 ? finance.after : finance.current
+  },
 }))
 
 const { CheckIn } = await import('./CheckIn')
@@ -703,5 +749,101 @@ describe('CheckIn, run and revert controls', () => {
       expect(r.reload).not.toHaveBeenCalled()
       expect(readDraft(CLIENT.id, PERIOD)).not.toBeNull()
     })
+  })
+})
+
+describe('CheckIn, the payments box', () => {
+  afterEach(() => {
+    payments.calls.length = 0
+  })
+
+  it('shows the payments box above the scores for someone who may see revenue', () => {
+    renderAs('account_manager')
+    expect(payments.calls.at(-1)).toEqual([CLIENT.id, PERIOD, true])
+    const heading = screen.getByRole('heading', { name: 'August payments' })
+    const firstBucket = screen.getAllByTestId('bucket-heading')[0]
+    expect(heading.compareDocumentPosition(firstBucket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a viewer gets no payments box and no revenue query', () => {
+    renderAs('viewer')
+    expect(payments.calls.length).toBeGreaterThan(0)
+    expect(payments.calls.every(([, , canRead]) => canRead === false)).toBe(true)
+    expect(screen.queryByRole('heading', { name: /payments/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /retainer/ })).toBeNull()
+  })
+})
+
+// Spec 2026-11-02 §5, through the REAL useCheckin: the form's own state is what
+// is under test, so a stubbed hook would prove nothing.
+describe('CheckIn, finance answers after a payment save', () => {
+  const radio = (key: string, value: number) =>
+    document.querySelector(`input[name="question-${key}"][value="${value}"]`) as HTMLInputElement
+
+  async function openAsAdmin() {
+    hookState.real = true
+    window.localStorage.clear()
+    render(
+      <CheckIn client={CLIENT} period={PERIOD} profile={profile('admin')} onBack={() => {}} onEditClient={() => {}} />,
+    )
+    await screen.findByRole('heading', { name: 'August payments' })
+  }
+
+  async function confirmPayment() {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Confirm .* retainer/ }))
+    })
+  }
+
+  afterEach(() => {
+    hookState.real = false
+    checkinRows.current = []
+    finance.after = null
+    finance.versions.length = 0
+    payments.save = null
+    window.localStorage.clear()
+  })
+
+  it('after a payment save the finance answers take the new values over the stored placeholder', async () => {
+    // The AI's "finance pending revenue" placeholders, stored. Before the save
+    // the data gives no answer; after it, only the rate change is answered.
+    checkinRows.current = [
+      { client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, fin_rack_rate: 3, comm_timely: 4, notes: null },
+    ]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    await openAsAdmin()
+    expect(radio('fin_rate_increased', 3).checked).toBe(true)
+    expect(document.getElementById('checkin-save-status')?.textContent).not.toMatch(/Unsaved/)
+
+    await confirmPayment()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+    // The data still gives no rack-rate answer: left alone.
+    expect(radio('fin_rack_rate', 3).checked).toBe(true)
+    expect(document.getElementById('checkin-save-status')?.textContent).toMatch(/Unsaved changes/)
+  })
+
+  it('a payment save keeps unsaved score edits', async () => {
+    checkinRows.current = [
+      { client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, comm_timely: 4, notes: null },
+    ]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    await openAsAdmin()
+    fireEvent.click(radio('comm_timely', 2))
+    expect(radio('comm_timely', 2).checked).toBe(true)
+
+    await confirmPayment()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+    expect(radio('comm_timely', 2).checked).toBe(true)
+  })
+
+  it('a failed payment save changes no answer', async () => {
+    checkinRows.current = [{ client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, notes: null }]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    payments.save = async () => ({ ok: false, error: 'Nope.' })
+    await openAsAdmin()
+    await confirmPayment()
+    await screen.findByText('Nope.')
+    expect(radio('fin_rate_increased', 3).checked).toBe(true)
+    expect(finance.versions.every((v) => v === 0)).toBe(true)
   })
 })

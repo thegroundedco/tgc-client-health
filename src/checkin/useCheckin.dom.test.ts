@@ -471,4 +471,37 @@ describe('useCheckin: setAnswers', () => {
     expect(second.result.current.unsavedFromEarlierVisit).toBe(true)
     expect(second.result.current.draft.answers.fin_rack_rate).toBe(1)
   })
+
+  // Spec 2026-11-02 §5: after a payment save the finance answers follow the
+  // payment, over a stored value too. Stored, not typed: the row holds 3 and
+  // the form opened clean.
+  it('setAnswers with overwrite replaces a stored answer without persisting a draft', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_rate_increased: 3, comm_timely: 4, notes: null }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.answers.fin_rate_increased).toBe(3)
+    expect(result.current.saveState.kind).toBe('clean')
+    act(() => result.current.setAnswers({ fin_rate_increased: 5 }, { overwrite: true }))
+    expect(result.current.draft.answers.fin_rate_increased).toBe(5)
+    // Only the named key: the other stored answer is untouched.
+    expect(result.current.draft.answers.comm_timely).toBe(4)
+    expect(result.current.saveState.kind).toBe('dirty')
+    expect(readDraft(1, '2026-08-01')).toBeNull()
+  })
+
+  it('setAnswers with overwrite and identical values is not an edit', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_rate_increased: 3, notes: null }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    const draftBefore = result.current.draft
+    act(() => result.current.setAnswers({ fin_rate_increased: 3 }, { overwrite: true }))
+    expect(result.current.draft).toBe(draftBefore)
+    expect(result.current.saveState.kind).toBe('clean')
+  })
 })
