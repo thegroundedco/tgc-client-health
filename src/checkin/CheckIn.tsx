@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, questionsFor } from '../lib/buckets'
+import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, PAYMENTS_BUCKET, questionsFor } from '../lib/buckets'
 import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
 import { formatPeriod, formatSavedAt } from '../lib/month'
@@ -306,16 +306,6 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         // changes who is scored has no business beside an unread check-in.
         <EndClientPanel client={client} hasCheckin={stored != null} onPaused={onBack} period={period} />
       )}
-      {/* Spec 2026-11-02 §3: above the scores, below the client controls. The
-          box draws nothing for a role without view_revenue. */}
-      <PaymentsBox
-        canEdit={can(profile.role, 'edit_revenue')}
-        clientId={client.id}
-        clientName={client.name}
-        onSaved={onPaymentSaved}
-        payment={payment}
-        period={period}
-      />
       {stored?.suggested_at != null && (
         <SuggestionBanner
           canConfirm={can(profile.role, 'edit_scores')}
@@ -454,6 +444,21 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
               </h3>
 
               {hasScale && <ScaleLegend />}
+
+              {/* Spec 2026-11-02 §3, moved by the owner the same day: inside
+                  Finances, above its questions, so the payment is confirmed
+                  right where the two answers it fills are read. The box draws
+                  nothing for a role without view_revenue. */}
+              {bucket === PAYMENTS_BUCKET && (
+                <PaymentsBox
+                  canEdit={can(profile.role, 'edit_revenue')}
+                  clientId={client.id}
+                  clientName={client.name}
+                  onSaved={onPaymentSaved}
+                  payment={payment}
+                  period={period}
+                />
+              )}
 
               {/* Shown, not hidden -- §7, "so the scorer learns the bucket
                   exists". A hidden section is a screen that silently asks for

@@ -23,6 +23,10 @@ export type Bucket = (typeof BUCKETS)[number]
 // written as the string at each call site, so the gate has one definition.
 export const GATED_BUCKET: Bucket = 'advocacy'
 
+// The check-in's payments box sits inside this bucket (owner, 2026-11-02): two
+// of its answers are worked out from the revenue confirmed there.
+export const PAYMENTS_BUCKET: Bucket = 'finances'
+
 export type QuestionKind = 'scale' | 'choice'
 
 export type ChoiceOption = { label: string; value: number }

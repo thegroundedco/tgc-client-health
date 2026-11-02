@@ -757,12 +757,19 @@ describe('CheckIn, the payments box', () => {
     payments.calls.length = 0
   })
 
-  it('shows the payments box above the scores for someone who may see revenue', () => {
+  // The owner moved the box into Finances on 2026-11-02: inside that section,
+  // under its heading and above its first question, and in no other section.
+  it('shows the payments box inside Finances, above its questions, for someone who may see revenue', () => {
     renderAs('account_manager')
     expect(payments.calls.at(-1)).toEqual([CLIENT.id, PERIOD, true])
     const heading = screen.getByRole('heading', { name: 'August payments' })
-    const firstBucket = screen.getAllByTestId('bucket-heading')[0]
-    expect(heading.compareDocumentPosition(firstBucket) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const finances = screen.getByTestId('bucket-finances')
+    expect(finances.contains(heading)).toBe(true)
+    const financesHeading = within(finances).getByTestId('bucket-heading')
+    const firstQuestion = within(finances).getAllByRole('radiogroup')[0]
+    expect(financesHeading.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(heading.compareDocumentPosition(firstQuestion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByRole('heading', { name: /payments/ })).toHaveLength(1)
   })
 
   it('a viewer gets no payments box and no revenue query', () => {

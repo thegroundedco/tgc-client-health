@@ -42,7 +42,7 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
   const month = monthName(period)
   const heading = (
     <>
-      <h3 className="t-label">{month} payments</h3>
+      <h4 className="t-label">{month} payments</h4>
       <p className="t-caption">{paymentCaption(period)}</p>
     </>
   )

@@ -9,7 +9,8 @@ entry screen stays.
 Agreed with the owner, 2026-11-02:
 
 - The check-in screen (the one a board card opens) gets a **payments box** with two fields, **Retainer** and
-  **Project**, placed **above the scores** (mockup option B).
+  **Project**, placed **inside the Finances section, above its questions** (moved there by the owner later on
+  2026-11-02, from mockup option B, "above the scores").
 - **Clients admin is the source of truth** for a client's monthly retainer. A retainer client's Retainer field
   shows that amount as **ghost text**; one click confirms it.
 - Saving a retainer amount **different** from the stored one asks whether to **update the client's retainer
@@ -55,8 +56,8 @@ The edit panel in Clients admin gets a **Monthly retainer** field (dollars, same
 
 ## 3. The payments box on the check-in
 
-Shown to roles with `view_revenue`; viewers get nothing, and no revenue query is made for them. Sits above the
-scores, below the masthead and Edit client / End client controls. Titled with the check-in's month
+Shown to roles with `view_revenue`; viewers get nothing, and no revenue query is made for them. Sits inside the
+Finances section, under its heading and above its questions. Titled with the check-in's month
 (e.g. "October payments").
 
 States, for the check-in's month (`client_month_revenue` row for `(client_id, period)`):

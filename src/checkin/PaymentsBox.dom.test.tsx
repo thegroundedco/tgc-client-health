@@ -33,7 +33,7 @@ describe('PaymentsBox', () => {
 
   it('shows the heading and caption', () => {
     setup(fake())
-    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('October payments')
+    expect(screen.getByRole('heading', { level: 4 }).textContent).toBe('October payments')
     expect(screen.getByText('Invoiced in October')).toBeTruthy()
   })
 
