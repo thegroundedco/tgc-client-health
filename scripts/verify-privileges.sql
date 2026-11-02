@@ -511,8 +511,13 @@ begin
   --    new functions -- see
   --    20260820232429_revoke_public_function_execute_from_public.sql. So a future
   --    `create function public.x()` IS anon-callable unless its migration
-  --    revokes execute explicitly. There are zero functions in `public` today;
-  --    this assertion is what makes that stay deliberate.
+  --    revokes execute explicitly. `public` holds exactly two browser-callable
+  --    functions today, both security INVOKER and granted to authenticated
+  --    only (allowlisted below): can_run_ai_suggestions()
+  --    (20261031090000_ai_suggestion_runs.sql) and save_month_payment(...)
+  --    (20261102120000_client_retainers.sql). Anything else, or ANY function
+  --    anon can execute, is a failure; this assertion is what makes that stay
+  --    deliberate.
   ----------------------------------------------------------------------------
   for r in
     select (p.oid::regprocedure)::text as fn, g as grantee
@@ -521,12 +526,19 @@ begin
     cross join unnest(array['anon','authenticated']) g
     where n.nspname = 'public'
       and has_function_privilege(g, p.oid, 'EXECUTE')
+      -- Expected-callable allowlist, by exact signature and grantee. anon is
+      -- never in it: an anon-callable function is always a failure.
+      and (g, (p.oid::regprocedure)::text) not in (
+        ('authenticated', 'can_run_ai_suggestions()'),
+        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean)')
+      )
   loop
     -- The advice deliberately does NOT say "revoke from public, anon,
     -- authenticated". That triple is the outage documented in section 9 and in
     -- spec section 7.2: if the function is referenced by a policy, revoking it
     -- from `authenticated` makes every query by every signed-in user fail
-    -- 42501. Harmless today only because `public` holds zero functions.
+    -- 42501. Harmless today only because the allowlist above holds just the two
+    -- invoker functions that are meant to be called.
     problems := problems || format(
       '%s can EXECUTE public function %s -- revoke execute from public and anon in its migration, then grant it back to exactly the roles that need to call it (or, if a POLICY references it, exactly the roles those policies name -- see section 9)',
       r.grantee, r.fn);

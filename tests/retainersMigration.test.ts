@@ -96,18 +96,38 @@ describe('the client_retainers migration', () => {
       )
     })
 
-    it('upserts revenue by (client_id, period) stamping entered_by', () => {
-      expect(fn).toContain('insert into public.client_month_revenue')
-      expect(fn).toContain('on conflict (client_id, period) do update')
-      expect(fn).toContain('(select auth.uid())')
+    it('upserts revenue by (client_id, period) stamping entered_by, in the revenue statement itself', () => {
+      const revenue = statement(fn, /insert into public\.client_month_revenue[\s\S]*?;/).replaceAll(/\s+/g, ' ')
+      expect(revenue).toMatch(/\(client_id, period, retainer_cents, project_cents, entered_by\)/)
+      expect(revenue).toContain('(select auth.uid())')
+      expect(revenue).toContain('on conflict (client_id, period) do update')
+      expect(revenue).toContain('entered_by = excluded.entered_by')
+      expect(revenue).toContain('retainer_cents = excluded.retainer_cents')
+      expect(revenue).toContain('project_cents = excluded.project_cents')
     })
 
-    it('upserts the retainer when positive and deletes it otherwise', () => {
-      expect(fn).toContain('if p_set_retainer then')
-      expect(fn).toContain('p_retainer_cents > 0')
-      expect(fn).toContain('insert into public.client_retainers')
-      expect(fn).toContain('on conflict (client_id) do update')
-      expect(fn).toMatch(/delete from public\.client_retainers\s+where client_id = p_client_id/)
+    it('upserts the retainer stamping updated_by, in the retainer statement itself', () => {
+      const retainer = statement(fn, /insert into public\.client_retainers[\s\S]*?;/).replaceAll(/\s+/g, ' ')
+      expect(retainer).toMatch(/\(client_id, monthly_cents, updated_by\)/)
+      expect(retainer).toContain('(select auth.uid())')
+      expect(retainer).toContain('on conflict (client_id) do update')
+      expect(retainer).toContain('monthly_cents = excluded.monthly_cents')
+      expect(retainer).toContain('updated_by = excluded.updated_by')
+    })
+
+    it('upserts the retainer when positive and deletes it otherwise, in that branch order', () => {
+      const gate = fn.indexOf('if p_set_retainer then')
+      const positive = fn.indexOf('if p_retainer_cents > 0 then')
+      const insert = fn.indexOf('insert into public.client_retainers')
+      const otherwise = fn.indexOf('else', positive)
+      const del = fn.search(/delete from public\.client_retainers\s+where client_id = p_client_id/)
+      for (const [label, at] of Object.entries({ gate, positive, insert, otherwise, del })) {
+        expect(at, label).toBeGreaterThan(-1)
+      }
+      expect(gate).toBeLessThan(positive)
+      expect(positive).toBeLessThan(insert)
+      expect(insert).toBeLessThan(otherwise)
+      expect(otherwise).toBeLessThan(del)
     })
 
     it('revokes execute from public and anon, and grants it to authenticated', () => {
