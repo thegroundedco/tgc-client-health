@@ -1,4 +1,4 @@
-import { formatSavedAt } from '../lib/month'
+import { formatSavedAt, shortDay } from '../lib/month'
 import { useConfirmSuggestion } from './useConfirmSuggestion'
 
 type Props = {
@@ -11,12 +11,6 @@ type Props = {
   // while the person is looking at different answers would accept answers they
   // are not looking at.
   hasUnsavedChanges: boolean
-}
-
-function shortDay(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 // Spec 2026-10-29: an AI suggestion that no person has reviewed. Confirm

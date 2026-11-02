@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { DialogShell } from '../ai/DialogShell'
 import styles from '../ai/RunMonthDialog.module.css'
+import { shortDay } from '../lib/month'
 import type { Answers } from '../lib/scoreV2'
 import type { AiSuggestion } from './aiSuggestion'
 import { useRevertSuggestion } from './useRevertSuggestion'
@@ -20,12 +21,6 @@ type Props = {
   /** Unsaved edits also offer the button, and Revert discards them. */
   hasUnsavedChanges: boolean
   onReverted: () => void
-}
-
-function shortDay(iso: string): string {
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return iso
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 // "Revert to AI suggested scores" on a check-in a person has reviewed, or is

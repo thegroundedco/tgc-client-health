@@ -101,3 +101,10 @@ export function formatDay(date: string): string {
   if (Number.isNaN(parsed.getTime())) return date
   return parsed.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
+
+// "Nov 4" from an ISO timestamp; an unparseable value is shown as given.
+export function shortDay(iso: string): string {
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return iso
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
