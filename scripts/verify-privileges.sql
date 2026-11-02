@@ -1085,7 +1085,15 @@ begin
         ('clients',  'clients_update_manage_clients'),
         ('checkins', 'checkins_select_view_scores'),
         ('checkins', 'checkins_insert_edit_scores'),
-        ('checkins', 'checkins_update_edit_scores')
+        ('checkins', 'checkins_update_edit_scores'),
+        -- client_retainers, 20261102120000. Four policies, delete included:
+        -- 10f3 probes the account manager's insert, update and delete against
+        -- them, and a dropped policy would make every one of those pass for
+        -- the wrong reason (no policy also means no rows).
+        ('client_retainers', 'client_retainers_select_view_revenue'),
+        ('client_retainers', 'client_retainers_insert_edit_revenue'),
+        ('client_retainers', 'client_retainers_update_edit_revenue'),
+        ('client_retainers', 'client_retainers_delete_edit_revenue')
     )
     select e.tbl, e.policy
     from expected e
@@ -1429,6 +1437,144 @@ begin
         else
           problems := problems || format(
             'the account-manager revenue boundary check could not run: %s %s -- whether an account manager can read revenue and is refused writing it is UNVERIFIED',
+            sqlstate, sqlerrm)::text;
+        end if;
+      end;
+    end if;
+
+    -- 10f3. The account manager's RETAINER boundary -- the same asymmetry as
+    -- 10f2 (view_revenue yes, edit_revenue no) for public.client_retainers,
+    -- added by 20261102120000_client_retainers.sql. Three verbs, because that
+    -- table has a delete policy (a retainer can end) and the other does not,
+    -- plus the one function that writes both tables.
+    --
+    -- INSERT is probed BEFORE the seed row exists, as a refusal-or-sentinel
+    -- like 10f2's insert (a with check failure raises). UPDATE and DELETE are
+    -- probed against a seed row created as the table owner, and COUNT ROWS
+    -- instead of waiting for an exception, for the reason 10f2 spells out: a
+    -- using predicate that is false matches nothing and raises nothing. The
+    -- whole block undoes itself with its own `probe rollback`, so a real
+    -- retainer on the probe client, which the first statement removes, comes
+    -- back untouched.
+    if to_regclass('public.client_retainers') is null then
+      preconditions := preconditions || 'public.client_retainers does not exist, so the account-manager retainer boundary went UNEXERCISED -- apply 20261102120000_client_retainers.sql and re-run'::text;
+    elsif am_uid is not null then
+      begin
+        delete from public.client_retainers where client_id = probe_client_id;
+
+        perform set_config(
+          'request.jwt.claims',
+          json_build_object('sub', am_uid, 'role', 'authenticated', 'aud', 'authenticated')::text,
+          true);
+        set local role authenticated;
+
+        begin
+          insert into public.client_retainers (client_id, monthly_cents)
+          values (probe_client_id, 1);
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active ACCOUNT MANAGER was ALLOWED to INSERT into public.client_retainers -- client_retainers_insert_edit_revenue is not gating on edit_revenue, so every account manager can set a standing retainer the owner decided only admins should (the row was rolled back by this check, not by the policy)'::text;
+            else
+              problems := problems || format(
+                'the account-manager retainer INSERT probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        -- Back to the owner to seed the row the next probes need.
+        reset role;
+        insert into public.client_retainers (client_id, monthly_cents)
+        values (probe_client_id, 1);
+        set local role authenticated;
+
+        -- The read half, against the seed row, so the two refusals below are
+        -- the policies refusing and not an empty table hiding the question.
+        select count(*) into n_seen
+        from public.client_retainers
+        where client_id = probe_client_id;
+
+        if n_seen <> 1 then
+          problems := problems || format(
+            'an active ACCOUNT MANAGER sees %s of 1 seeded row(s) in public.client_retainers -- client_retainers_select_view_revenue is denying rows the view_revenue preset is meant to expose, so the month box could not pre-fill the retainer for any account manager',
+            n_seen)::text;
+        end if;
+
+        begin
+          update public.client_retainers
+             set monthly_cents = 999999
+           where client_id = probe_client_id;
+          get diagnostics n_updated = row_count;
+
+          if n_updated > 0 then
+            problems := problems || format(
+              'an active ACCOUNT MANAGER was ALLOWED to UPDATE public.client_retainers -- %s row(s) changed, so client_retainers_update_edit_revenue is not gating on edit_revenue (the row was rolled back by this check, not by the policy)',
+              n_updated)::text;
+          end if;
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            problems := problems || format(
+              'the account-manager retainer UPDATE probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+        end;
+
+        -- DELETE counts rows for the same reason as UPDATE: a false using
+        -- predicate deletes nothing and raises nothing.
+        begin
+          delete from public.client_retainers
+           where client_id = probe_client_id;
+          get diagnostics n_updated = row_count;
+
+          if n_updated > 0 then
+            problems := problems || format(
+              'an active ACCOUNT MANAGER was ALLOWED to DELETE from public.client_retainers -- %s row(s) removed, so client_retainers_delete_edit_revenue is not gating on edit_revenue and every account manager can end a client''s retainer (the row was rolled back by this check, not by the policy)',
+              n_updated)::text;
+          end if;
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            problems := problems || format(
+              'the account-manager retainer DELETE probe failed for an unexpected reason: %s %s',
+              sqlstate, sqlerrm)::text;
+        end;
+
+        -- public.save_month_payment is security invoker, so an account manager
+        -- is refused by the same policies, at its first statement (the revenue
+        -- insert). A different period than any seed row; the sentinel means
+        -- the function let them write.
+        begin
+          perform public.save_month_payment(
+            probe_client_id, (probe_period + interval '2 month')::date, 1, 1, true);
+          raise exception 'probe rollback';
+        exception
+          when insufficient_privilege then
+            null;
+          when others then
+            if sqlerrm = 'probe rollback' then
+              problems := problems || 'an active ACCOUNT MANAGER was ALLOWED to call public.save_month_payment -- the function is not running as the caller (security invoker) or the revenue and retainer policies are not gating on edit_revenue, so every account manager can write payments (the rows were rolled back by this check, not by the policies)'::text;
+            else
+              problems := problems || format(
+                'the account-manager save_month_payment probe failed for an unexpected reason: %s %s',
+                sqlstate, sqlerrm)::text;
+            end if;
+        end;
+
+        reset role;
+
+        -- Undo the delete and the seed at the top of this block.
+        raise exception 'probe rollback';
+      exception when others then
+        if sqlerrm = 'probe rollback' then
+          null;
+        else
+          problems := problems || format(
+            'the account-manager retainer boundary check could not run: %s %s -- whether an account manager can read a retainer and is refused writing it is UNVERIFIED',
             sqlstate, sqlerrm)::text;
         end if;
       end;

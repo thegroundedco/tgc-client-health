@@ -1043,6 +1043,7 @@ describe('the monthly retainer on the edit form', () => {
     await open('admin', { monthlyCents: 400000, save })
 
     expect(screen.getByText('Shown on each check-in to confirm. Blank means no retainer.')).toBeTruthy()
+    expect(screen.getAllByText('Monthly retainer')).toHaveLength(1)
     const input = screen.getByLabelText('Monthly retainer') as HTMLInputElement
     expect(input.value).toBe('4000')
     await userEvent.clear(input)
@@ -1085,7 +1086,10 @@ describe('the monthly retainer on the edit form', () => {
     await open('account_manager', { monthlyCents: 400000 })
 
     expect(screen.getByText('$4,000 a month')).toBeTruthy()
-    expect(screen.queryByLabelText('Monthly retainer')).toBeNull()
+    // One visible heading, and the read-only text is labelled by it.
+    expect(screen.getAllByText('Monthly retainer')).toHaveLength(1)
+    expect(screen.getByLabelText('Monthly retainer')).toBe(screen.getByTestId('retainer-readonly'))
+    expect(screen.queryByRole('textbox', { name: 'Monthly retainer' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save retainer' })).toBeNull()
     expect(vi.mocked(useRetainer)).toHaveBeenCalledWith(1, true)
   })

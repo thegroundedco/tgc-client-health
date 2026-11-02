@@ -877,6 +877,34 @@ describe('CheckIn, finance answers after a payment save', () => {
     expect(screen.getByText(/from an earlier visit on this device and have not been saved/)).toBeTruthy()
   })
 
+  // Spec §5: the payment save changes a finance answer on a row the AI
+  // suggested, so the form no longer matches the stored suggestion. Confirm
+  // would confirm answers that are not on screen; Save is what remains, and it
+  // must stay enabled so the person can still finish.
+  it('a payment save that changes a finance answer on a suggested row disables Confirm but not Save', async () => {
+    checkinRows.current = [
+      {
+        id: 'c1',
+        client_id: CLIENT.id,
+        period: PERIOD,
+        suggested_at: '2026-10-29T12:00:00Z',
+        fin_rate_increased: 3,
+        comm_timely: 4,
+        notes: null,
+      },
+    ]
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }
+    await openAsAdmin()
+    const confirm = () => screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement
+    expect(confirm().disabled).toBe(false)
+
+    await confirmPayment()
+    await waitFor(() => expect(radio('fin_rate_increased', 5).checked).toBe(true))
+    expect(confirm().disabled).toBe(true)
+    expect(screen.getByText(/Save them instead/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
   it('a failed payment save changes no answer', async () => {
     checkinRows.current = [{ client_id: CLIENT.id, period: PERIOD, fin_rate_increased: 3, notes: null }]
     finance.after = { fin_rate_increased: { value: 5, reason: 'Up on last month.' } }

@@ -47,6 +47,10 @@ function retainerText(cents: number | null): string {
   return (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)
 }
 
+// The one visible "Monthly retainer" heading, which both the admin's input
+// and the account manager's read-only text point at (aria-labelledby).
+const RETAINER_LABEL_ID = 'edit-client-retainer-label'
+
 // The standing monthly retainer. Its OWN Save button, separate from the client
 // form's: like the package recorder beside it, a failure in one write never
 // blocks or half-applies the other. Gated at the read (useRetainer issues no
@@ -60,7 +64,9 @@ function RetainerBlock({ clientId, role }: { clientId: number; role: string }) {
 
   return (
     <div className={styles.field}>
-      <p className="t-caption">Monthly retainer</p>
+      <p className="t-caption" id={RETAINER_LABEL_ID}>
+        Monthly retainer
+      </p>
       <p className="t-caption">Shown on each check-in to confirm. Blank means no retainer.</p>
       {retainer.status === 'loading' && <p className="t-caption">Loading…</p>}
       {retainer.status === 'error' && (
@@ -72,7 +78,7 @@ function RetainerBlock({ clientId, role }: { clientId: number; role: string }) {
         (canEdit ? (
           <RetainerEditor monthlyCents={retainer.monthlyCents} onSave={retainer.save} />
         ) : (
-          <p className="t-body" data-testid="retainer-readonly">
+          <p aria-labelledby={RETAINER_LABEL_ID} className="t-body" data-testid="retainer-readonly">
             {retainer.monthlyCents === null ? 'No retainer' : `${formatMoney(retainer.monthlyCents)} a month`}
           </p>
         ))}
@@ -109,10 +115,8 @@ function RetainerEditor({
 
   return (
     <>
-      <label className="t-caption" htmlFor="edit-client-retainer">
-        Monthly retainer
-      </label>
       <input
+        aria-labelledby={RETAINER_LABEL_ID}
         className="field"
         disabled={busy}
         id="edit-client-retainer"
