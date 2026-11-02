@@ -428,7 +428,19 @@ begin
         -- either, so the absence here and the absence there agree.
         ('client_month_revenue', 'authenticated', 'SELECT'),
         ('client_month_revenue', 'authenticated', 'INSERT'),
-        ('client_month_revenue', 'authenticated', 'UPDATE')
+        ('client_month_revenue', 'authenticated', 'UPDATE'),
+
+        -- public.client_retainers: added by payments-on-checkin
+        -- (20261102120000_client_retainers.sql). All four verbs, unlike
+        -- client_month_revenue: a retainer can end, and the table forbids
+        -- zero, so "no retainer" is a deleted row and save_month_payment (a
+        -- security INVOKER function) needs DELETE plus a delete policy to do
+        -- it. As above, these entries say only that the verbs exist; WHO may
+        -- use them is RLS's job (view_revenue reads, edit_revenue writes).
+        ('client_retainers', 'authenticated', 'SELECT'),
+        ('client_retainers', 'authenticated', 'INSERT'),
+        ('client_retainers', 'authenticated', 'UPDATE'),
+        ('client_retainers', 'authenticated', 'DELETE')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),

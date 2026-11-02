@@ -336,6 +336,42 @@ export type Database = {
           },
         ]
       }
+      client_retainers: {
+        Row: {
+          client_id: number
+          monthly_cents: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: number
+          monthly_cents: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: number
+          monthly_cents?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_retainers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_retainers_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           created_at: string
@@ -448,6 +484,16 @@ export type Database = {
     }
     Functions: {
       can_run_ai_suggestions: { Args: never; Returns: boolean }
+      save_month_payment: {
+        Args: {
+          p_client_id: number
+          p_period: string
+          p_project_cents: number
+          p_retainer_cents: number
+          p_set_retainer: boolean
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
