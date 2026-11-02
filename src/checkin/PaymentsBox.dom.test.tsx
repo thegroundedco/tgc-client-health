@@ -17,7 +17,7 @@ function fake(over: Partial<UseMonthPayment> = {}): UseMonthPayment {
 
 function setup(payment: UseMonthPayment, canEdit = true) {
   const onSaved = vi.fn()
-  const view = render(<PaymentsBox canEdit={canEdit} clientName="Acme" onSaved={onSaved} payment={payment} period="2026-10-01" />)
+  const view = render(<PaymentsBox canEdit={canEdit} clientId={7} clientName="Acme" onSaved={onSaved} payment={payment} period="2026-10-01" />)
   return { onSaved, view }
 }
 const retainer = () => screen.getByLabelText('Retainer') as HTMLInputElement
@@ -183,9 +183,73 @@ describe('PaymentsBox', () => {
     const p = fake({ row: ROW })
     const { view } = setup(p)
     view.rerender(
-      <PaymentsBox canEdit clientName="Acme" onSaved={vi.fn()} period="2026-10-01"
+      <PaymentsBox canEdit clientId={7} clientName="Acme" onSaved={vi.fn()} period="2026-10-01"
         payment={{ ...p, row: { ...ROW, project_cents: 70000 } }} />,
     )
     expect(project().value).toBe('700')
+  })
+
+  it('clearing Retainer on a saved month asks, and never stores the ghost', async () => {
+    const p = fake({ row: ROW })
+    setup(p)
+    await userEvent.clear(retainer())
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(p.save).not.toHaveBeenCalled()
+    expect(screen.getByText(/Remove it from now on\?/)).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'No, just October' }))
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 0, projectCents: 50000, setRetainer: false })
+  })
+
+  it('a new month with no row clears typed fields and an open question', async () => {
+    const p = fake()
+    const { view } = setup(p)
+    await userEvent.type(retainer(), '3000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByText(/from now on/)).toBeTruthy()
+    view.rerender(
+      <PaymentsBox canEdit clientId={7} clientName="Acme" onSaved={vi.fn()} payment={p} period="2026-09-01" />,
+    )
+    expect(retainer().value).toBe('')
+    expect(screen.queryByText(/from now on/)).toBeNull()
+  })
+
+  it('a different client with no row clears typed fields and an open question', async () => {
+    const p = fake()
+    const { view } = setup(p)
+    await userEvent.type(project(), '900')
+    await userEvent.type(retainer(), '3000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    view.rerender(
+      <PaymentsBox canEdit clientId={8} clientName="Delta" onSaved={vi.fn()} payment={p} period="2026-10-01" />,
+    )
+    expect(project().value).toBe('')
+    expect(screen.queryByText(/from now on/)).toBeNull()
+  })
+
+  it('Cancel closes the question and writes nothing', async () => {
+    const p = fake()
+    setup(p)
+    await userEvent.type(retainer(), '3000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText(/from now on/)).toBeNull()
+    expect(p.save).not.toHaveBeenCalled()
+    expect(retainer().value).toBe('3000')
+  })
+
+  it('disables the inputs while saving and a double click saves once', async () => {
+    let finish: (r: { ok: true }) => void = () => {}
+    const p = fake({ save: vi.fn(() => new Promise<{ ok: true }>((r) => { finish = r })) })
+    setup(p)
+    await userEvent.type(retainer(), '3000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const yes = screen.getByRole('button', { name: 'Yes, update the retainer' })
+    await userEvent.click(yes)
+    await userEvent.click(yes)
+    expect(p.save).toHaveBeenCalledTimes(1)
+    expect(retainer().disabled).toBe(true)
+    expect(project().disabled).toBe(true)
+    finish({ ok: true })
+    await waitFor(() => expect(retainer().disabled).toBe(false))
   })
 })

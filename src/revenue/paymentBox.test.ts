@@ -3,6 +3,8 @@ import { parseMoney } from './money'
 import {
   boxMode,
   effectiveRetainer,
+  ghostRetainer,
+  monthName,
   initialFields,
   paymentCaption,
   retainerQuestion,
@@ -103,5 +105,23 @@ describe('retainerQuestion', () => {
   })
   it('names the month in the no button', () => {
     expect(retainerQuestion('Acme', '2026-03-01', 1, 2).no).toBe('No, just March')
+  })
+})
+
+describe('ghostRetainer', () => {
+  const row: MonthRow = { retainer_cents: 300000, project_cents: 0, entered_by: null, updated_at: '2026-11-04T12:00:00Z' }
+  it('is the stored retainer only when the month has no row', () => {
+    expect(ghostRetainer(null, 400000)).toBe(400000)
+    expect(ghostRetainer(null, null)).toBeNull()
+    expect(ghostRetainer(row, 400000)).toBeNull()
+  })
+  it('makes a cleared Retainer on a saved month zero, not the stored amount', () => {
+    expect(effectiveRetainer('', ghostRetainer(row, 400000))).toBe(0)
+  })
+})
+
+describe('monthName', () => {
+  it('is the month only', () => {
+    expect(monthName('2026-10-01')).toBe('October')
   })
 })

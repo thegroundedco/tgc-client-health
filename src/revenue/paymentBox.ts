@@ -27,6 +27,13 @@ export function effectiveRetainer(typed: string, storedRetainer: number | null):
   return parseMoney(typed)
 }
 
+// The ghost exists only where it is SHOWN: a month with no row. On a saved
+// month the Retainer field holds real figures, so a cleared field is a typed
+// zero-by-blank, never the Clients-admin amount (spec §9: a ghost is never stored).
+export function ghostRetainer(row: MonthRow | null, storedRetainer: number | null): number | null {
+  return row === null ? storedRetainer : null
+}
+
 // Only an EDITED retainer field can prompt. A month opened from Revenue entry
 // shows saved figures as values, and changing only Project must ask nothing
 // even when the saved retainer differs from the one in Clients admin.
@@ -52,7 +59,7 @@ export function boxMode(args: {
 }
 
 // Month name only, from the shared helper: "October 2026" -> "October".
-const monthName = (period: string) => formatPeriod(period).split(' ')[0]
+export const monthName = (period: string) => formatPeriod(period).split(' ')[0]
 
 export function paymentCaption(period: string): string {
   return `Invoiced in ${monthName(period)}`
