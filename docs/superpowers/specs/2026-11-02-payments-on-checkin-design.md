@@ -19,9 +19,7 @@ Agreed with the owner, 2026-11-02:
 - Each client's retainer is **seeded** from the imported invoice history so the ghost text works at the first
   meeting.
 
-**Open — waiting on the owner's boss:** which month an invoice belongs to. Billing is believed to be on the 1st on
-Net 15 terms. See §6. The design assumes the check-in's own month (October's check-in holds October's charges)
-until that is answered, and nothing may ship until it is.
+**Settled 2026-11-02 — which month an invoice belongs to:** the month it is dated. See §6.
 
 ---
 
@@ -118,24 +116,18 @@ review scores → Save or Confirm. The person must never be left unable to finis
 a payment. Whether the finance answers are written straight into the stored row instead of the form is the
 builder's call, provided it never discards a person's unsaved edits.
 
-## 6. Open: which month an invoice belongs to
+## 6. Which month an invoice belongs to
 
-The owner is confirming with their boss. Believed: invoices go out on the 1st, on Net 15.
+Settled with the owner, 2026-11-02: the bulk import put each amount in the month it was labelled with, not shifted
+a month. The new screen follows the same rule: **a month's revenue is what was invoiced in that month**. Invoices
+go out on the 1st on Net 15, so October's check-in holds the invoice dated Oct 1, which is due mid-October and has
+been paid or not by the meeting on the first Wednesday of November.
 
-- **If an invoice dated Nov 1 counts as November** (billing in advance for the month): at the Nov 4 meeting the
-  team confirms October's charges on October's check-in. This is the assumed default.
-- **If it counts as October** (billing in arrears): October's check-in holds an invoice issued Nov 1, which isn't
-  due at the meeting.
+So history and new entries agree, no historical rows move, and `period` keeps meaning what it means today. The
+box's caption says it plainly, e.g. "Invoiced in October".
 
-Before building, also confirm which rule the bulk import used (it came from a spreadsheet with a column per month;
-the code cannot tell). The new screen must follow the same rule as the history, or every rate-change answer
-compares mismatched months. Whatever is decided, the box's caption must say it plainly (e.g. "Invoiced Oct 1").
-
-**If the decided rule differs from the import's rule**, the existing rows (including the October rows already
-entered) sit in the wrong months. Shifting them is a one-off production data step. It is reviewed by the owner
-before it is written, like §7, and it runs **before** §7's seeding, because the seeding reads "the most recent
-row". Whether that shift is part of this project is the owner's decision at that point. Nothing in §1–5 is built
-on top of history that is known to be mis-keyed.
+(Whether a Nov 1 invoice pays for November's work or October's is a billing question the owner may still raise
+with their boss. It changes the caption's wording at most, not what is stored.)
 
 ## 7. Seeding the retainers
 
