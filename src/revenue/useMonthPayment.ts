@@ -111,7 +111,13 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
     [clientId, period, canRead],
   )
 
+  // The refresh belonging to the key now on screen. A save started under an
+  // older key must not refresh: its run would bump the generation, cancel the
+  // new key's read, and write the OLD month into the new view.
+  const current = useRef(refresh)
+
   useEffect(() => {
+    current.current = refresh
     void refresh(true)
     return () => {
       generation.current += 1
@@ -133,7 +139,9 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
         if (error) return { ok: false, error: describeError(error) }
         // Resolve only once the refreshed read has landed (or failed), so a
         // caller acting on success sees fresh data.
-        await refresh(false)
+        // The save itself succeeded either way; only the refresh is skipped
+        // when the person has moved to another client or month meanwhile.
+        if (current.current === refresh) await refresh(false)
         return { ok: true }
       } catch (thrown: unknown) {
         return { ok: false, error: describeError(thrown) }

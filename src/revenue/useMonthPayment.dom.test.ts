@@ -165,6 +165,32 @@ describe('useMonthPayment', () => {
     expect(result.current.status).toBe('ready')
   })
 
+  it('a save finishing after the month changed does not clobber the new month', async () => {
+    const OCT = { ...ROW, project_cents: 111 }
+    const NOV = { ...ROW, project_cents: 222 }
+    db.results.client_month_revenue = async () => ({ data: OCT, error: null })
+    const { result, rerender } = renderHook(({ p }) => useMonthPayment(7, p, true), { initialProps: { p: '2026-10-01' } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    let releaseRpc: () => void = () => {}
+    db.rpc = () => new Promise<Result>((resolve) => { releaseRpc = () => resolve({ data: null, error: null }) })
+    let out: unknown
+    let saving: Promise<unknown> = Promise.resolve()
+    await act(async () => {
+      saving = result.current.save({ retainerCents: 1, projectCents: 2, setRetainer: false }).then((r) => { out = r })
+    })
+
+    db.results.client_month_revenue = async () => ({ data: NOV, error: null })
+    rerender({ p: '2026-11-01' })
+    await waitFor(() => expect(result.current.row).toEqual(NOV))
+
+    db.results.client_month_revenue = async () => ({ data: OCT, error: null })
+    await act(async () => { releaseRpc(); await saving })
+    expect(out).toEqual({ ok: true })
+    expect(result.current.row).toEqual(NOV)
+    expect(result.current.status).toBe('ready')
+  })
+
   it('a changed month blanks the old one and shows loading', async () => {
     const { result, rerender } = renderHook(({ p }) => useMonthPayment(7, p, true), { initialProps: { p: '2026-10-01' } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
