@@ -440,7 +440,19 @@ begin
         ('client_retainers', 'authenticated', 'SELECT'),
         ('client_retainers', 'authenticated', 'INSERT'),
         ('client_retainers', 'authenticated', 'UPDATE'),
-        ('client_retainers', 'authenticated', 'DELETE')
+        ('client_retainers', 'authenticated', 'DELETE'),
+
+        -- public.client_packages (20260912140000_add_client_packages.sql) and
+        -- public.ai_runs (20261031090000_ai_suggestion_runs.sql). Both
+        -- migrations grant these deliberately, and this list was never
+        -- updated for either, so every run since has failed on them. Same
+        -- caveat as above: RLS decides who, these say only that the verbs
+        -- exist. ai_runs is SELECT only -- its rows are written by the Edge
+        -- Function and the routine, never by a browser.
+        ('client_packages', 'authenticated', 'SELECT'),
+        ('client_packages', 'authenticated', 'INSERT'),
+        ('client_packages', 'authenticated', 'UPDATE'),
+        ('ai_runs', 'authenticated', 'SELECT')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
