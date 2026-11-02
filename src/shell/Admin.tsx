@@ -71,7 +71,7 @@ export function Admin({
       case 'people':
         return <UsersAdmin currentUserId={currentUserId} onWritingChange={onWritingChange} />
       case 'clients':
-        return <ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} />
+        return <ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} role={role} />
       case 'revenue':
         return <RevenueAdmin onWritingChange={onWritingChange} />
       default: {

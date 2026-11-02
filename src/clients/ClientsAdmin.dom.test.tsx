@@ -2,7 +2,7 @@
 
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminClient } from './clientForm'
 import type { UseClients } from './useClients'
 
@@ -15,9 +15,26 @@ import type { UseClients } from './useClients'
 // src/board/Board.test.tsx:19.
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useClients', () => ({ useClients: vi.fn() }))
+vi.mock('./useRetainer', () => ({ useRetainer: vi.fn() }))
 
 import { ClientsAdmin } from './ClientsAdmin'
 import { useClients } from './useClients'
+import { useRetainer } from './useRetainer'
+import type { UseRetainer } from './useRetainer'
+
+function retainer(overrides: Partial<UseRetainer> = {}): UseRetainer {
+  return {
+    status: 'ready',
+    loadError: null,
+    monthlyCents: null,
+    save: vi.fn(async () => ({ ok: true as const })),
+    ...overrides,
+  }
+}
+
+beforeEach(() => {
+  vi.mocked(useRetainer).mockReturnValue(retainer())
+})
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -76,9 +93,10 @@ function mount(
   overrides: Partial<UseClients> = {},
   onWritingChange = vi.fn(),
   editClientId?: number,
+  role = 'admin',
 ) {
   vi.mocked(useClients).mockReturnValue(hook(overrides))
-  render(<ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} />)
+  render(<ClientsAdmin editClientId={editClientId} onWritingChange={onWritingChange} role={role} />)
 }
 
 describe('the clients admin screen, reading', () => {
@@ -292,7 +310,7 @@ describe('the clients admin screen, adding', () => {
     // transition: the first render has the press with the state still idle, the
     // second has the confirmed state the hook would then report.
     vi.mocked(useClients).mockReturnValue(hook())
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
 
     await userEvent.type(screen.getByLabelText('Name'), 'Acme')
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
@@ -301,7 +319,7 @@ describe('the clients admin screen, adding', () => {
     vi.mocked(useClients).mockReturnValue(
       hook({ addState: { kind: 'saved', at: '2026-08-24T15:42:00.000Z', what: 'Client added' } }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByLabelText('Name')).toHaveProperty('value', '')
     const line = screen.getByTestId('add-status')
@@ -332,7 +350,7 @@ describe('the clients admin screen, adding', () => {
     // must never lose what was typed -- it is the one moment the person most
     // wants to look at it.
     vi.mocked(useClients).mockReturnValue(hook())
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
 
     await userEvent.type(screen.getByLabelText('Name'), 'Acme')
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
@@ -345,7 +363,7 @@ describe('the clients admin screen, adding', () => {
         },
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByLabelText('Name')).toHaveProperty('value', 'Acme')
   })
@@ -536,7 +554,7 @@ describe('the clients admin screen, editing', () => {
     // equivalent test: the first render types into the open form, the second
     // supplies the failure the hook would then report.
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
 
     await userEvent.clear(screen.getByLabelText('Client name'))
@@ -552,7 +570,7 @@ describe('the clients admin screen, editing', () => {
         editStateFor: ACME.id,
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByLabelText('Client name')).toHaveProperty('value', 'Acme Holdings')
   })
@@ -589,7 +607,7 @@ describe('the clients admin screen, editing', () => {
     // honest thing to render beside Test Client is nothing at all.
     const resetEdit = vi.fn()
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE], resetEdit }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
     // The Edit press still clears the previous row's state -- the old test's
     // one real assertion, kept. It is no longer the guarantee, though: the
@@ -603,7 +621,7 @@ describe('the clients admin screen, editing', () => {
         editStateFor: ACME.id,
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByRole('heading', { name: 'Editing Test Client' })).toBeTruthy()
     const line = screen.getByTestId('edit-status')
@@ -616,7 +634,7 @@ describe('the clients admin screen, editing', () => {
     // refused, and the sentence naming Acme must not appear under Test Client's
     // fields, where it reads as a refusal of a save nobody attempted.
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
 
     vi.mocked(useClients).mockReturnValue(
@@ -629,7 +647,7 @@ describe('the clients admin screen, editing', () => {
         editStateFor: ACME.id,
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByTestId('edit-status').textContent).not.toContain('Acme')
   })
@@ -640,13 +658,13 @@ describe('the clients admin screen, editing', () => {
     // Test Client. EditClientForm already disabled its own Save and Cancel
     // while saving; the list's Edit buttons were the omission.
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
 
     vi.mocked(useClients).mockReturnValue(
       hook({ clients: [ACME, GONE], editState: { kind: 'saving' }, editStateFor: ACME.id }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByRole('button', { name: 'Edit Test Client' })).toHaveProperty(
       'disabled',
@@ -664,7 +682,7 @@ describe('the clients admin screen, editing', () => {
     // fields -- a confirmation of a write that never happened.
     const saveClient = vi.fn()
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE], saveClient }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(saveClient.mock.calls[0][0]).toBe(ACME.id)
@@ -672,7 +690,7 @@ describe('the clients admin screen, editing', () => {
     vi.mocked(useClients).mockReturnValue(
       hook({ clients: [ACME, GONE], saveClient, editState: { kind: 'saving' }, editStateFor: ACME.id }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
 
     vi.mocked(useClients).mockReturnValue(
@@ -683,7 +701,7 @@ describe('the clients admin screen, editing', () => {
         editStateFor: ACME.id,
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     // The confirmation is Acme's, so Acme's form is the only place it may
     // appear -- and Test Client's form must not have opened at all.
@@ -708,7 +726,7 @@ describe('the clients admin screen, editing', () => {
     // form revealed them again and saving wrote them back as if they were
     // today's departure -- a false fact recorded in a database with no backups.
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Test Client' }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'active')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -723,7 +741,7 @@ describe('the clients admin screen, editing', () => {
         editStateFor: REVIVED.id,
       }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'former')
 
@@ -738,13 +756,13 @@ describe('the clients admin screen, editing', () => {
     // no longer have a form opened on it. Same assertions, same intent -- the
     // form's own controls are dead while its write is pending.
     vi.mocked(useClients).mockReturnValue(hook({ clients: [ACME, GONE] }))
-    const { rerender } = render(<ClientsAdmin />)
+    const { rerender } = render(<ClientsAdmin role="admin" />)
     await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
 
     vi.mocked(useClients).mockReturnValue(
       hook({ clients: [ACME, GONE], editState: { kind: 'saving' }, editStateFor: ACME.id }),
     )
-    rerender(<ClientsAdmin />)
+    rerender(<ClientsAdmin role="admin" />)
 
     expect(screen.getByLabelText('Client name')).toHaveProperty('disabled', true)
     expect(screen.getByLabelText('Status')).toHaveProperty('disabled', true)
@@ -1009,4 +1027,86 @@ describe('the package ladder', () => {
     })
   })
 
+})
+
+describe('the monthly retainer on the edit form', () => {
+  const CLIENT = client({ id: 1, name: 'Acme' })
+
+  async function open(role: string, r: Partial<UseRetainer> = {}) {
+    vi.mocked(useRetainer).mockReturnValue(retainer(r))
+    mount({ clients: [CLIENT] }, vi.fn(), undefined, role)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+  }
+
+  it('an admin edits the monthly retainer', async () => {
+    const save = vi.fn(async () => ({ ok: true as const }))
+    await open('admin', { monthlyCents: 400000, save })
+
+    expect(screen.getByText('Shown on each check-in to confirm. Blank means no retainer.')).toBeTruthy()
+    const input = screen.getByLabelText('Monthly retainer') as HTMLInputElement
+    expect(input.value).toBe('4000')
+    await userEvent.clear(input)
+    await userEvent.type(input, '4,500.50')
+    await userEvent.click(screen.getByRole('button', { name: 'Save retainer' }))
+
+    expect(save).toHaveBeenCalledWith(450050)
+    expect(vi.mocked(useRetainer)).toHaveBeenCalledWith(1, true)
+  })
+
+  it('blank saves as no retainer', async () => {
+    const save = vi.fn(async () => ({ ok: true as const }))
+    await open('admin', { monthlyCents: 400000, save })
+
+    await userEvent.clear(screen.getByLabelText('Monthly retainer'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save retainer' }))
+    expect(save).toHaveBeenCalledWith(0)
+  })
+
+  it('refuses an invalid amount and saves nothing', async () => {
+    const save = vi.fn(async () => ({ ok: true as const }))
+    await open('admin', { save })
+
+    await userEvent.type(screen.getByLabelText('Monthly retainer'), 'lots')
+    await userEvent.click(screen.getByRole('button', { name: 'Save retainer' }))
+    expect(save).not.toHaveBeenCalled()
+    expect(screen.getByTestId('retainer-status').textContent).toBe(
+      'Monthly retainer is not a dollar amount up to $21,474,836.47. Nothing was saved.',
+    )
+  })
+
+  it('shows a failed save', async () => {
+    await open('admin', { save: vi.fn(async () => ({ ok: false as const, error: 'permission denied' })) })
+    await userEvent.type(screen.getByLabelText('Monthly retainer'), '100')
+    await userEvent.click(screen.getByRole('button', { name: 'Save retainer' }))
+    expect(screen.getByTestId('retainer-status').textContent).toContain('permission denied')
+  })
+
+  it('an account manager sees the retainer read-only', async () => {
+    await open('account_manager', { monthlyCents: 400000 })
+
+    expect(screen.getByText('$4,000 a month')).toBeTruthy()
+    expect(screen.queryByLabelText('Monthly retainer')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save retainer' })).toBeNull()
+    expect(vi.mocked(useRetainer)).toHaveBeenCalledWith(1, true)
+  })
+
+  it('an account manager sees No retainer when there is none', async () => {
+    await open('account_manager', { monthlyCents: null })
+    expect(screen.getByText('No retainer')).toBeTruthy()
+  })
+
+  it('a role without view_revenue gets no block and no query', async () => {
+    await open('viewer', { status: 'off' })
+
+    expect(screen.queryByText('Monthly retainer')).toBeNull()
+    expect(screen.queryByLabelText('Monthly retainer')).toBeNull()
+    expect(vi.mocked(useRetainer)).toHaveBeenCalledWith(1, false)
+  })
+
+  it('a failed read is said, never shown as no retainer', async () => {
+    await open('admin', { status: 'error', loadError: 'permission denied' })
+    expect(screen.getByRole('alert').textContent).toContain('permission denied')
+    expect(screen.queryByText('No retainer')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Save retainer' })).toBeNull()
+  })
 })

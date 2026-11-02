@@ -9,7 +9,7 @@ import { useClients } from './useClients'
 import type { OwnerOption } from './useClients'
 import styles from './ClientsAdmin.module.css'
 
-type Props = { editClientId?: number; onWritingChange?: (writing: boolean) => void }
+type Props = { editClientId?: number; onWritingChange?: (writing: boolean) => void; role: string }
 
 // Spec §7: one screen, a list and a form, no modal. The list shows every client
 // regardless of status, because this is the screen where a former client has to
@@ -25,7 +25,7 @@ function ownerText(client: AdminClient, owners: readonly OwnerOption[]): string 
     ?? 'Owner is not an active account'
 }
 
-export function ClientsAdmin({ editClientId, onWritingChange }: Props) {
+export function ClientsAdmin({ editClientId, onWritingChange, role }: Props) {
   const admin = useClients()
 
   // Which row's form is open, by id rather than by row object: the hook replaces
@@ -225,6 +225,7 @@ export function ClientsAdmin({ editClientId, onWritingChange }: Props) {
                   }}
                   onEdited={admin.resetEdit}
                   onRecordPackage={admin.addStint}
+                  role={role}
                   onSave={admin.saveClient}
                   owners={admin.owners}
                   stints={admin.packages.get(client.id) ?? []}

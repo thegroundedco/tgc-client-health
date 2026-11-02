@@ -24,6 +24,9 @@ import {
 } from './clientForm'
 import type { AdminClient, ClientDraft, ClientStatus, WriteState } from './clientForm'
 import type { OwnerOption } from './useClients'
+import { useRetainer } from './useRetainer'
+import { can } from '../lib/capabilities'
+import { MAX_CENTS, formatMoney, parseMoney } from '../revenue/money'
 import styles from './ClientsAdmin.module.css'
 
 type Props = {
@@ -35,6 +38,100 @@ type Props = {
   onCancel: () => void
   onEdited: () => void
   onRecordPackage: (clientId: number, draft: StintDraft) => void
+  role: string
+}
+
+// The amount as a person would type it back: no commas, cents only when real.
+function retainerText(cents: number | null): string {
+  if (cents === null) return ''
+  return (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)
+}
+
+// The standing monthly retainer. Its OWN Save button, separate from the client
+// form's: like the package recorder beside it, a failure in one write never
+// blocks or half-applies the other. Gated at the read (useRetainer issues no
+// query without view_revenue) and drawn by capability: edit_revenue gets the
+// input, view_revenue alone gets text, anyone else gets nothing.
+function RetainerBlock({ clientId, role }: { clientId: number; role: string }) {
+  const canView = can(role, 'view_revenue')
+  const canEdit = can(role, 'edit_revenue')
+  const retainer = useRetainer(clientId, canView)
+  if (!canView) return null
+
+  return (
+    <div className={styles.field}>
+      <p className="t-caption">Monthly retainer</p>
+      <p className="t-caption">Shown on each check-in to confirm. Blank means no retainer.</p>
+      {retainer.status === 'loading' && <p className="t-caption">Loading…</p>}
+      {retainer.status === 'error' && (
+        <p className="alert" role="alert">
+          {retainer.loadError ?? 'The retainer could not be read.'}
+        </p>
+      )}
+      {retainer.status === 'ready' &&
+        (canEdit ? (
+          <RetainerEditor monthlyCents={retainer.monthlyCents} onSave={retainer.save} />
+        ) : (
+          <p className="t-body" data-testid="retainer-readonly">
+            {retainer.monthlyCents === null ? 'No retainer' : `${formatMoney(retainer.monthlyCents)} a month`}
+          </p>
+        ))}
+    </div>
+  )
+}
+
+// Mounted only once the read has landed, so its field starts from the stored
+// amount rather than from the blank of a still-loading hook.
+function RetainerEditor({
+  monthlyCents,
+  onSave,
+}: {
+  monthlyCents: number | null
+  onSave: (cents: number) => Promise<{ ok: true } | { ok: false; error: string }>
+}) {
+  const [text, setText] = useState(() => retainerText(monthlyCents))
+  const [line, setLine] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function submit() {
+    // Blank parses as 0, which save() turns into a delete: no retainer.
+    const cents = parseMoney(text)
+    if (cents === null) {
+      setLine(`Monthly retainer is not a dollar amount up to ${formatMoney(MAX_CENTS)}. Nothing was saved.`)
+      return
+    }
+    setBusy(true)
+    setLine('')
+    const result = await onSave(cents)
+    setBusy(false)
+    setLine(result.ok ? (cents === 0 ? 'Retainer removed.' : 'Retainer saved.') : result.error)
+  }
+
+  return (
+    <>
+      <label className="t-caption" htmlFor="edit-client-retainer">
+        Monthly retainer
+      </label>
+      <input
+        className="field"
+        disabled={busy}
+        id="edit-client-retainer"
+        inputMode="decimal"
+        onChange={(event) => {
+          setText(event.target.value)
+          setLine('')
+        }}
+        type="text"
+        value={text}
+      />
+      <button className="button button--quiet" disabled={busy} onClick={() => void submit()} type="button">
+        Save retainer
+      </button>
+      <p className="t-caption" data-testid="retainer-status" role="status">
+        {line}
+      </p>
+    </>
+  )
 }
 
 const TONE_CLASS = {
@@ -57,6 +154,7 @@ export function EditClientForm({
   onCancel,
   onEdited,
   onRecordPackage,
+  role,
 }: Props) {
   const [stint, setStint] = useState<StintDraft>(EMPTY_STINT)
   const stintFaults = stintProblems(stint, stints)
@@ -354,6 +452,8 @@ export function EditClientForm({
           Record package
         </button>
       </div>
+
+      <RetainerBlock clientId={client.id} role={role} />
 
       {/* Both live OUTSIDE the churned block above, deliberately. Those three
           fields appear only for a client who has left, because they describe a
