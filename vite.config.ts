@@ -10,5 +10,11 @@ export default defineConfig({
   base: '/tgc-client-health/',
   test: {
     environment: 'node',
+    // Node 26 (LTS since 2026-10-28; CI installs lts/*) turns its own Web
+    // Storage on by default, and without --localstorage-file its localStorage
+    // is undefined -- yet it still shadows jsdom's, so every test touching
+    // localStorage fails. Switched off in the workers; Node 24 accepts the flag
+    // too, where it is a no-op.
+    execArgv: ['--no-experimental-webstorage'],
   },
 })
