@@ -57,6 +57,10 @@ function reason(b: BudgetRow): string {
   return `From Productive: ${fmt(toHours(b.worked_minutes))}h worked vs ${fmt(toHours(b.budgeted_minutes))}h budgeted (${sign}${fmt(Math.abs(toHours(diff)))}h).`
 }
 
+// `today` is the date to judge month-end against: the date the budgets are as
+// of (YYYY-MM-DD), which on the check-in is the local date of the fetch that
+// stored them, not the viewer's clock. Data fetched before the month ended is
+// "hours so far" and is never scored, whenever it is read.
 export function hoursFromBudgets(input: {
   period: string
   today: string

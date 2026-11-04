@@ -139,6 +139,25 @@ describe('useMonthHours', () => {
     })
   })
 
+  // Review fix round 1: a mid-month snapshot must not be scored as final just
+  // because it is read after month end. Today is Nov 4; the stored fetch is
+  // from Oct 20 and today's fetch failed.
+  it('judges month-end by the stored fetch date, not the current date', async () => {
+    db.invoke = async () => ({ data: null, error: new Error('502') })
+    db.fetches = async () => ({ data: [{ fetched_at: new Date(2026, 9, 20, 15, 0, 0).toISOString() }], error: null })
+    const { result } = renderHook(() => useMonthHours(7, OCT, true))
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })
+    expect((result.current as { lines: unknown[] }).lines).toHaveLength(1)
+  })
+
+  it('reads an unparseable fetch date as not finished', async () => {
+    db.fetches = async () => ({ data: [{ fetched_at: 'not a date' }], error: null })
+    const { result } = renderHook(() => useMonthHours(7, OCT, true))
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })
+  })
+
   it('is not applicable for a client with no links', async () => {
     db.links = async () => ({ data: [], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
@@ -146,8 +165,11 @@ describe('useMonthHours', () => {
     expect(result.current).toEqual({ applies: false, reason: 'not_linked', message: 'Not linked to Productive' })
   })
 
-  it('passes today as the local date, so the last day of the month is not finished', async () => {
+  // A fetch late on the 31st, local: its stored timestamp may already be Nov 1
+  // in UTC, and the month must still read as not finished.
+  it('takes the fetch date as the local date, so the last day of the month is not finished', async () => {
     vi.setSystemTime(new Date(2026, 9, 31, 23, 30, 0))
+    db.fetches = async () => ({ data: [{ fetched_at: new Date(2026, 9, 31, 23, 30, 0).toISOString() }], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
     expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })

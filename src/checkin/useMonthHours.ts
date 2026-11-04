@@ -26,7 +26,8 @@ export function localDay(date: Date = new Date()): string {
 // earlier fetch, and that is what is shown. Whether the month was fetched at
 // all is the fetch row's to say, not the request's -- the function writes it in
 // the same transaction as the budgets, and private.hours_applies decides from
-// the same row, so the screen and the score agree.
+// the same row, so the screen and the score agree. The same row's fetched_at
+// is the date month-end is judged against (see asOf below).
 //
 // `version` is bumped by Try again. The result is tagged with the version it
 // was read for, and from the render the version changes in the hook gives null
@@ -67,13 +68,26 @@ export function useMonthHours(
         if (cancelled) return
         if (links.error || budgets.error || fetches.error) return
 
+        // The date the stored hours are AS OF, which is what month-end is
+        // judged against -- not the date on the viewer's clock. A snapshot
+        // taken on the 20th is "hours so far" for good, even when it is read
+        // on the 4th of the next month because that day's fetch failed. When
+        // the fetch succeeds the row was just written, so this is today. The
+        // viewer's local date of fetched_at, as localDay explains. An
+        // unparseable timestamp reads as the period's own first day: not
+        // finished, so nothing is filled from data of unknown age.
+        const row = (fetches.data ?? [])[0] as { fetched_at: string } | undefined
+        const fetchedAt = row ? new Date(row.fetched_at) : null
+        const asOf =
+          fetchedAt !== null && !Number.isNaN(fetchedAt.getTime()) ? localDay(fetchedAt) : period
+
         setResult({
           version,
           hours: hoursFromBudgets({
             period,
-            today: localDay(),
+            today: asOf,
             linked: (links.data ?? []).length > 0,
-            fetched: (fetches.data ?? []).length > 0,
+            fetched: row !== undefined,
             budgets: (budgets.data ?? []) as BudgetRow[],
           }),
         })
