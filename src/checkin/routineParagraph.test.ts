@@ -1,13 +1,13 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { HOURS_START_PERIOD } from '../src/lib/buckets.ts'
-import { hoursFromBudgets, hoursScore, signedHours, toHours } from '../src/checkin/hoursFromBudgets.ts'
+import { HOURS_START_PERIOD } from '../lib/buckets'
+import { hoursFromBudgets, hoursScore, signedHours, toHours } from './hoursFromBudgets'
+// Read through Vite's ?raw, as the app's tsconfig has no Node types.
+import PARAGRAPH from '../../docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md?raw'
 
 // The routine paragraph is prose the owner pastes into the live AI routine, so
 // nothing runs it. These pins hold it to the rule the screen runs: the same
 // notes, the same bands, the same hours format, the same applicability rule,
 // and no step that contradicts another (final review I1, I3).
-const PARAGRAPH = readFileSync('docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md', 'utf8')
 // The text that is pasted: between the first two --- lines.
 const PASTED = PARAGRAPH.split('\n---\n')[1]
 
