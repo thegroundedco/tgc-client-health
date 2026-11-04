@@ -65,7 +65,7 @@ describe('the generated SQL', () => {
     )
     expect(aliasLists).toHaveLength(BUCKETS.length)
     BUCKETS.forEach((bucket, index) => {
-      const expectedAlias = [...questionsFor(bucket).map((q) => q.key), 'expected']
+      const expectedAlias = [...questionsFor(bucket, false).map((q) => q.key), 'expected']
       expect(aliasLists[index], bucket).toEqual(expectedAlias)
     })
   })

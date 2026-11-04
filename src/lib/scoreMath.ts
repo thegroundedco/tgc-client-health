@@ -41,12 +41,15 @@ export const BAND_LABELS: Record<Band, string> = {
 // view's round(x, 2) produces. Computed from the integer sum and divisor rather
 // than by rounding a float, so the two implementations cannot drift.
 //
-// No half-way case is reachable for the divisors this model uses (3, 4, 17 and
-// 21): reaching one requires `sum * 100 / divisor` to be an odd half-integer,
-// which for each of those divisors requires `sum` to be a multiple of the
-// divisor -- and every such multiple yields an even numerator. So the rounding
-// direction on a tie is never exercised, and the two implementations cannot
-// disagree here regardless of which tie-breaking rule Postgres uses.
+// No half-way case is reachable for the divisors this model uses (3, 4, 17,
+// 18, 21 and 22). A tie needs `sum * 100 / divisor` to be k + 1/2, i.e.
+// `sum * 200 = divisor * (2k + 1)`. For an even divisor (4, 18, 22) the right
+// side has at most one factor of 2 beyond the odd part (4 has two), while 200
+// has three, so there is no solution. For an odd divisor (3, 17, 21), none
+// shares a factor with 200, so the divisor must divide `sum`; then
+// `sum = divisor * m` gives `200 * m = 2k + 1`, even against odd, so no
+// solution either. The rounding direction on a tie is never exercised, and the
+// two implementations cannot disagree here regardless of Postgres's rule.
 export function meanTo2dp(sum: number, divisor: number): number {
   return Math.round((sum * 100) / divisor) / 100
 }

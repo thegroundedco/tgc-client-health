@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { OVERALL_QUESTIONS } from '../src/lib/buckets.ts'
+import { overallQuestions } from '../src/lib/buckets.ts'
 
 // The TypeScript overall against the SQL one, by the same bargain and the same
 // remedy as tests/gateParity.test.ts: two copies of one rule exist because the
@@ -33,7 +33,23 @@ function latestMigrationContaining(needle: string): string {
   return readFileSync(`${MIGRATIONS}/${matches[matches.length - 1]}`, 'utf8')
 }
 
+// TS side, both branches: 17 questions (so divisor 17) without hours, 18 with.
+describe.each([
+  [false, 17],
+  [true, 18],
+])('the TypeScript overall (hoursApplies=%s)', (hoursApplies, divisor) => {
+  it(`averages ${divisor} questions`, () => {
+    expect(overallQuestions(hoursApplies)).toHaveLength(divisor)
+  })
+})
+
+// SQL side. The current view has ONE expression, which is the
+// hoursApplies = false branch (3 Finances questions, divisor 17), so it is
+// compared against overallQuestions(false) only.
+// Task 3 turns the view into a case over fin_hours_applies, updates how this
+// reads it, and compares the true branch too.
 describe('the screen agrees with the view about the overall score', () => {
+  const OVERALL = overallQuestions(false)
   const sql = latestMigrationContaining('as overall_score')
 
   // The whole expression, from `round(` to `as overall_score`, so the divisor
@@ -50,7 +66,7 @@ describe('the screen agrees with the view about the overall score', () => {
     // agreement. This project has shipped one check that reported success by
     // finding no data.
     expect(divisors.length).toBeGreaterThan(0)
-    for (const divisor of divisors) expect(divisor).toBe(OVERALL_QUESTIONS.length)
+    for (const divisor of divisors) expect(divisor).toBe(OVERALL.length)
   })
 
   it('sums exactly the questions the overall averages, and no others', () => {
@@ -58,7 +74,7 @@ describe('the screen agrees with the view about the overall score', () => {
     // keeps the count at seventeen and still produces a number for every
     // client -- a wrong one, quietly. So the terms are matched as a set too.
     const summed = [...expression.matchAll(/ch\.([a-z_]+)/g)].map((m) => m[1])
-    expect([...summed].sort()).toEqual([...OVERALL_QUESTIONS].sort())
+    expect([...summed].sort()).toEqual([...OVERALL].sort())
   })
 
   it('leaves every Advocacy answer out of the overall', () => {

@@ -92,6 +92,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     draft,
     saveState,
     advocacyApplies,
+    hoursApplies,
     required,
     scored,
     localOverall,
@@ -328,6 +329,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       )}
       <RevertButton
         advocacyApplies={advocacyApplies}
+        hoursApplies={hoursApplies}
         ai={parseAiSuggestion(stored?.ai_suggestion)}
         canEdit={canEdit}
         clientId={client.id}
@@ -428,7 +430,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       <div className={styles.buckets}>
         {BUCKETS.map((bucket) => {
           const definition = BUCKET_DEFINITIONS[bucket]
-          const questions = questionsFor(bucket)
+          const questions = questionsFor(bucket, hoursApplies)
           // Finances and Advocacy answer No/Unsure/Yes, so a 1-5 agreement
           // legend above them would explain a scale their rows do not have.
           // Derived from the questions rather than from a list of bucket names,

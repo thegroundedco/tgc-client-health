@@ -15,7 +15,7 @@ import { enumerateBucketStates } from '../scripts/score-parity.mjs'
 // under vitest but fails `npm run build` with TS2835 on scoreV2.ts's own
 // import lines. buckets.ts and scoreMath.ts have no imports of their own, so
 // they carry none of that risk -- meanOrNull composes the same arithmetic
-// bucketScore does, applied to the same questionsFor(bucket) keys.
+// bucketScore does, applied to the same questionsFor(bucket, false) keys.
 
 // What this test does and does not do, stated because it would be easy to
 // mistake for more than it is. It pins the text of the generated column's
@@ -43,14 +43,14 @@ describe('the per-bucket enumeration the verifier rests on', () => {
     // One value set for every question now: null, 1, 2, 3, 4, 5. The dispatch
     // this test used to carry is gone because the model's is.
     for (const bucket of BUCKETS) {
-      const questions = questionsFor(bucket)
+      const questions = questionsFor(bucket, false)
       expect(enumerateBucketStates(bucket).length, bucket).toBe(6 ** questions.length)
     }
   })
 
   it('includes the all-null and all-5s states for every bucket', () => {
     for (const bucket of BUCKETS) {
-      const keys = questionsFor(bucket).map((question) => question.key)
+      const keys = questionsFor(bucket, false).map((question) => question.key)
       const states: Record<string, number | null>[] = enumerateBucketStates(bucket)
       const allNull = states.find((state) => keys.every((key) => state[key] === null))
       const allMax = states.find((state) => keys.every((key) => state[key] === 5))
@@ -66,7 +66,7 @@ describe('the per-bucket enumeration the verifier rests on', () => {
     // buckets specifically: four Nos is 1.00 and a single blank is nothing at
     // all. It is now true of every bucket, so it is asserted of every bucket.
     for (const bucket of BUCKETS) {
-      const keys = questionsFor(bucket).map((question) => question.key)
+      const keys = questionsFor(bucket, false).map((question) => question.key)
       const states: Record<string, number | null>[] = enumerateBucketStates(bucket)
       const allMin = states.find((state) => keys.every((key) => state[key] === 1))
       expect(allMin, bucket).toBeDefined()
@@ -83,7 +83,7 @@ describe('the per-bucket enumeration the verifier rests on', () => {
   it("covers each question's full, distinct value set -- {null,1,2,3,4,5}", () => {
     for (const bucket of BUCKETS) {
       const states: Record<string, number | null>[] = enumerateBucketStates(bucket)
-      for (const question of questionsFor(bucket)) {
+      for (const question of questionsFor(bucket, false)) {
         const label = `${bucket}.${question.key}`
         const seen = new Set(states.map((state) => state[question.key]))
         expect(seen.size, label).toBe(6)

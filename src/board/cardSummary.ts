@@ -88,6 +88,7 @@ export function cardFooter(
   checkin: CardCheckin | null,
   viewerId: string,
   advocacyApplies: boolean,
+  hoursApplies: boolean,
 ): string {
   if (!checkin) return 'Not started'
 
@@ -108,11 +109,11 @@ export function cardFooter(
     if (typeof value === 'number') answers[key] = value
   }
 
-  const scored = answeredCount(answers, advocacyApplies)
+  const scored = answeredCount(answers, advocacyApplies, hoursApplies)
   // A row can exist with notes and no answers. "Draft, 0 of 21" would send the
   // reader looking for scores that were never entered.
   if (scored === 0) return 'Not started'
-  return `Draft, ${scored} of ${requiredQuestions(advocacyApplies).length} scored`
+  return `Draft, ${scored} of ${requiredQuestions(advocacyApplies, hoursApplies).length} scored`
 }
 
 // Names the month it is counting, rather than saying "this month".

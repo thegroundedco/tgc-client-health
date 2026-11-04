@@ -25,7 +25,7 @@ export function useRevertSuggestion(clientId: number, period: string, profileId:
   const inFlight = useRef(false)
 
   const revert = useCallback(
-    async (args: { current: Answers; ai: AiSuggestion; advocacyApplies: boolean }): Promise<void> => {
+    async (args: { current: Answers; ai: AiSuggestion; advocacyApplies: boolean; hoursApplies: boolean }): Promise<void> => {
       if (inFlight.current) return
       inFlight.current = true
       setState({ kind: 'saving' })
@@ -33,7 +33,7 @@ export function useRevertSuggestion(clientId: number, period: string, profileId:
         const merged = revertedAnswers(args.current, args.ai)
         const answers = Object.fromEntries(AI_ANSWER_KEYS.map((key) => [key, merged[key] ?? null]))
         const now = new Date().toISOString()
-        const complete = isComplete(merged, args.advocacyApplies)
+        const complete = isComplete(merged, args.advocacyApplies, args.hoursApplies)
         const { data, error } = await supabase
           .from('checkins')
           .update({

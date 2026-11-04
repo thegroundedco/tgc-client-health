@@ -83,25 +83,25 @@ describe('cardFooter', () => {
   const VIEWER = 'viewer-uuid'
 
   it('says Not started when there is no row', () => {
-    expect(cardFooter(null, VIEWER, true)).toBe('Not started')
+    expect(cardFooter(null, VIEWER, true, false)).toBe('Not started')
   })
 
   it('says Not started when a row exists with no answers', () => {
     const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null }
-    expect(cardFooter(row, VIEWER, true)).toBe('Not started')
+    expect(cardFooter(row, VIEWER, true, false)).toBe('Not started')
   })
 
   // Gate open: the denominator is 21, not 17. This is the number that decides
   // whether the person thinks they are finished.
   it('counts against 21 when the gate is open', () => {
     const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
-    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 17 of 21 scored')
+    expect(cardFooter(row, VIEWER, true, false)).toBe('Draft, 17 of 21 scored')
   })
 
   // Same row, gate shut: the same seventeen answers are a COMPLETE check-in.
   it('counts against 17 when the gate is shut', () => {
     const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
-    expect(cardFooter(row, VIEWER, false)).toBe('Draft, 17 of 17 scored')
+    expect(cardFooter(row, VIEWER, false, false)).toBe('Draft, 17 of 17 scored')
   })
 
   // A No is an ANSWER. Counting it as unanswered would leave the card
@@ -111,7 +111,7 @@ describe('cardFooter', () => {
       client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null,
       ...seventeenAnswered(), adv_left_review: 1,
     }
-    expect(cardFooter(row, VIEWER, true)).toBe('Draft, 18 of 21 scored')
+    expect(cardFooter(row, VIEWER, true, false)).toBe('Draft, 18 of 21 scored')
   })
 
   // A 1 is an answer. Counting it as missing would leave any client with
@@ -120,25 +120,25 @@ describe('cardFooter', () => {
   it('counts a No as answered', () => {
     const checkin = blankCheckin()
     for (const key of ALL_QUESTIONS) checkin[key] = 1
-    expect(cardFooter(checkin, 'someone', true)).toBe('Draft, 21 of 21 scored')
+    expect(cardFooter(checkin, 'someone', true, false)).toBe('Draft, 21 of 21 scored')
   })
 
   it('ignores a stray boolean left in a row', () => {
     const checkin = blankCheckin()
     checkin.adv_left_review = true as unknown as number
-    expect(cardFooter(checkin, 'someone', true)).toBe('Not started')
+    expect(cardFooter(checkin, 'someone', true, false)).toBe('Not started')
   })
 
   it('names you when you submitted it, with the "Submitted" prefix', () => {
     const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: VIEWER, suggested_at: null }
-    const text = cardFooter(row, VIEWER, true)
+    const text = cardFooter(row, VIEWER, true, false)
     expect(text).toContain('by you')
     expect(text.startsWith('Submitted ')).toBe(true)
   })
 
   it('names another account manager when someone else did', () => {
     const row = { client_id: 1, submitted_at: '2026-08-28T12:00:00Z', submitted_by: 'someone-else', suggested_at: null }
-    expect(cardFooter(row, VIEWER, true)).toContain('by another account manager')
+    expect(cardFooter(row, VIEWER, true, false)).toContain('by another account manager')
   })
 
   // The defect this whole slice exists to fix is a screen that says nothing.
@@ -165,7 +165,7 @@ describe('cardFooter', () => {
               suggested_at: null,
               ...answeredPrefix(count),
             }
-            const text = cardFooter(row, VIEWER, advocacyApplies)
+            const text = cardFooter(row, VIEWER, advocacyApplies, false)
             expect(
               text.trim(),
               JSON.stringify({ submitted_at, submitted_by, advocacyApplies, count }),

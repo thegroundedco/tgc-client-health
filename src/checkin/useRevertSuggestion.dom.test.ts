@@ -64,7 +64,7 @@ describe('useRevertSuggestion', () => {
   it('writes exactly the AI columns, notes, and review fields, filtered on client and month', async () => {
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true })
+      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true, hoursApplies: false })
     })
     const payload = db.lastUpdate!
     expect(Object.keys(payload).sort()).toEqual(
@@ -85,7 +85,7 @@ describe('useRevertSuggestion', () => {
     const partial = { ...FULL_AI, [AI_ANSWER_KEYS[0]]: null }
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current: CURRENT, ai: ai(partial), advocacyApplies: true })
+      await result.current.revert({ current: CURRENT, ai: ai(partial), advocacyApplies: true, hoursApplies: false })
     })
     expect(db.lastUpdate!.submitted_at).toBeNull()
     expect(db.lastUpdate!.submitted_by).toBeNull()
@@ -97,24 +97,24 @@ describe('useRevertSuggestion', () => {
     const current: Answers = Object.fromEntries(ALL_QUESTIONS.map((k) => [k, 3]))
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current, ai: ai(FULL_AI), advocacyApplies: false })
+      await result.current.revert({ current, ai: ai(FULL_AI), advocacyApplies: false, hoursApplies: false })
     })
     expect(db.lastUpdate!.submitted_at).toBe(db.lastUpdate!.suggested_at)
     expect(db.lastUpdate!.submitted_by).toBe('prof-1')
   })
 
   it('judges completeness by the gate: no Advocacy answers is complete only with the gate shut', async () => {
-    const advocacy = ALL_QUESTIONS.filter((k) => !requiredQuestions(false).includes(k))
+    const advocacy = ALL_QUESTIONS.filter((k) => !requiredQuestions(false, false).includes(k))
     expect(advocacy.length).toBeGreaterThan(0)
     const noAdvocacy = { ...FULL_AI, ...Object.fromEntries(advocacy.map((k) => [k, null])) }
     const current: Answers = { fin_rack_rate: 3, fin_rate_increased: 3 }
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current, ai: ai(noAdvocacy), advocacyApplies: false })
+      await result.current.revert({ current, ai: ai(noAdvocacy), advocacyApplies: false, hoursApplies: false })
     })
     expect(db.lastUpdate!.submitted_at).not.toBeNull()
     await act(async () => {
-      await result.current.revert({ current, ai: ai(noAdvocacy), advocacyApplies: true })
+      await result.current.revert({ current, ai: ai(noAdvocacy), advocacyApplies: true, hoursApplies: false })
     })
     expect(db.lastUpdate!.submitted_at).toBeNull()
   })
@@ -123,7 +123,7 @@ describe('useRevertSuggestion', () => {
     db.write = async () => ({ data: null, error: null })
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true })
+      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true, hoursApplies: false })
     })
     expect(result.current.state).toEqual({ kind: 'failed', message: UPDATE_MATCHED_NOTHING_TEXT })
   })
@@ -132,7 +132,7 @@ describe('useRevertSuggestion', () => {
     db.write = async () => ({ data: null, error: { message: 'boom' } })
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {
-      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true })
+      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true, hoursApplies: false })
     })
     expect(result.current.state.kind).toBe('failed')
   })

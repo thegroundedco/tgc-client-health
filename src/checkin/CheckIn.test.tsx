@@ -149,6 +149,7 @@ function defaultHook(): UseCheckin {
     draft: { answers: {}, notes: '' },
     saveState: { kind: 'clean' },
     advocacyApplies: true,
+    hoursApplies: false,
     required: 21,
     scored: 0,
     localOverall: null,
@@ -437,7 +438,7 @@ describe('CheckIn', () => {
     expect(extractAllByTestId(markup, 'h3', 'bucket-heading')).toEqual([
       'Communication',
       'Growth',
-      'Finances',
+      'Finances and Hours',
       'Relationship',
       'Delivery',
       'Advocacy',

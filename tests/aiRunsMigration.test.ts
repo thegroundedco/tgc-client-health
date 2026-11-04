@@ -9,9 +9,13 @@ const NAME = '20261031090000_ai_suggestion_runs.sql'
 // so the backfilled copy must not carry them (spec §2.1).
 const FINANCE_FROM_REVENUE = ['fin_rack_rate', 'fin_rate_increased']
 
+// Not an AI answer either (it comes from Productive), and added after this
+// migration shipped, so the migration never carried it.
+const NOT_AI = [...FINANCE_FROM_REVENUE, 'fin_hours_in_budget']
+
 // Derived, not typed out: if a question is added or renamed, this list moves
 // with it and the backfill assertion fails rather than going stale.
-const AI_KEYS = ALL_QUESTIONS.filter((key: string) => !FINANCE_FROM_REVENUE.includes(key))
+const AI_KEYS = ALL_QUESTIONS.filter((key: string) => !NOT_AI.includes(key))
 
 function migration(name: string): string {
   const names = readdirSync(MIGRATIONS).filter((entry) => entry === name)

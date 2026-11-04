@@ -43,8 +43,10 @@ export const OUT = 'scripts/.score-parity.generated.sql'
 // function, imported unchanged. bucketScore() is pinned separately, against
 // this same primitive, by scoreV2.test.ts -- this file does not re-prove
 // that.
+// Task 1: the hours question is left out (hoursApplies = false) because the SQL
+// still has the three-question Finances; Task 3 extends this to both branches.
 function expectedBucketScore(state, bucket) {
-  return meanOrNull(questionsFor(bucket).map((question) => state[question.key]))
+  return meanOrNull(questionsFor(bucket, false).map((question) => state[question.key]))
 }
 
 // The values any question can hold: unanswered, or 1 through 5.
@@ -55,7 +57,7 @@ const SCALE_VALUES = [null, 1, 2, 3, 4, 5]
 // expression references only its own columns, so the space is (3 or 6)^n
 // per bucket rather than 6^21 across the table.
 export function enumerateBucketStates(bucket) {
-  const questions = questionsFor(bucket)
+  const questions = questionsFor(bucket, false)
   let states = [{}]
   for (const question of questions) {
     states = states.flatMap((state) =>
@@ -76,7 +78,7 @@ const BUCKET_SCORE_COLUMN = {
 
 function bucketCheckSql(bucket) {
   const column = BUCKET_SCORE_COLUMN[bucket]
-  const questions = questionsFor(bucket)
+  const questions = questionsFor(bucket, false)
   const keys = questions.map((question) => question.key)
   const states = enumerateBucketStates(bucket)
 

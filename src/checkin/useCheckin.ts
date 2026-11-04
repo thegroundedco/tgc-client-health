@@ -33,6 +33,9 @@ export type UseCheckin = {
   // The gate, and the count that follows from it. §4.4: every count on screen is
   // against this number, never a hardcoded 21.
   advocacyApplies: boolean
+  // Whether the hours question is asked. A placeholder (always false) until
+  // Task 5 wires the stored fin_hours_applies.
+  hoursApplies: boolean
   required: number
   scored: number
   localOverall: number | null
@@ -84,7 +87,9 @@ export function useCheckin(
   // does not -- which is every check-in, the first time somebody opens it.
   // tests/gateParity.test.ts is what keeps the two answers the same.
   const applies = gateApplies(client.started_on, period)
-  const required = requiredQuestions(applies).length
+  // Placeholder: Task 5 supplies the real source (stored fin_hours_applies).
+  const hoursApplies = false
+  const required = requiredQuestions(applies, hoursApplies).length
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -293,8 +298,8 @@ export function useCheckin(
     [draft, applyEdit],
   )
 
-  const scored = answeredCount(draft.answers, applies)
-  const localOverall = overallScore(draft.answers)
+  const scored = answeredCount(draft.answers, applies, hoursApplies)
+  const localOverall = overallScore(draft.answers, hoursApplies)
   const storedOverall = scores.find((row) => row.period === period)?.overall_score ?? null
   const lastOverall = scores.find((row) => row.period === lastPeriod)?.overall_score ?? null
   const hasContent = !isDraftEmpty(draft)
@@ -310,7 +315,7 @@ export function useCheckin(
       // Against the REQUIRED count, not 21. A gated-out check-in is complete at
       // 17, and marking it submitted only at 21 would make a complete check-in
       // permanently unsubmittable for every client inside their first 90 days.
-      const complete = isComplete(draft.answers, applies)
+      const complete = isComplete(draft.answers, applies, hoursApplies)
       const now = new Date().toISOString()
 
       // Every answer column is sent, including the unanswered ones as null, and
@@ -418,7 +423,7 @@ export function useCheckin(
     // things it actually reads -- clientId, period, lastPeriod (read by the
     // post-save score refresh above), the draft, applies and the
     // account -- change.
-  }, [clientId, period, lastPeriod, draft, profile.id, applies])
+  }, [clientId, period, lastPeriod, draft, profile.id, applies, hoursApplies])
 
   return {
     status,
@@ -429,6 +434,7 @@ export function useCheckin(
     draft,
     saveState,
     advocacyApplies: applies,
+    hoursApplies,
     required,
     scored,
     localOverall,

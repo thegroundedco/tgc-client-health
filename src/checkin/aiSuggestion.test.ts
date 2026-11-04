@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { ALL_QUESTIONS } from '../lib/buckets'
 import { AI_ANSWER_KEYS, parseAiSuggestion, revertedAnswers, type AiSuggestion } from './aiSuggestion'
 
-const FINANCE = ['fin_rack_rate', 'fin_rate_increased']
+const FINANCE = ['fin_rack_rate', 'fin_rate_increased', 'fin_hours_in_budget']
 
 describe('AI_ANSWER_KEYS', () => {
-  it('is the 19 non-finance keys', () => {
+  it('is the 19 non-finance keys, hours excluded', () => {
     expect(AI_ANSWER_KEYS).toHaveLength(19)
     for (const key of FINANCE) expect(AI_ANSWER_KEYS).not.toContain(key)
     expect([...AI_ANSWER_KEYS, ...FINANCE].sort()).toEqual([...ALL_QUESTIONS].sort())

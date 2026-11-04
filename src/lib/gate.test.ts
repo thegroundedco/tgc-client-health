@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OVERALL_QUESTIONS } from './buckets'
+import { overallQuestions } from './buckets'
 import { advocacyApplies, advocacyGate, advocacyOpensAt } from './gate'
 
 describe('advocacyApplies', () => {
@@ -101,13 +101,13 @@ describe('advocacyGate', () => {
     const shut = advocacyGate('2026-08-01', '2026-08-01')
     expect(shut.open).toBe(false)
     if (shut.open) return
-    expect(shut.reason).toContain(`other ${OVERALL_QUESTIONS.length} questions`)
+    expect(shut.reason).toContain(`other ${overallQuestions(false).length} questions`)
   })
 
   it('says the same for a client with no start date', () => {
     const none = advocacyGate(null, '2026-08-01')
     expect(none.open).toBe(false)
     if (none.open) return
-    expect(none.reason).toContain(`other ${OVERALL_QUESTIONS.length} questions`)
+    expect(none.reason).toContain(`other ${overallQuestions(false).length} questions`)
   })
 })

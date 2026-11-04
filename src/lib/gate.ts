@@ -1,4 +1,4 @@
-import { OVERALL_QUESTIONS } from './buckets.ts'
+import { overallQuestions } from './buckets.ts'
 import { formatPeriod } from './month.ts'
 
 // Derived rather than written: this count feeds two sentences of user-facing
@@ -70,7 +70,7 @@ export function advocacyGate(startedOn: string | null, period: string): Advocacy
       open: false,
       reason:
         'This client has no start date, so Advocacy is not scored and this ' +
-        `check-in is scored out of the other ${OVERALL_QUESTIONS.length} questions. Adding the date on ` +
+        `check-in is scored out of the other ${overallQuestions(false).length} questions. Adding the date on ` +
         'the client admin screen opens this section.',
     }
   }
@@ -79,7 +79,7 @@ export function advocacyGate(startedOn: string | null, period: string): Advocacy
     open: false,
     reason:
       `This client is still inside their first ${GATE_DAYS} days, so Advocacy ` +
-      `is not scored yet and this check-in is scored out of the other ${OVERALL_QUESTIONS.length} ` +
+      `is not scored yet and this check-in is scored out of the other ${overallQuestions(false).length} ` +
       `questions. It opens with the ${formatPeriod(advocacyOpensAt(startedOn))} ` +
       `check-in — a check-in covers a whole month, so the gate opens with the ` +
       `first month that begins on or after day ${GATE_DAYS}, not on day ` +

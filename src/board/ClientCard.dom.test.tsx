@@ -149,7 +149,7 @@ describe('a client card', () => {
     // bar is the decoration -- not the other way round.
     expect(bars()[0].getAttribute('aria-label')).toMatch(/Communication: 5 of 5/)
     expect(bars()[1].getAttribute('aria-label')).toMatch(/Growth: 1 of 5/)
-    expect(bars()[2].getAttribute('aria-label')).toMatch(/Finances: not scored/)
+    expect(bars()[2].getAttribute('aria-label')).toMatch(/Finances and Hours: not scored/)
     expect(screen.getByText('Draft, 2 of 21 scored')).toBeTruthy()
   })
 
@@ -200,7 +200,7 @@ describe('a client card', () => {
     for (const initial of screen.getAllByTestId('bucket-initial')) {
       expect(initial.getAttribute('aria-hidden')).toBe('true')
     }
-    expect(bars()[2].getAttribute('aria-label')).toMatch(/^Finances:/)
+    expect(bars()[2].getAttribute('aria-label')).toMatch(/^Finances and Hours:/)
   })
 
   it('opens the check-in when the card is clicked', async () => {

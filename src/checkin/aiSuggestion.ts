@@ -1,9 +1,11 @@
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, HOURS_QUESTION } from '../lib/buckets'
 import type { Answers } from '../lib/scoreV2'
 
 // The two finance answers an AI run never scores: they are facts about the
-// contract, not judgments, so a revert leaves the person's values alone.
-const FINANCE_KEYS: readonly string[] = ['fin_rack_rate', 'fin_rate_increased']
+// contract, not judgments, so a revert leaves the person's values alone. The
+// hours answer joins them: it is worked out from Productive, never by the AI,
+// so a revert must not write it either.
+const FINANCE_KEYS: readonly string[] = ['fin_rack_rate', 'fin_rate_increased', HOURS_QUESTION]
 
 export const AI_ANSWER_KEYS: readonly string[] = ALL_QUESTIONS.filter(
   (key) => !FINANCE_KEYS.includes(key),

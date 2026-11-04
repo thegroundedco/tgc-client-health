@@ -18,6 +18,7 @@ type Props = {
   /** The stored answers: revert keeps their finance answers. */
   current: Answers
   advocacyApplies: boolean
+  hoursApplies: boolean
   /** Unsaved edits also offer the button, and Revert discards them. */
   hasUnsavedChanges: boolean
   onReverted: () => void
@@ -26,7 +27,7 @@ type Props = {
 // "Revert to AI suggested scores" on a check-in a person has reviewed, or is
 // editing, and whose AI copy is still on file (spec 2026-10-30 §5.3). Confirmed first: it replaces saved scores and note.
 export function RevertButton({
-  clientId, period, profileId, canEdit, suggestedAt, ai, current, advocacyApplies, hasUnsavedChanges, onReverted,
+  clientId, period, profileId, canEdit, suggestedAt, ai, current, advocacyApplies, hoursApplies, hasUnsavedChanges, onReverted,
 }: Props) {
   const headingId = useId()
   const [open, setOpen] = useState(false)
@@ -67,7 +68,7 @@ export function RevertButton({
               className="button"
               onClick={() => {
                 setOpen(false)
-                void revert({ current, ai, advocacyApplies })
+                void revert({ current, ai, advocacyApplies, hoursApplies })
               }}
               type="button"
             >

@@ -34,6 +34,7 @@ const base = {
   profileId: 'p',
   current: { fin_rack_rate: 5 },
   advocacyApplies: true,
+  hoursApplies: false,
   hasUnsavedChanges: false,
   onReverted: vi.fn(),
 }
@@ -81,7 +82,7 @@ describe('RevertButton', () => {
     render(<RevertButton {...base} canEdit suggestedAt={null} ai={AI} />)
     fireEvent.click(screen.getByRole('button', { name: BUTTON }))
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
-    expect(hook.revert).toHaveBeenCalledWith({ current: base.current, ai: AI, advocacyApplies: true })
+    expect(hook.revert).toHaveBeenCalledWith({ current: base.current, ai: AI, advocacyApplies: true, hoursApplies: false })
     await waitFor(() => expect(base.onReverted).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('dialog')).toBeNull()
   })

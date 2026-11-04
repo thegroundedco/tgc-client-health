@@ -163,6 +163,7 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
     draft: { answers: { comm_constructive: 4 }, notes: 'Renewal conversation went well.' },
     saveState: { kind: 'dirty' },
     advocacyApplies: true,
+    hoursApplies: false,
     required: 21,
     scored: 1,
     localOverall: null,

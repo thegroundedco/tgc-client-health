@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
-import { ALL_QUESTIONS, OVERALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, overallQuestions } from '../lib/buckets'
 import { requiredQuestions } from '../lib/scoreV2'
 
 // A fake of the Supabase chained builder, in the same style as
@@ -126,7 +126,7 @@ describe('useCheckin: the local overall', () => {
     const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
-    const required = requiredQuestions(false)
+    const required = requiredQuestions(false, false)
     for (const key of required.slice(0, required.length - 1)) {
       act(() => result.current.setAnswer(key, 4))
     }
@@ -140,7 +140,7 @@ describe('useCheckin: the local overall', () => {
   it('ignores unanswered Advocacy questions when the gate is shut', async () => {
     const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))
+    for (const key of requiredQuestions(false, false)) act(() => result.current.setAnswer(key, 3))
     expect(result.current.localOverall).toBe(3)
     expect(result.current.scored).toBe(17)
   })
@@ -157,7 +157,7 @@ describe('useCheckin: the local overall', () => {
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     expect(result.current.advocacyApplies).toBe(true)
-    for (const key of OVERALL_QUESTIONS) act(() => result.current.setAnswer(key, 4))
+    for (const key of overallQuestions(false)) act(() => result.current.setAnswer(key, 4))
     expect(result.current.localOverall).toBe(4)
     // ...and still 21 required, so it is not yet complete.
     expect(result.current.required).toBe(21)
@@ -316,7 +316,7 @@ describe('useCheckin: submit', () => {
   it('marks a gated-out check-in submitted at 17 answers', async () => {
     const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    for (const key of requiredQuestions(false)) act(() => result.current.setAnswer(key, 3))
+    for (const key of requiredQuestions(false, false)) act(() => result.current.setAnswer(key, 3))
     act(() => result.current.submit())
     await waitFor(() => expect(upsert).toHaveBeenCalled())
     expect(upsert.mock.calls[0][0].submitted_at).not.toBeNull()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_QUESTIONS, CHOICE_OPTIONS, OVERALL_QUESTIONS, questionsFor } from './buckets'
+import { ALL_QUESTIONS, CHOICE_OPTIONS, overallQuestions, questionsFor } from './buckets'
 import {
   answeredCount,
   bandFor,
@@ -17,11 +17,11 @@ function allAt(value: number): Answers {
 
 describe('requiredQuestions', () => {
   it('is all 21 when Advocacy applies', () => {
-    expect(requiredQuestions(true)).toHaveLength(21)
+    expect(requiredQuestions(true, false)).toHaveLength(21)
   })
 
   it('is 17 when it does not, and excludes every Advocacy question', () => {
-    const required = requiredQuestions(false)
+    const required = requiredQuestions(false, false)
     expect(required).toHaveLength(17)
     for (const question of questionsFor('advocacy')) {
       expect(required).not.toContain(question.key)
@@ -36,7 +36,7 @@ describe('bucketScore', () => {
       comm_timely: 4,
       comm_consistent: 3,
     }
-    expect(bucketScore(answers, 'communication')).toBe(4)
+    expect(bucketScore(answers, 'communication', false)).toBe(4)
   })
 
   it('rounds to two decimals', () => {
@@ -46,12 +46,12 @@ describe('bucketScore', () => {
       comm_consistent: 4,
     }
     // 13 / 3 = 4.333...
-    expect(bucketScore(answers, 'communication')).toBe(4.33)
+    expect(bucketScore(answers, 'communication', false)).toBe(4.33)
   })
 
   it('is null when any of its questions is unanswered', () => {
     const answers: Answers = { comm_constructive: 5, comm_timely: 4 }
-    expect(bucketScore(answers, 'communication')).toBeNull()
+    expect(bucketScore(answers, 'communication', false)).toBeNull()
   })
 
   it('is null when a question is explicitly null, not just absent', () => {
@@ -60,7 +60,7 @@ describe('bucketScore', () => {
       comm_timely: 4,
       comm_consistent: null,
     }
-    expect(bucketScore(answers, 'communication')).toBeNull()
+    expect(bucketScore(answers, 'communication', false)).toBeNull()
   })
 })
 
@@ -70,7 +70,7 @@ describe('overallScore', () => {
   // before the amendment only because allAt(3) happens to set the 17 scale
   // answers to 3 as well; the "when Advocacy applies" framing is what's retired.
   it('is the mean of the 17 scale answers', () => {
-    expect(overallScore(allAt(3))).toBe(3)
+    expect(overallScore(allAt(3), false)).toBe(3)
   })
 
   // Retitled 2026-08-28, same reason as above: this was the gate-false
@@ -78,7 +78,7 @@ describe('overallScore', () => {
   // two calls are now identical. Kept rather than merged, per this project's
   // rule against folding tests together, even though they now overlap exactly.
   it('is the mean of the 17 non-Advocacy answers', () => {
-    expect(overallScore(allAt(3))).toBe(3)
+    expect(overallScore(allAt(3), false)).toBe(3)
   })
 
   // Retitled 2026-08-28: this is no longer conditional on a gate -- Advocacy is
@@ -86,7 +86,7 @@ describe('overallScore', () => {
   // Advocacy answers present and low) with the gate argument simply removed.
   it('ignores Advocacy answers entirely', () => {
     const answers = { ...allAt(5), adv_left_review: 1, adv_case_study: 1 }
-    expect(overallScore(answers)).toBe(5)
+    expect(overallScore(answers, false)).toBe(5)
   })
 
   // This is the test that fails loudly if anyone reverts to averaging the six
@@ -106,14 +106,14 @@ describe('overallScore', () => {
       comm_timely: 5,
       comm_consistent: 5,
     }
-    expect(overallScore(answers)).toBe(2.53)
-    expect(overallScore(answers)).not.toBe(2.6)
+    expect(overallScore(answers, false)).toBe(2.53)
+    expect(overallScore(answers, false)).not.toBe(2.6)
   })
 
   it('is null when one required answer is missing', () => {
     const answers = { ...allAt(4) }
     delete answers.del_on_time
-    expect(overallScore(answers)).toBeNull()
+    expect(overallScore(answers, false)).toBeNull()
   })
 
   // Retired 2026-08-28: this used to assert null, back when Advocacy still
@@ -125,28 +125,28 @@ describe('overallScore', () => {
   it('is NOT null when an Advocacy answer is missing -- Advocacy is not in the divisor', () => {
     const answers = { ...allAt(4) }
     delete answers.adv_would_refer
-    expect(overallScore(answers)).toBe(4)
+    expect(overallScore(answers, false)).toBe(4)
   })
 
   it('is NOT null when Advocacy is gated out and every Advocacy answer is missing', () => {
     const answers: Answers = {}
-    for (const key of requiredQuestions(false)) answers[key] = 4
-    expect(overallScore(answers)).toBe(4)
+    for (const key of requiredQuestions(false, false)) answers[key] = 4
+    expect(overallScore(answers, false)).toBe(4)
   })
 })
 
 describe('answeredCount', () => {
   it('counts only required questions, so a gated-out sheet cannot exceed 17', () => {
-    expect(answeredCount(allAt(3), false)).toBe(17)
+    expect(answeredCount(allAt(3), false, false)).toBe(17)
   })
 
   it('counts all 21 when the gate is open', () => {
-    expect(answeredCount(allAt(3), true)).toBe(21)
+    expect(answeredCount(allAt(3), true, false)).toBe(21)
   })
 
   it('ignores stray keys, because a restored draft is arbitrary JSON', () => {
     const answers = { ...allAt(3), not_a_question: 5 }
-    expect(answeredCount(answers, true)).toBe(21)
+    expect(answeredCount(answers, true, false)).toBe(21)
   })
 })
 
@@ -176,28 +176,28 @@ describe('overallScore (amendment coverage)', () => {
   // parameter at all, which is the point -- there is no way to ask for the old
   // 21-divisor behaviour by accident.
   it('is the mean of the 17, and ignores Advocacy entirely', () => {
-    const seventeen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 4]))
-    expect(overallScore(seventeen)).toBe(4)
+    const seventeen = Object.fromEntries(overallQuestions(false).map((k) => [k, 4]))
+    expect(overallScore(seventeen, false)).toBe(4)
     // Adding every Advocacy answer, either way, must not move it.
     const withYes = { ...seventeen, adv_left_review: 5, adv_case_study: 5,
                       adv_would_refer: 5, adv_reference_check: 5 }
     const withNo = { ...seventeen, adv_left_review: 1, adv_case_study: 1,
                      adv_would_refer: 1, adv_reference_check: 1 }
-    expect(overallScore(withYes)).toBe(4)
-    expect(overallScore(withNo)).toBe(4)
+    expect(overallScore(withYes, false)).toBe(4)
+    expect(overallScore(withNo, false)).toBe(4)
   })
 
   // The regression that would signal a reversion to the old model.
   it('still has an overall when every Advocacy answer is blank', () => {
-    const seventeen = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 3]))
-    expect(overallScore(seventeen)).toBe(3)
+    const seventeen = Object.fromEntries(overallQuestions(false).map((k) => [k, 3]))
+    expect(overallScore(seventeen, false)).toBe(3)
   })
 
   it('is null when any one of the 17 is missing', () => {
-    for (const key of OVERALL_QUESTIONS) {
-      const answers = Object.fromEntries(OVERALL_QUESTIONS.map((k) => [k, 3]))
+    for (const key of overallQuestions(false)) {
+      const answers = Object.fromEntries(overallQuestions(false).map((k) => [k, 3]))
       delete answers[key]
-      expect(overallScore(answers)).toBeNull()
+      expect(overallScore(answers, false)).toBeNull()
     }
   })
 })
@@ -206,14 +206,14 @@ describe('bucketScore (amendment coverage)', () => {
   it('uses the same mean for Advocacy as for every other bucket', () => {
     expect(bucketScore({ adv_left_review: 5, adv_case_study: 5,
                          adv_would_refer: 1, adv_reference_check: 1 },
-                       'advocacy')).toBe(3)
+                       'advocacy', false)).toBe(3)
     expect(bucketScore({ comm_constructive: 2, comm_timely: 4,
-                         comm_consistent: 3 }, 'communication')).toBe(3)
+                         comm_consistent: 3 }, 'communication', false)).toBe(3)
   })
 
   it('is null for a bucket with any unanswered question, either kind', () => {
-    expect(bucketScore({ adv_left_review: 5 }, 'advocacy')).toBeNull()
-    expect(bucketScore({ comm_constructive: 2 }, 'communication')).toBeNull()
+    expect(bucketScore({ adv_left_review: 5 }, 'advocacy', false)).toBeNull()
+    expect(bucketScore({ comm_constructive: 2 }, 'communication', false)).toBeNull()
   })
 })
 
@@ -222,15 +222,15 @@ describe('requiredQuestions and answeredCount (amendment coverage)', () => {
   // answers before a check-in may be submitted -- and is still 21 gate-open.
   // Only the overall's divisor moved. Keeping these two apart is the point.
   it('still requires 21 when the gate is open and 17 when it is shut', () => {
-    expect(requiredQuestions(true)).toHaveLength(21)
-    expect(requiredQuestions(false)).toHaveLength(17)
+    expect(requiredQuestions(true, false)).toHaveLength(21)
+    expect(requiredQuestions(false, false)).toHaveLength(17)
   })
 
   // A 1 ("No") is an ANSWER. Counting it as unanswered would make a complete
   // check-in permanently unsubmittable for a client with nothing to advocate.
   it('counts a No as answered', () => {
-    const answers = Object.fromEntries(requiredQuestions(true).map((k) => [k, 1]))
-    expect(answeredCount(answers, true)).toBe(21)
+    const answers = Object.fromEntries(requiredQuestions(true, false).map((k) => [k, 1]))
+    expect(answeredCount(answers, true, false)).toBe(21)
   })
 })
 
@@ -257,26 +257,26 @@ describe('the mean replaces yesNoScore without changing a number', () => {
     [3, 4],
     [4, 5],
   ])('scores %i yeses as %i, exactly as 1 + yeses did', (yeses, expected) => {
-    expect(bucketScore(advocacy(yeses), 'advocacy')).toBe(expected)
+    expect(bucketScore(advocacy(yeses), 'advocacy', false)).toBe(expected)
   })
 
   it('gives a three-question choice bucket the full 1-5 range', () => {
     // The reason `1 + yeses` had to go: on three questions it caps at 4 and the
     // Finances bar could never fill.
-    const keys = questionsFor('finances').map((question) => question.key)
+    const keys = questionsFor('finances', false).map((question) => question.key)
     const all = (value: number): Answers =>
       Object.fromEntries(keys.map((key) => [key, value]))
-    expect(bucketScore(all(NO), 'finances')).toBe(1)
-    expect(bucketScore(all(YES), 'finances')).toBe(5)
-    expect(bucketScore({ ...all(NO), [keys[0]]: YES }, 'finances')).toBe(2.33)
+    expect(bucketScore(all(NO), 'finances', false)).toBe(1)
+    expect(bucketScore(all(YES), 'finances', false)).toBe(5)
+    expect(bucketScore({ ...all(NO), [keys[0]]: YES }, 'finances', false)).toBe(2.33)
     // Two Yeses and one No: (5+5+1)/3 = 3.67.
-    expect(bucketScore({ ...all(YES), [keys[0]]: NO }, 'finances')).toBe(3.67)
+    expect(bucketScore({ ...all(YES), [keys[0]]: NO }, 'finances', false)).toBe(3.67)
   })
 
   it('reads an Unsure as the middle, not as a No and not as unanswered', () => {
-    const keys = questionsFor('finances').map((question) => question.key)
+    const keys = questionsFor('finances', false).map((question) => question.key)
     const answers = Object.fromEntries(keys.map((key) => [key, UNSURE]))
-    expect(bucketScore(answers, 'finances')).toBe(3)
+    expect(bucketScore(answers, 'finances', false)).toBe(3)
   })
 
   it('still nulls a bucket when any of its answers is missing', () => {
@@ -284,26 +284,26 @@ describe('the mean replaces yesNoScore without changing a number', () => {
     // a blank scores nothing at all.
     const keys = questionsFor('advocacy').map((question) => question.key)
     const answers: Answers = Object.fromEntries(keys.map((key) => [key, NO]))
-    expect(bucketScore(answers, 'advocacy')).toBe(1)
+    expect(bucketScore(answers, 'advocacy', false)).toBe(1)
     answers[keys[0]] = null
-    expect(bucketScore(answers, 'advocacy')).toBeNull()
+    expect(bucketScore(answers, 'advocacy', false)).toBeNull()
   })
 
   it('leaves Advocacy out of the overall in both gate states', () => {
     const answers: Answers = {}
-    for (const key of requiredQuestions(true)) answers[key] = 3
-    expect(overallScore(answers)).toBe(3)
+    for (const key of requiredQuestions(true, false)) answers[key] = 3
+    expect(overallScore(answers, false)).toBe(3)
     for (const question of questionsFor('advocacy')) {
       answers[question.key] = YES
     }
     // Four Yeses must not move the headline number by a hundredth.
-    expect(overallScore(answers)).toBe(3)
+    expect(overallScore(answers, false)).toBe(3)
   })
 
   it('counts 21 required answers gate-open and 17 gate-shut', () => {
     // required and the divisor are DIFFERENT numbers (spec §3.2). 21 != 17.
-    expect(requiredQuestions(true)).toHaveLength(21)
-    expect(requiredQuestions(false)).toHaveLength(17)
+    expect(requiredQuestions(true, false)).toHaveLength(21)
+    expect(requiredQuestions(false, false)).toHaveLength(17)
   })
 
   it('exports the choice values the control writes', () => {
@@ -314,20 +314,57 @@ describe('the mean replaces yesNoScore without changing a number', () => {
 describe('isComplete', () => {
   // First n required questions answered, so the count is exactly n.
   function answered(n: number, applies: boolean): Answers {
-    return Object.fromEntries(requiredQuestions(applies).slice(0, n).map((key) => [key, 3]))
+    return Object.fromEntries(requiredQuestions(applies, false).slice(0, n).map((key) => [key, 3]))
   }
 
   it('gate shut: true at 17, false at 16', () => {
-    expect(isComplete(answered(17, false), false)).toBe(true)
-    expect(isComplete(answered(16, false), false)).toBe(false)
+    expect(isComplete(answered(17, false), false, false)).toBe(true)
+    expect(isComplete(answered(16, false), false, false)).toBe(false)
   })
 
   it('gate open: true at 21, false at 20', () => {
-    expect(isComplete(answered(21, true), true)).toBe(true)
-    expect(isComplete(answered(20, true), true)).toBe(false)
+    expect(isComplete(answered(21, true), true, false)).toBe(true)
+    expect(isComplete(answered(20, true), true, false)).toBe(false)
   })
 
   it('gate open: 17 is not complete', () => {
-    expect(isComplete(answered(17, true), true)).toBe(false)
+    expect(isComplete(answered(17, true), true, false)).toBe(false)
+  })
+})
+
+describe('hours applicability', () => {
+  const fin3 = { fin_rack_rate: 5, fin_pays_on_time: 5, fin_rate_increased: 5 }
+
+  it('scores Finances over three when hours do not apply, ignoring a stray hours answer', () => {
+    expect(bucketScore({ ...fin3, fin_hours_in_budget: 1 }, 'finances', false)).toBe(5)
+  })
+
+  it('scores Finances over four when hours apply', () => {
+    expect(bucketScore({ ...fin3, fin_hours_in_budget: 1 }, 'finances', true)).toBe(4)
+    expect(bucketScore(fin3, 'finances', true)).toBeNull()
+  })
+
+  it('requires 22/18 questions with hours, 21/17 without', () => {
+    expect(requiredQuestions(true, true)).toHaveLength(22)
+    expect(requiredQuestions(false, true)).toHaveLength(18)
+    expect(requiredQuestions(true, false)).toHaveLength(21)
+    expect(requiredQuestions(false, false)).toHaveLength(17)
+  })
+
+  it('divides the overall by 18 with hours and by 17 without', () => {
+    const answers = Object.fromEntries(overallQuestions(true).map((k) => [k, 3]))
+    // Seventeen 3s and one 1: (51 + 1) / 18 = 2.89, not 52 / 17 = 3.06.
+    expect(overallScore({ ...answers, fin_hours_in_budget: 1 }, true)).toBe(2.89)
+    expect(overallScore({ ...answers, fin_hours_in_budget: 1 }, false)).toBe(3)
+    expect(overallScore({ ...answers, fin_hours_in_budget: null }, true)).toBeNull()
+  })
+
+  it('counts and completes against the hours-aware required set', () => {
+    const seventeen = Object.fromEntries(requiredQuestions(false, false).map((k) => [k, 3]))
+    expect(answeredCount(seventeen, false, true)).toBe(17)
+    expect(isComplete(seventeen, false, true)).toBe(false)
+    expect(isComplete({ ...seventeen, fin_hours_in_budget: 3 }, false, true)).toBe(true)
+    // A stray hours answer is not counted when hours do not apply.
+    expect(answeredCount({ ...seventeen, fin_hours_in_budget: 3 }, false, false)).toBe(17)
   })
 })

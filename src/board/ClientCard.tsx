@@ -175,7 +175,8 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
           survives a reload, which is the check v1 failed. cardFooter guarantees
           it is never empty. */}
       <p className={`t-caption ${styles.footerLine}`}>
-        {cardFooter(checkin ?? null, viewerId, advocacyApplies)}
+        {// Placeholder: Task 7 wires the stored fin_hours_applies.
+        cardFooter(checkin ?? null, viewerId, advocacyApplies, false)}
       </p>
 
       {/* Why the name is not a link. Without this the card is a dead end that

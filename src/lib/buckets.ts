@@ -111,6 +111,23 @@ export const RATE_OPTIONS: readonly ChoiceOption[] = [
   { label: 'Increased', value: 5 },
 ]
 
+// The Finances and Hours question, answered from Productive's budget hours
+// (Task 2 onwards fills it). It only exists for a client whose month has a
+// fixed monthly budget, so questionsFor() takes a hoursApplies flag.
+export const HOURS_QUESTION = 'fin_hours_in_budget'
+
+// The first month the hours question can apply to. Before it, never.
+export const HOURS_START_PERIOD = '2026-10-01'
+
+// Worse-left to better-right. Same 1-5 column as every other answer, so no
+// constraint moves; four options rather than three, and the values skip 4.
+export const HOURS_OPTIONS: readonly ChoiceOption[] = [
+  { label: 'Over 10h under or 8h over', value: 1 },
+  { label: '8–10h under or 6–8h over', value: 2 },
+  { label: '6–8h under', value: 3 },
+  { label: 'Within 6h', value: 5 },
+]
+
 // The label a `choice` answer reads as, for the "last month" line. Takes the
 // question's own option set, because the same stored 3 reads as "Unsure" on six
 // questions and "No change" on the seventh -- a lookup against one global list
@@ -146,7 +163,7 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
     ],
   },
   finances: {
-    label: 'Finances',
+    label: 'Finances and Hours',
     initial: 'F',
     questions: [
       { key: 'fin_rack_rate', prompt: 'Paying rack rate.', kind: 'choice' },
@@ -161,6 +178,13 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
         prompt: 'Rate vs last month.',
         kind: 'choice',
         options: RATE_OPTIONS,
+      },
+      // Last, and only asked when hoursApplies (see questionsFor).
+      {
+        key: HOURS_QUESTION,
+        prompt: 'Hours within budget.',
+        kind: 'choice',
+        options: HOURS_OPTIONS,
       },
     ],
   },
@@ -221,8 +245,12 @@ export const BUCKET_DEFINITIONS: Record<Bucket, BucketDefinition> = {
   },
 }
 
-export function questionsFor(bucket: Bucket): readonly Question[] {
-  return BUCKET_DEFINITIONS[bucket].questions
+// `hoursApplies` defaults to true so a caller that wants the rubric (labels,
+// column names) gets every question; anything that SCORES must pass the
+// client's real answer, which is why scoreV2 has no default.
+export function questionsFor(bucket: Bucket, hoursApplies = true): readonly Question[] {
+  const questions = BUCKET_DEFINITIONS[bucket].questions
+  return hoursApplies ? questions : questions.filter((q) => q.key !== HOURS_QUESTION)
 }
 
 export const ALL_QUESTIONS: readonly string[] = BUCKETS.flatMap((bucket) =>
@@ -239,16 +267,19 @@ export type QuestionKey = (typeof ALL_QUESTIONS)[number]
 // the gate silently changed the divisor.
 export const OVERALL_EXCLUDED: Bucket = 'advocacy'
 
-// The seventeen the overall is the mean of: every question except Advocacy's,
-// whether the gate is open or shut. Unlike requiredQuestions() in scoreV2 this
-// takes no gate argument and never varies.
+// The questions the overall is the mean of: every question except Advocacy's,
+// whether the gate is open or shut, and except the hours question when it does
+// not apply. Seventeen without hours, eighteen with. Unlike requiredQuestions()
+// in scoreV2 this takes no gate argument.
 //
 // This filtered on `kind === 'scale'` until 2026-08-31, which gave the right
 // answer for the wrong reason -- it excluded Advocacy BECAUSE Advocacy was
 // answered with booleans. The moment Finances moved to the same control, that
 // filter would have dropped Finances out of the headline score too: divisor 17
 // to 14, every client's number moved, and nothing failing. buckets.test.ts pins
-// the count at seventeen.
-export const OVERALL_QUESTIONS: readonly string[] = BUCKETS.filter(
-  (bucket) => bucket !== OVERALL_EXCLUDED,
-).flatMap((bucket) => questionsFor(bucket).map((question) => question.key))
+// the counts at seventeen and eighteen.
+export function overallQuestions(hoursApplies: boolean): readonly string[] {
+  return BUCKETS.filter((bucket) => bucket !== OVERALL_EXCLUDED).flatMap((bucket) =>
+    questionsFor(bucket, hoursApplies).map((question) => question.key),
+  )
+}

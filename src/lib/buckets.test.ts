@@ -5,8 +5,10 @@ import {
   BUCKET_DEFINITIONS,
   CHOICE_OPTIONS,
   GATED_BUCKET,
+  HOURS_QUESTION,
+  HOURS_START_PERIOD,
   OVERALL_EXCLUDED,
-  OVERALL_QUESTIONS,
+  overallQuestions,
   questionsFor,
   RATE_OPTIONS,
   choiceLabel,
@@ -28,13 +30,13 @@ describe('the six buckets', () => {
     expect(BUCKETS[BUCKETS.length - 1]).toBe(GATED_BUCKET)
   })
 
-  it('holds 21 questions in total', () => {
-    expect(ALL_QUESTIONS).toHaveLength(21)
+  it('holds 22 questions in total', () => {
+    expect(ALL_QUESTIONS).toHaveLength(22)
   })
 
   it('holds the question counts the rubric specifies', () => {
     const counts = BUCKETS.map((bucket) => questionsFor(bucket).length)
-    expect(counts).toEqual([3, 3, 3, 4, 4, 4])
+    expect(counts).toEqual([3, 3, 4, 4, 4, 4])
   })
 })
 
@@ -92,7 +94,37 @@ describe('the question keys', () => {
   // undefined question against another's is not measurement.
   it('no longer carries the retired "On terms" question', () => {
     expect(ALL_QUESTIONS).not.toContain('fin_on_terms')
-    expect(questionsFor('finances')).toHaveLength(3)
+    expect(questionsFor('finances', false)).toHaveLength(3)
+  })
+})
+
+describe('the hours question', () => {
+  it('labels the finances bucket "Finances and Hours" and keeps F', () => {
+    expect(BUCKET_DEFINITIONS.finances.label).toBe('Finances and Hours')
+    expect(BUCKET_DEFINITIONS.finances.initial).toBe('F')
+  })
+
+  it('asks the hours question last in Finances, with four options worse-left', () => {
+    const q = questionsFor('finances').at(-1)
+    expect(q?.key).toBe('fin_hours_in_budget')
+    expect(q?.prompt).toBe('Hours within budget.')
+    expect(q?.options?.map((o) => [o.label, o.value])).toEqual([
+      ['Over 10h under or 8h over', 1],
+      ['8–10h under or 6–8h over', 2],
+      ['6–8h under', 3],
+      ['Within 6h', 5],
+    ])
+  })
+
+  it('drops the hours question when it does not apply', () => {
+    expect(questionsFor('finances', false).map((q) => q.key)).not.toContain('fin_hours_in_budget')
+    expect(overallQuestions(false)).toHaveLength(17)
+    expect(overallQuestions(true)).toHaveLength(18)
+  })
+
+  it('starts applying from October 2026', () => {
+    expect(HOURS_START_PERIOD).toBe('2026-10-01')
+    expect(HOURS_QUESTION).toBe('fin_hours_in_budget')
   })
 })
 
@@ -146,7 +178,7 @@ describe('one answer type', () => {
     const relabelled = BUCKETS.flatMap((bucket) => questionsFor(bucket))
       .filter((question) => question.options !== undefined)
       .map((question) => question.key)
-    expect(relabelled).toEqual(['fin_rate_increased'])
+    expect(relabelled).toEqual(['fin_rate_increased', 'fin_hours_in_budget'])
   })
 
   it('reads a stored value against the question that stored it', () => {
@@ -183,23 +215,34 @@ describe('one answer type', () => {
     // The number that broke before. OVERALL_QUESTIONS used to be derived from
     // `kind === 'scale'`, so moving Finances to a choice control would have cut
     // the divisor to 14 with nothing failing. This is the guard.
-    expect(OVERALL_QUESTIONS).toHaveLength(17)
-    expect(ALL_QUESTIONS).toHaveLength(21)
+    expect(overallQuestions(false)).toHaveLength(17)
+    expect(overallQuestions(true)).toHaveLength(18)
+    expect(ALL_QUESTIONS).toHaveLength(22)
     expect(OVERALL_EXCLUDED).toBe('advocacy')
-    for (const question of questionsFor('finances')) {
-      expect(OVERALL_QUESTIONS).toContain(question.key)
+    for (const question of questionsFor('finances', false)) {
+      expect(overallQuestions(false)).toContain(question.key)
     }
     for (const question of questionsFor('advocacy')) {
-      expect(OVERALL_QUESTIONS).not.toContain(question.key)
+      expect(overallQuestions(false)).not.toContain(question.key)
+      expect(overallQuestions(true)).not.toContain(question.key)
     }
+    expect(overallQuestions(false)).not.toContain('fin_hours_in_budget')
+    expect(overallQuestions(true)).toContain('fin_hours_in_budget')
     // The length and containment checks above pass even if OVERALL_QUESTIONS
     // drops a real question and gains a key that is not in the rubric at all
     // -- overallScore would then be null for every client, forever, and
     // nothing above would notice. Exact, ordered equality against the rubric
     // itself is what closes that gap.
-    expect([...OVERALL_QUESTIONS]).toEqual(
+    expect([...overallQuestions(true)]).toEqual(
       ALL_QUESTIONS.filter(
         (key) => !questionsFor('advocacy').some((question) => question.key === key),
+      ),
+    )
+    expect([...overallQuestions(false)]).toEqual(
+      ALL_QUESTIONS.filter(
+        (key) =>
+          key !== 'fin_hours_in_budget' &&
+          !questionsFor('advocacy').some((question) => question.key === key),
       ),
     )
   })

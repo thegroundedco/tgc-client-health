@@ -110,7 +110,7 @@ describe('the matrix table', () => {
       'Client',
       'Communication',
       'Growth',
-      'Finances',
+      'Finances and Hours',
       'Relationship',
       'Delivery',
       'Advocacy',
