@@ -1126,7 +1126,7 @@ begin
         -- Productive hours, 20261104120000. scripts/verify-hours.sql probes a
         -- viewer's zero rows and refused writes against these; a dropped
         -- policy would make those pass for the wrong reason.
-        ('client_productive_projects', 'client_productive_projects_select_view_revenue_or_manage_clients'),
+        ('client_productive_projects', 'client_productive_projects_select_revenue_or_manage'),
         ('client_productive_projects', 'client_productive_projects_insert_manage_clients'),
         ('client_productive_projects', 'client_productive_projects_delete_manage_clients'),
         ('client_month_budgets', 'client_month_budgets_select_view_revenue'),

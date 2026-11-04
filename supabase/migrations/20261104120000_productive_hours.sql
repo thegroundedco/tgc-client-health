@@ -144,7 +144,7 @@ alter table public.client_month_hours_fetch enable row level security;
 -- Links: read by whoever sees the hours (view_revenue) or manages clients
 -- (the Clients admin setting). Added and removed with manage_clients. No
 -- update: a wrong link is removed and re-added.
-create policy client_productive_projects_select_view_revenue_or_manage_clients
+create policy client_productive_projects_select_revenue_or_manage
   on public.client_productive_projects
   for select
   to authenticated
