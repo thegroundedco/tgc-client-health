@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   budgetsFromDeals,
+  ProductiveError,
   dealsUrl,
+  fetchAllBudgets,
+  recordEach,
   isFixedMonthly,
   isPeriod,
   lastDayOf,
@@ -128,5 +131,69 @@ describe('safeEqual', () => {
     expect(safeEqual('abc', 'abd')).toBe(false)
     expect(safeEqual('abc', 'abcd')).toBe(false)
     expect(safeEqual('', 'a')).toBe(false)
+  })
+})
+
+const okPage = (data: unknown[], total_pages?: number) => ({
+  ok: true,
+  status: 200,
+  json: async () => (total_pages === undefined ? { data } : { data, meta: { total_pages } }),
+})
+const fixed = (id: string, project: string) =>
+  deal(id, `Budget ${id}`, { date: '2026-10-01', end_date: '2026-10-31', budgeted_time: 60, worked_time: 1 }, project)
+
+describe('fetchAllBudgets', () => {
+  it('pages to meta.total_pages', async () => {
+    const urls: string[] = []
+    const pages = [okPage([fixed('1', '900')], 3), okPage([fixed('2', '900')], 3), okPage([fixed('3', '900')], 3)]
+    const rows = await fetchAllBudgets(async (u) => pages[urls.push(u) - 1], ['900'], P)
+    expect(urls).toHaveLength(3)
+    expect(urls[2]).toContain('page[number]=3')
+    expect(rows.map((r) => r.productive_deal_id)).toEqual(['1', '2', '3'])
+  })
+  it('stops after page 1 when there is no meta', async () => {
+    let calls = 0
+    const rows = await fetchAllBudgets(async () => (calls++, okPage([fixed('1', '900')])), ['900'], P)
+    expect(calls).toBe(1)
+    expect(rows).toHaveLength(1)
+  })
+  it('throws ProductiveError on a non-OK page', async () => {
+    const bad = { ok: false, status: 503, json: async () => ({}) }
+    await expect(fetchAllBudgets(async () => bad, ['900'], P)).rejects.toBeInstanceOf(ProductiveError)
+  })
+  it('throws on an unexpected body', async () => {
+    const bad = { ok: true, status: 200, json: async () => ({ nope: 1 }) }
+    await expect(fetchAllBudgets(async () => bad, ['900'], P)).rejects.toBeInstanceOf(ProductiveError)
+  })
+  it('throws on a deal from a project that was not requested, even on a later page', async () => {
+    const pages = [okPage([fixed('1', '900')], 2), okPage([fixed('2', '777')], 2)]
+    let i = 0
+    await expect(fetchAllBudgets(async () => pages[i++], ['900'], P)).rejects.toThrow(/not requested/)
+  })
+})
+
+describe('recordEach', () => {
+  it('never records a client whose fetch throws, and carries on', async () => {
+    const recorded: number[] = []
+    const result = await recordEach(
+      [[1, ['a']], [2, ['b']], [3, ['c']]],
+      async (id) => {
+        if (id === 2) throw new ProductiveError('boom')
+        return []
+      },
+      async (id) => void recorded.push(id),
+    )
+    expect(recorded).toEqual([1, 3])
+    expect(result).toEqual({ fetched: 2, failed: [2] })
+  })
+  it('counts a failed record as failed', async () => {
+    const result = await recordEach(
+      [[1, ['a']], [2, ['b']]],
+      async () => [],
+      async (id) => {
+        if (id === 1) throw new Error('db')
+      },
+    )
+    expect(result).toEqual({ fetched: 1, failed: [1] })
   })
 })

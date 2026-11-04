@@ -10,7 +10,7 @@
 // PRODUCTIVE_API_TOKEN, PRODUCTIVE_ORG_ID, HOURS_CRON_SECRET (secrets).
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
-import { budgetsFromDeals, dealsUrl, isPeriod, redact, safeEqual } from './logic.ts'
+import { ProductiveError, fetchAllBudgets, isPeriod, recordEach, redact, safeEqual } from './logic.ts'
 import type { StoredBudget } from './logic.ts'
 
 const CORS = {
@@ -34,8 +34,6 @@ function secretList(): string[] {
   ]
 }
 
-class ProductiveError extends Error {}
-
 Deno.serve(async (req: Request): Promise<Response> => {
   try {
     return await handle(req)
@@ -46,30 +44,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 })
 
-async function fetchBudgets(projectIds: string[], period: string): Promise<StoredBudget[]> {
+function fetchBudgets(projectIds: string[], period: string): Promise<StoredBudget[]> {
   const token = Deno.env.get('PRODUCTIVE_API_TOKEN') ?? ''
   const org = Deno.env.get('PRODUCTIVE_ORG_ID') ?? ''
-  const all: StoredBudget[] = []
-  let totalPages = 1
-  for (let page = 1; page <= totalPages; page++) {
-    const response = await fetch(dealsUrl(projectIds, period, page), {
-      headers: {
-        'X-Auth-Token': token,
-        'X-Organization-Id': org,
-        'Content-Type': 'application/vnd.api+json',
-      },
-    })
-    if (!response.ok) throw new ProductiveError(`Productive answered ${response.status}.`)
-    const body: unknown = await response.json().catch(() => null)
-    try {
-      all.push(...budgetsFromDeals(body, period))
-    } catch (error) {
-      throw new ProductiveError(error instanceof Error ? error.message : String(error))
-    }
-    const pages = (body as { meta?: { total_pages?: unknown } } | null)?.meta?.total_pages
-    if (typeof pages === 'number' && Number.isFinite(pages)) totalPages = pages
-  }
-  return all
+  return fetchAllBudgets(
+    (url) =>
+      fetch(url, {
+        headers: {
+          'X-Auth-Token': token,
+          'X-Organization-Id': org,
+          'Content-Type': 'application/vnd.api+json',
+        },
+      }),
+    projectIds,
+    period,
+  )
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -137,8 +126,8 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // 3. Fetch and record. Writes only through record_month_budgets.
-  async function fetchOne(clientId: number, projectIds: string[]): Promise<void> {
-    const budgets = await fetchBudgets(projectIds, period)
+  const fetchFor = (_clientId: number, projectIds: string[]) => fetchBudgets(projectIds, period)
+  async function record(clientId: number, budgets: StoredBudget[]): Promise<void> {
     const { error } = await admin.rpc('record_month_budgets', {
       p_client_id: clientId,
       p_period: period,
@@ -148,22 +137,15 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (!scheduleMode) {
-    const projectIds = byClient.get(input.clientId as number)
+    const clientId = input.clientId as number
+    const projectIds = byClient.get(clientId)
     if (!projectIds) return json(200, { fetched: false })
-    await fetchOne(input.clientId as number, projectIds)
+    await record(clientId, await fetchFor(clientId, projectIds))
     return json(200, { fetched: true })
   }
 
-  let fetched = 0
-  const failed: number[] = []
-  for (const [clientId, projectIds] of byClient) {
-    try {
-      await fetchOne(clientId, projectIds)
-      fetched++
-    } catch (error) {
-      failed.push(clientId)
-      console.error('fetch-productive-hours: client failed', clientId, redact(String(error), secretList()))
-    }
-  }
-  return json(200, { fetched, failed })
+  const result = await recordEach(byClient, fetchFor, record, (clientId, error) =>
+    console.error('fetch-productive-hours: client failed', clientId, redact(String(error), secretList())),
+  )
+  return json(200, result)
 }

@@ -107,3 +107,65 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0)
   return diff === 0
 }
+
+// A failure on Productive's side (bad status, unexpected body, foreign deal).
+// index.ts maps it to a 502.
+export class ProductiveError extends Error {}
+
+export type PageResponse = { ok: boolean; status: number; json: () => Promise<unknown> }
+
+// Every fixed monthly budget for the projects, paged to meta.total_pages (one
+// page when there is no meta). Throws, and so records nothing, when a page is
+// not OK, is not a deals page, or holds a deal from a project we did not ask
+// for: record_month_budgets has no ownership check, so a filter Productive
+// ignored must never become another client's hours.
+export async function fetchAllBudgets(
+  fetchPage: (url: string) => Promise<PageResponse>,
+  projectIds: readonly string[],
+  period: string,
+): Promise<StoredBudget[]> {
+  const all: StoredBudget[] = []
+  let totalPages = 1
+  for (let page = 1; page <= totalPages; page++) {
+    const response = await fetchPage(dealsUrl(projectIds, period, page))
+    if (!response.ok) throw new ProductiveError(`Productive answered ${response.status}.`)
+    const body: unknown = await response.json().catch(() => null)
+    let rows: StoredBudget[]
+    try {
+      rows = budgetsFromDeals(body, period)
+    } catch (error) {
+      throw new ProductiveError(error instanceof Error ? error.message : String(error))
+    }
+    for (const row of rows) {
+      if (!projectIds.includes(row.productive_project_id)) {
+        throw new ProductiveError('Productive returned a budget from a project that was not requested.')
+      }
+    }
+    all.push(...rows)
+    const pages = isObject(body) && isObject(body.meta) ? body.meta.total_pages : undefined
+    if (typeof pages === 'number' && Number.isFinite(pages)) totalPages = pages
+  }
+  return all
+}
+
+// Schedule mode: fetch then record for each client, carrying on past a
+// failure. A client whose fetch throws is never recorded.
+export async function recordEach(
+  entries: Iterable<readonly [number, string[]]>,
+  fetchFor: (clientId: number, projectIds: string[]) => Promise<StoredBudget[]>,
+  record: (clientId: number, budgets: StoredBudget[]) => Promise<void>,
+  onFailure: (clientId: number, error: unknown) => void = () => {},
+): Promise<{ fetched: number; failed: number[] }> {
+  let fetched = 0
+  const failed: number[] = []
+  for (const [clientId, projectIds] of entries) {
+    try {
+      await record(clientId, await fetchFor(clientId, projectIds))
+      fetched++
+    } catch (error) {
+      failed.push(clientId)
+      onFailure(clientId, error)
+    }
+  }
+  return { fetched, failed }
+}
