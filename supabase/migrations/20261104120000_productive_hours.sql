@@ -65,9 +65,13 @@
 -- belongs to at most one client, hence the unique. on delete RESTRICT, like
 -- every table here and like client_retainers: a client with hours history
 -- refuses deletion; the operator sets status = 'former' instead.
+-- productive_project_id is the number from the project's URL, as text, with no
+-- leading zero: Productive returns ids without one, and the edge function
+-- refuses a deal whose project id is not exactly a linked id, so '0123' would
+-- fail every fetch for the client.
 create table public.client_productive_projects (
   client_id             bigint not null,
-  productive_project_id text   not null,
+  productive_project_id text   not null check (productive_project_id ~ '^[1-9][0-9]*$'),
   created_at            timestamptz not null default now(),
   primary key (client_id, productive_project_id),
   unique (productive_project_id),

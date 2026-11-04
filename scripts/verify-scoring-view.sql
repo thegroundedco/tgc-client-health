@@ -322,7 +322,7 @@ begin
   end if;
 
   insert into public.client_productive_projects (client_id, productive_project_id)
-  values (v_client, '__verify_scoring_view_project__');
+  values (v_client, '999999990003'); -- numeric, as the link table's check requires
 
   select overall_score, fin_hours_applies into v_overall, v_applies
     from public.checkin_scores s join public.checkins ch using (id) where s.id = v_hours;

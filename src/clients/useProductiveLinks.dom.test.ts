@@ -74,7 +74,7 @@ describe('useProductiveLinks', () => {
     expect(result.current.projectIds).toEqual([])
   })
 
-  it.each(['abc', '12a', '1.5', '-3', '', '  ', '12 34', '１２'])('add(%j) is refused with no insert', async (bad) => {
+  it.each(['abc', '12a', '1.5', '-3', '', '  ', '12 34', '１２', '0123', '0', '00'])('add(%j) is refused with no insert', async (bad) => {
     const { result } = renderHook(() => useProductiveLinks(7, true))
     await waitFor(() => expect(result.current.status).toBe('ready'))
     let message: string | null = null

@@ -58,7 +58,9 @@ export function useProductiveLinks(clientId: number, canManage: boolean): UsePro
   const add = useCallback(
     async (raw: string): Promise<string | null> => {
       const id = raw.trim()
-      if (!/^\d+$/.test(id)) return NOT_A_NUMBER
+      // No leading zero, matching the table's check: Productive's ids have
+      // none, and '0123' would never match the ids its deals come back with.
+      if (!/^[1-9]\d*$/.test(id)) return NOT_A_NUMBER
       if (projectIds.includes(id)) return null
       try {
         const { error } = await supabase

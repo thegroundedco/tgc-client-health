@@ -53,7 +53,9 @@ declare
 
   oct   constant date := '2026-10-01';
   sep   constant date := '2026-09-01';
-  probe_project constant text := '__verify_hours_project_a__';
+  -- Numeric, as the link table's check requires; far above any real
+  -- Productive project id, and rolled back with everything else.
+  probe_project constant text := '999999990001';
   probe_ai      constant jsonb := '{"probe": "verify-hours", "answers": {}}';
   probe_note    constant text  := 'verify-hours probe note -- must never persist';
   long_ago      constant timestamptz := '2000-01-01 00:00:00+00';
@@ -340,7 +342,7 @@ begin
     end;
     begin
       insert into public.client_productive_projects (client_id, productive_project_id)
-      values (v_client, '__verify_hours_project_b__');
+      values (v_client, '999999990002');
       problems := problems || '(g) an active viewer (no manage_clients) linked a project';
     exception
       when insufficient_privilege then null;

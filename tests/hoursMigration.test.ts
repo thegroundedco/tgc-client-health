@@ -336,6 +336,8 @@ describe('the productive_hours migration', () => {
     const links = statement(sql, /create table public\.client_productive_projects[\s\S]*?\);/)
     expect(links).toContain('primary key (client_id, productive_project_id)')
     expect(links).toContain('unique (productive_project_id)')
+    // M2: no leading zero, the same rule as useProductiveLinks.add.
+    expect(links).toContain("productive_project_id text not null check (productive_project_id ~ '^[1-9][0-9]*$')")
     const budgets = statement(sql, /create table public\.client_month_budgets[\s\S]*?\);/)
     expect(budgets).toContain('primary key (client_id, period, productive_deal_id)')
     expect(budgets).toContain("check (period = date_trunc('month', period::timestamp)::date)")
@@ -348,6 +350,33 @@ describe('the productive_hours migration', () => {
       expect(body, table).toMatch(/references public\.clients\s*\(id\) on delete restrict/)
       expect(body, table).not.toContain('cascade')
     }
+  })
+
+  // M2: the check would refuse a verifier's non-numeric probe id, so every id a
+  // verifier links must pass the same rule.
+  it('links only ids the check accepts in the verifiers', () => {
+    const ID = /^[1-9][0-9]*$/
+    let seen = 0
+    for (const file of ['scripts/verify-hours.sql', 'scripts/verify-scoring-view.sql']) {
+      const text = withoutComments(readFileSync(file, 'utf8'))
+      const constants = new Map(
+        [...text.matchAll(/([a-z_]+)\s+constant\s+text\s*:=\s*'([^']*)'/g)].map((m) => [m[1], m[2]]),
+      )
+      const inserts = [
+        ...text.matchAll(
+          /insert into public\.client_productive_projects\s*\(client_id, productive_project_id\)\s*values\s*\(\s*[a-z_]+\s*,\s*('([^']*)'|[a-z_]+)\s*\)/g,
+        ),
+      ]
+      expect(inserts.length, file).toBeGreaterThan(0)
+      for (const m of inserts) {
+        const id = m[2] ?? constants.get(m[1])
+        expect(id, `${file}: ${m[0]}`).toMatch(ID)
+        seen++
+      }
+      const budgetProject = [...text.matchAll(/'productive_project_id',\s*([a-z_]+)/g)].map((m) => constants.get(m[1]))
+      for (const id of budgetProject) expect(id, `${file} budget project`).toMatch(ID)
+    }
+    expect(seen).toBe(4)
   })
 
   it('adds can_view_revenue as an invoker wrapper over view_revenue, callable by authenticated', () => {
