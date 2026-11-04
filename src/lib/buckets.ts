@@ -38,8 +38,9 @@ export type Question = {
   // Which CONTROL the check-in screen draws, and nothing more. Every answer,
   // whatever its kind, is a nullable smallint 1-5 in the same shape of column
   // and is scored by the same mean (spec §3.2, amended 2026-08-31). 'scale'
-  // draws five numbered radios; 'choice' draws three labelled ones -- the
-  // question's own `options` if it has them, otherwise CHOICE_OPTIONS.
+  // draws five numbered radios; 'choice' draws labelled ones -- the
+  // question's own `options` if it has them, otherwise CHOICE_OPTIONS. The
+  // option count is the option set's: three in CHOICE_OPTIONS, four for hours.
   //
   // This USED to decide how a bucket was scored and, through a filter on it,
   // which questions the overall averaged. Both of those were wrong: the first

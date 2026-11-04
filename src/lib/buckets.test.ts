@@ -212,7 +212,7 @@ describe('one answer type', () => {
   })
 
   it('averages seventeen answers into the overall, excluding only Advocacy', () => {
-    // The number that broke before. OVERALL_QUESTIONS used to be derived from
+    // The number that broke before. overallQuestions() used to be derived from
     // `kind === 'scale'`, so moving Finances to a choice control would have cut
     // the divisor to 14 with nothing failing. This is the guard.
     expect(overallQuestions(false)).toHaveLength(17)
@@ -228,7 +228,7 @@ describe('one answer type', () => {
     }
     expect(overallQuestions(false)).not.toContain('fin_hours_in_budget')
     expect(overallQuestions(true)).toContain('fin_hours_in_budget')
-    // The length and containment checks above pass even if OVERALL_QUESTIONS
+    // The length and containment checks above pass even if overallQuestions()
     // drops a real question and gains a key that is not in the rubric at all
     // -- overallScore would then be null for every client, forever, and
     // nothing above would notice. Exact, ordered equality against the rubric
