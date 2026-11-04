@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  RECORD_RPC,
+  authorize,
   budgetsFromDeals,
   ProductiveError,
   dealsUrl,
@@ -215,5 +218,119 @@ describe('recordEach', () => {
       },
     )
     expect(result).toEqual({ fetched: 1, failed: [1] })
+  })
+})
+
+// I5: the auth gate, as a pure decision. Every branch, and the deps it must
+// not call on the way.
+describe('authorize', () => {
+  const SECRET = 'cron-secret-for-tests'
+  function deps(over: { user?: string | null; canView?: boolean | Error } = {}) {
+    return {
+      cronSecret: SECRET,
+      getUser: vi.fn(async (_jwt: string) => ('user' in over ? over.user! : 'user-1') as string | null),
+      canViewRevenue: vi.fn(async () => ('canView' in over ? over.canView! : true)),
+    }
+  }
+  const user = (authorization: string | null) => ({ authorization, cronHeader: null })
+
+  it('lets a signed-in user who can see revenue through, passing the bare JWT', async () => {
+    const d = deps()
+    expect(await authorize(user('Bearer jwt-abc'), d)).toEqual({ mode: 'user', userId: 'user-1' })
+    expect(d.getUser).toHaveBeenCalledWith('jwt-abc')
+  })
+
+  it.each([[null], [''], ['Bearer '], ['jwt-without-scheme'], ['Basic abc']])(
+    'is 401 with no usable bearer token (%j), and never asks the auth server',
+    async (authorization) => {
+      const d = deps()
+      expect(await authorize(user(authorization), d)).toEqual({ status: 401, error: 'Sign in to fetch hours.' })
+      expect(d.getUser).not.toHaveBeenCalled()
+      expect(d.canViewRevenue).not.toHaveBeenCalled()
+    },
+  )
+
+  it('is 401 when the auth server does not accept the JWT', async () => {
+    const d = deps({ user: null })
+    expect(await authorize(user('Bearer expired'), d)).toEqual({ status: 401, error: 'Sign in to fetch hours.' })
+    expect(d.canViewRevenue).not.toHaveBeenCalled()
+  })
+
+  it('is 403 when the user cannot see revenue', async () => {
+    expect(await authorize(user('Bearer jwt'), deps({ canView: false }))).toEqual({
+      status: 403,
+      error: 'You cannot see hours.',
+    })
+  })
+
+  it('is 500, not a refusal, when can_view_revenue fails', async () => {
+    expect(await authorize(user('Bearer jwt'), deps({ canView: new Error('rpc broke') }))).toEqual({
+      status: 500,
+      error: 'rpc broke',
+    })
+  })
+
+  it('is schedule mode with the exact cron secret, and asks nothing of the auth server', async () => {
+    const d = deps()
+    expect(await authorize({ authorization: null, cronHeader: SECRET }, d)).toEqual({ mode: 'schedule' })
+    expect(d.getUser).not.toHaveBeenCalled()
+  })
+
+  it.each([[''], ['wrong'], [SECRET + 'x'], [SECRET.slice(1)]])(
+    'is 401 for a wrong cron secret (%j), even alongside a valid user JWT',
+    async (cronHeader) => {
+      const d = deps()
+      expect(await authorize({ authorization: 'Bearer jwt', cronHeader }, d)).toEqual({
+        status: 401,
+        error: 'Not allowed.',
+      })
+      expect(d.getUser).not.toHaveBeenCalled()
+    },
+  )
+
+  it('is 401 for every cron header when the cron secret is unset', async () => {
+    expect(await authorize({ authorization: null, cronHeader: '' }, { ...deps(), cronSecret: '' })).toEqual({
+      status: 401,
+      error: 'Not allowed.',
+    })
+  })
+})
+
+// I5: the rpc name the function calls is the function the migration creates.
+describe('RECORD_RPC', () => {
+  const FN = 'supabase/functions/fetch-productive-hours'
+  const strip = (src: string) => src.replaceAll(/--[^\n]*/g, '')
+
+  it('is the name of the migration function that takes (bigint, date, jsonb)', () => {
+    const sql = strip(readFileSync('supabase/migrations/20261104120000_productive_hours.sql', 'utf8')).toLowerCase()
+    const made = [...sql.matchAll(/create function public\.([a-z_]+)\s*\(\s*p_client_id bigint,\s*p_period date,\s*p_budgets jsonb\s*\)/g)]
+    expect(made.map((m) => m[1])).toEqual([RECORD_RPC])
+    expect(sql).toContain(`grant execute on function public.${RECORD_RPC}(bigint, date, jsonb) to service_role;`)
+  })
+
+  it('is what index.ts calls, and index.ts names the rpc nowhere else', () => {
+    const index = readFileSync(`${FN}/index.ts`, 'utf8').replaceAll(/\/\/[^\n]*/g, '')
+    expect(index).toMatch(/admin\.rpc\(RECORD_RPC,/)
+    expect(index).not.toContain("'record_month_budgets'")
+  })
+})
+
+// I5 / E2: index.ts decides auth only through authorize, and stops on its refusal;
+// a browser never sends the cron header, so CORS does not allow it.
+describe('index.ts wiring', () => {
+  const index = readFileSync('supabase/functions/fetch-productive-hours/index.ts', 'utf8').replaceAll(/\/\/[^\n]*/g, '')
+
+  it('returns authorize\'s refusal before reading the body', () => {
+    const gate = index.indexOf("if ('status' in auth) return json(auth.status,")
+    expect(index).toMatch(/const auth = await authorize\(/)
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(index.indexOf('await req.json()'))
+    expect(index).not.toContain('safeEqual')
+  })
+
+  it('does not list x-hours-cron-secret in Access-Control-Allow-Headers', () => {
+    const allow = /'Access-Control-Allow-Headers':\s*'([^']*)'/.exec(index)
+    expect(allow).not.toBeNull()
+    expect(allow![1].split(',').map((h) => h.trim())).toEqual(['authorization', 'x-client-info', 'apikey', 'content-type'])
   })
 })

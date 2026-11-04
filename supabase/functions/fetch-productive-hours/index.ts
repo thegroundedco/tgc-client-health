@@ -5,17 +5,19 @@
 // in ./logic.ts. Two callers:
 //   user mode      bearer JWT of someone with view_revenue; body { clientId, period }
 //   schedule mode  header x-hours-cron-secret; body { period }; every linked client
+//                  (pg_net, server side: never a browser, so the header is
+//                  not in the CORS allow-list)
 //
 // Env: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (provided),
 // PRODUCTIVE_API_TOKEN, PRODUCTIVE_ORG_ID, HOURS_CRON_SECRET (secrets).
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3'
-import { ProductiveError, fetchAllBudgets, isPeriod, recordEach, redact, safeEqual } from './logic.ts'
+import { ProductiveError, RECORD_RPC, authorize, fetchAllBudgets, isPeriod, recordEach, redact } from './logic.ts'
 import type { StoredBudget } from './logic.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-hours-cron-secret',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -76,25 +78,30 @@ async function handle(req: Request): Promise<Response> {
     return json(500, { error: 'The hours function is not configured.' })
   }
 
-  // 1. Who is asking.
-  const cronHeader = req.headers.get('x-hours-cron-secret')
-  const scheduleMode = cronHeader !== null
-  if (scheduleMode) {
-    if (!safeEqual(cronHeader, cronSecret)) return json(401, { error: 'Not allowed.' })
-  } else {
-    const authorization = req.headers.get('Authorization') ?? ''
-    const jwt = authorization.replace(/^Bearer\s+/i, '')
-    if (jwt === '' || jwt === authorization) return json(401, { error: 'Sign in to fetch hours.' })
-    const asUser = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authorization } },
+  // 1. Who is asking. The decision is logic.ts's authorize, tested there.
+  const authorization = req.headers.get('Authorization')
+  let asUser: ReturnType<typeof createClient> | null = null
+  const userClient = () =>
+    (asUser ??= createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authorization ?? '' } },
       auth: { persistSession: false, autoRefreshToken: false },
-    })
-    const { data: userData, error: userError } = await asUser.auth.getUser(jwt)
-    if (userError || !userData?.user) return json(401, { error: 'Sign in to fetch hours.' })
-    const { data: allowed, error: allowedError } = await asUser.rpc('can_view_revenue')
-    if (allowedError) return json(500, { error: redact(allowedError.message, secretList()) })
-    if (allowed !== true) return json(403, { error: 'You cannot see hours.' })
-  }
+    }))
+  const auth = await authorize(
+    { authorization, cronHeader: req.headers.get('x-hours-cron-secret') },
+    {
+      cronSecret,
+      getUser: async (jwt) => {
+        const { data, error } = await userClient().auth.getUser(jwt)
+        return error || !data?.user ? null : data.user.id
+      },
+      canViewRevenue: async () => {
+        const { data, error } = await userClient().rpc('can_view_revenue')
+        return error ? new Error(error.message) : data === true
+      },
+    },
+  )
+  if ('status' in auth) return json(auth.status, { error: redact(auth.error, secretList()) })
+  const scheduleMode = auth.mode === 'schedule'
 
   // 2. The request.
   let body: unknown
@@ -128,7 +135,7 @@ async function handle(req: Request): Promise<Response> {
   // 3. Fetch and record. Writes only through record_month_budgets.
   const fetchFor = (_clientId: number, projectIds: string[]) => fetchBudgets(projectIds, period)
   async function record(clientId: number, budgets: StoredBudget[]): Promise<void> {
-    const { error } = await admin.rpc('record_month_budgets', {
+    const { error } = await admin.rpc(RECORD_RPC, {
       p_client_id: clientId,
       p_period: period,
       p_budgets: budgets,

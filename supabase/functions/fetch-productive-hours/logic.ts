@@ -119,6 +119,46 @@ export function safeEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
+// The database function every write goes through. A constant, so a test can
+// hold it to the name the migration creates (a misspelt rpc fails only at
+// run time, on production).
+export const RECORD_RPC = 'record_month_budgets'
+
+export type AuthDecision =
+  | { mode: 'schedule' }
+  | { mode: 'user'; userId: string }
+  | { status: 401 | 403 | 500; error: string }
+
+// Who is asking. A request carrying x-hours-cron-secret is the schedule and
+// must match the secret exactly, compared in constant time; there is no
+// falling back to user mode. Anything else must be a signed-in user (a Bearer
+// JWT the auth server accepts) who can see revenue. canViewRevenue resolves
+// to an Error when the rpc fails, which is a 500, not a refusal.
+export async function authorize(
+  req: { authorization: string | null; cronHeader: string | null },
+  deps: {
+    cronSecret: string
+    getUser: (jwt: string) => Promise<string | null>
+    canViewRevenue: () => Promise<boolean | Error>
+  },
+): Promise<AuthDecision> {
+  if (req.cronHeader !== null) {
+    if (deps.cronSecret === '' || !safeEqual(req.cronHeader, deps.cronSecret)) {
+      return { status: 401, error: 'Not allowed.' }
+    }
+    return { mode: 'schedule' }
+  }
+  const authorization = req.authorization ?? ''
+  const jwt = authorization.replace(/^Bearer\s+/i, '')
+  if (jwt === '' || jwt === authorization) return { status: 401, error: 'Sign in to fetch hours.' }
+  const userId = await deps.getUser(jwt)
+  if (userId === null) return { status: 401, error: 'Sign in to fetch hours.' }
+  const allowed = await deps.canViewRevenue()
+  if (allowed instanceof Error) return { status: 500, error: allowed.message }
+  if (allowed !== true) return { status: 403, error: 'You cannot see hours.' }
+  return { mode: 'user', userId }
+}
+
 export type PageResponse = { ok: boolean; status: number; json: () => Promise<unknown> }
 
 // Every fixed monthly budget for the projects, paged to meta.total_pages (one
