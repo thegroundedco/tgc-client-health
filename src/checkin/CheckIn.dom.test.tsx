@@ -121,10 +121,43 @@ vi.mock('./useFinanceSuggestion', () => ({
   },
 }))
 
+// Productive hours (spec 2026-11-04 §7). Stubbed as a seam, honouring canRead
+// the way the real hook does (null, no request). `byVersion` is what a Try
+// again (a bumped version) returns; `current` is the first read.
+const hours = vi.hoisted(() => ({
+  current: null as unknown,
+  byVersion: {} as Record<number, unknown>,
+  calls: [] as [number, string, boolean, number][],
+}))
+vi.mock('./useMonthHours', () => ({
+  useMonthHours: (clientId: number, period: string, canRead: boolean, version = 0) => {
+    hours.calls.push([clientId, period, canRead, version])
+    if (!canRead) return null
+    return version in hours.byVersion ? hours.byVersion[version] : hours.current
+  },
+}))
+
+// A capability can be withheld per test, for the role no preset has today: one
+// that may edit scores but not see revenue (Review Focus 5). Everything else
+// answers exactly as the real presets do.
+const caps = vi.hoisted(() => ({ withheld: [] as string[] }))
+vi.mock('../lib/capabilities', async () => {
+  const actual = await vi.importActual<typeof import('../lib/capabilities')>('../lib/capabilities')
+  return {
+    ...actual,
+    can: (role: string, capability: Parameters<typeof actual.can>[1]) =>
+      caps.withheld.includes(capability) ? false : actual.can(role, capability),
+  }
+})
+
 const { CheckIn } = await import('./CheckIn')
 
 afterEach(() => {
   finance.current = null
+  hours.current = null
+  hours.byVersion = {}
+  hours.calls.length = 0
+  caps.withheld = []
   document.body.innerHTML = ''
   statusChange.apply.mockReset()
   statusChange.apply.mockResolvedValue(true)
@@ -922,5 +955,248 @@ describe('CheckIn, finance answers after a payment save', () => {
     await screen.findByText('Nope.')
     expect(radio('fin_rate_increased', 3).checked).toBe(true)
     expect(finance.versions.every((v) => v === 0)).toBe(true)
+  })
+})
+
+// Spec 2026-11-04 §4 and §7: Productive hours in Finances and Hours.
+describe('CheckIn, hours from Productive', () => {
+  const OCT = '2026-10-01'
+  const blank = { answers: {}, notes: '' }
+  const LINE = { dealId: 'd1', name: 'Budget A', budgetedHours: 20, workedHours: 21, diffHours: 1, flagged: false }
+  const SCORED = {
+    applies: true,
+    lines: [LINE],
+    answer: { value: 2, reason: 'From Productive: 27.5h worked vs 20h budgeted (+7.5h).' },
+    note: null,
+  }
+  const UNREACHABLE = {
+    applies: true,
+    lines: [],
+    answer: null,
+    note: "Couldn't reach Productive – answer by hand or try again",
+  }
+  const NO_BUDGET = { applies: false, reason: 'no_budget', message: 'No fixed monthly budget' }
+  const hoursGroup = () => screen.queryByRole('radiogroup', { name: /Hours within budget/ })
+
+  function props(role: Profile['role'] = 'account_manager') {
+    return { client: CLIENT, period: OCT, profile: profile(role), onBack: () => {}, onEditClient: () => {} }
+  }
+  function renderHours(role: Profile['role'], overrides: Partial<UseCheckin> = {}) {
+    hookState.current = mockCheckin({ hoursApplies: true, ...overrides })
+    return render(<CheckIn {...props(role)} />)
+  }
+
+  it('fills Hours within budget once, only when blank in the database and the form', () => {
+    hours.current = SCORED
+    hookState.current = mockCheckin({ hoursApplies: true, draft: blank })
+    const first = hookState.current
+    const { rerender } = render(<CheckIn {...props()} />)
+    expect(first.setAnswers).toHaveBeenCalledTimes(1)
+    expect(first.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 2 })
+
+    // Same visit, cleared by the person: not refilled.
+    const cleared = mockCheckin({ hoursApplies: true, draft: { answers: {}, notes: '' } })
+    hookState.current = cleared
+    rerender(<CheckIn {...props()} />)
+    expect(cleared.setAnswers).not.toHaveBeenCalled()
+
+    // A new period fills again.
+    const next = mockCheckin({ hoursApplies: true, draft: blank })
+    hookState.current = next
+    rerender(<CheckIn {...props()} period="2026-11-01" />)
+    expect(next.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 2 })
+  })
+
+  it('does not fill an answer already in the form', () => {
+    hours.current = SCORED
+    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '' } })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite a stored hours answer', () => {
+    hours.current = SCORED
+    renderHours('account_manager', {
+      draft: blank,
+      stored: { fin_hours_in_budget: 3, fin_hours_applies: true } as unknown as UseCheckin['stored'],
+    })
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
+  // Withheld from an account manager rather than tested as a viewer: a viewer
+  // has no view_revenue either, so the hours would never arrive and the test
+  // could not tell the edit_scores guard from the canRead one.
+  it('does not fill for someone who cannot edit scores', () => {
+    hours.current = SCORED
+    caps.withheld = ['edit_scores']
+    renderHours('account_manager', { draft: blank })
+    expect(hours.calls.at(-1)?.[2]).toBe(true)
+    expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
+  it('fills hours together with the finance answers in ONE call when both are ready', () => {
+    finance.current = { fin_rack_rate: { value: 1, reason: 'R1' } }
+    hours.current = SCORED
+    renderHours('account_manager', { draft: blank })
+    const h = hookState.current as UseCheckin
+    expect(h.setAnswers).toHaveBeenCalledTimes(1)
+    expect(h.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1, fin_hours_in_budget: 2 })
+  })
+
+  it('fills hours that arrive after the finance answers were filled', () => {
+    finance.current = { fin_rack_rate: { value: 1, reason: 'R1' } }
+    hookState.current = mockCheckin({ hoursApplies: true, draft: blank })
+    const first = hookState.current
+    const { rerender } = render(<CheckIn {...props()} />)
+    expect(first.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1 })
+
+    hours.current = SCORED
+    const later = mockCheckin({ hoursApplies: true, draft: { answers: { fin_rack_rate: 1 }, notes: '' } })
+    hookState.current = later
+    rerender(<CheckIn {...props()} />)
+    expect(later.setAnswers).toHaveBeenCalledTimes(1)
+    expect(later.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 2 })
+  })
+
+  it('Try again reads the hours again and fills if the answer is still blank', () => {
+    hours.current = UNREACHABLE
+    hours.byVersion = { 1: SCORED }
+    renderHours('account_manager', { draft: blank })
+    const h = hookState.current as UseCheckin
+    expect(h.setAnswers).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(hours.calls.at(-1)?.[3]).toBe(1)
+    expect(h.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 2 })
+  })
+
+  it('shows the hours reason as the hint on the hours question', () => {
+    hours.current = SCORED
+    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 2 }, notes: '' } })
+    const group = hoursGroup() as HTMLElement
+    expect(group.closest('section')?.textContent).toContain('From Productive: 27.5h worked vs 20h budgeted (+7.5h).')
+  })
+
+  it('shows the hours box inside Finances and Hours, beside the hours question', () => {
+    hours.current = SCORED
+    renderHours('account_manager')
+    const finances = screen.getByTestId('bucket-finances')
+    const box = within(finances).getByTestId('hours-box')
+    expect(within(box).getByText('Budget A')).toBeTruthy()
+    // Immediately before the hours question in document order, after the rest.
+    const rate = screen.getByRole('radiogroup', { name: /Rate vs last month/ })
+    expect(rate.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(box.compareDocumentPosition(hoursGroup() as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(hours.calls.at(-1)).toEqual([CLIENT.id, OCT, true, 0])
+  })
+
+  it('still shows the box, with its message, when the question is hidden', () => {
+    hours.current = NO_BUDGET
+    renderHours('account_manager', { hoursApplies: false })
+    const finances = screen.getByTestId('bucket-finances')
+    expect(within(finances).getByText('No fixed monthly budget')).toBeTruthy()
+    expect(hoursGroup()).toBeNull()
+  })
+
+  it('labels the section "Finances and Hours"', () => {
+    renderHours('account_manager')
+    const finances = screen.getByTestId('bucket-finances')
+    expect(within(finances).getByTestId('bucket-heading').textContent).toBe('Finances and Hours')
+  })
+
+  it('a payment save re-reads finance only: hours are neither overwritten nor re-fetched', async () => {
+    hours.current = SCORED
+    finance.after = { fin_rate_increased: { value: 5, reason: 'Up.' } }
+    renderHours('admin', {
+      draft: { answers: { fin_hours_in_budget: 3 }, notes: '' },
+      stored: { fin_hours_in_budget: 3, fin_hours_applies: true } as unknown as UseCheckin['stored'],
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Confirm .* retainer/ }))
+    })
+    const h = hookState.current as UseCheckin
+    await waitFor(() => expect(h.setAnswers).toHaveBeenCalledWith({ fin_rate_increased: 5 }, { overwrite: true }))
+    for (const [values] of (h.setAnswers as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(values).not.toHaveProperty('fin_hours_in_budget')
+    }
+    expect(hours.calls.every(([, , , v]) => v === 0)).toBe(true)
+    finance.after = null
+  })
+})
+
+// Through the REAL useCheckin, because which questions are asked and what the
+// count is against are the hook's to decide; a stub would hand back whatever
+// the test told it to.
+describe('CheckIn, whether the hours question is asked', () => {
+  const OCT = '2026-10-01'
+  const NO_BUDGET = { applies: false, reason: 'no_budget', message: 'No fixed monthly budget' }
+  const UNREACHABLE = {
+    applies: true,
+    lines: [],
+    answer: null,
+    note: "Couldn't reach Productive – answer by hand or try again",
+  }
+  const hoursGroup = () => screen.queryByRole('radiogroup', { name: /Hours within budget/ })
+  const caption = () => screen.getByTestId('overall-caption').textContent
+
+  async function open(client: typeof CLIENT | { id: number; name: string; status: string; started_on: string | null }, role: Profile['role'] = 'account_manager') {
+    hookState.real = true
+    window.localStorage.clear()
+    render(<CheckIn client={client} period={OCT} profile={profile(role)} onBack={() => {}} onEditClient={() => {}} />)
+    await screen.findByTestId('overall-caption')
+  }
+
+  afterEach(() => {
+    hookState.real = false
+    checkinRows.current = []
+    window.localStorage.clear()
+  })
+
+  it('hides the hours question and counts 17/21 when hours do not apply', async () => {
+    hours.current = NO_BUDGET
+    await open(CLIENT)
+    expect(hoursGroup()).toBeNull()
+    expect(caption()).toBe('not scored · 0 of 21 answered')
+    cleanup()
+    await open({ ...CLIENT, started_on: null })
+    expect(hoursGroup()).toBeNull()
+    expect(caption()).toBe('not scored · 0 of 17 answered')
+  })
+
+  it('asks the hours question and counts 18/22 when hours apply', async () => {
+    hours.current = UNREACHABLE
+    await open(CLIENT)
+    expect(hoursGroup()).not.toBeNull()
+    expect(caption()).toBe('not scored · 0 of 22 answered')
+    cleanup()
+    await open({ ...CLIENT, started_on: null })
+    expect(caption()).toBe('not scored · 0 of 18 answered')
+  })
+
+  it('the hours result wins over the stored flag once it is read', async () => {
+    hours.current = NO_BUDGET
+    checkinRows.current = [{ client_id: CLIENT.id, period: OCT, fin_hours_applies: true, notes: null }]
+    await open(CLIENT)
+    expect(hoursGroup()).toBeNull()
+  })
+
+  it('shows the hours question from the stored row for an editor without view_revenue', async () => {
+    caps.withheld = ['view_revenue']
+    checkinRows.current = [{ client_id: CLIENT.id, period: OCT, fin_hours_applies: true, notes: null }]
+    await open(CLIENT)
+    expect(hoursGroup()).not.toBeNull()
+    expect(hours.calls.length).toBeGreaterThan(0)
+    expect(hours.calls.every(([, , canRead]) => canRead === false)).toBe(true)
+    expect(screen.queryByTestId('hours-box')).toBeNull()
+    // And it can still be answered: the editor's controls are live.
+    expect(
+      (document.querySelector('input[name="question-fin_hours_in_budget"][value="5"]') as HTMLInputElement).disabled,
+    ).toBe(false)
+  })
+
+  it('hides it from the stored row for that editor when the row says it does not apply', async () => {
+    caps.withheld = ['view_revenue']
+    checkinRows.current = [{ client_id: CLIENT.id, period: OCT, fin_hours_applies: false, notes: null }]
+    await open(CLIENT)
+    expect(hoursGroup()).toBeNull()
+    expect(caption()).toBe('not scored · 0 of 21 answered')
   })
 })

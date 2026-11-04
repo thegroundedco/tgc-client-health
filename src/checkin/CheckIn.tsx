@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, PAYMENTS_BUCKET, questionsFor } from '../lib/buckets'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, HOURS_QUESTION, PAYMENTS_BUCKET, questionsFor } from '../lib/buckets'
 import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
 import { formatPeriod, formatSavedAt } from '../lib/month'
@@ -10,6 +10,8 @@ import { useCheckin } from './useCheckin'
 import { useFinanceSuggestion } from './useFinanceSuggestion'
 import { useMonthPayment } from '../revenue/useMonthPayment'
 import { PaymentsBox } from './PaymentsBox'
+import { useMonthHours } from './useMonthHours'
+import { HoursBox } from './HoursBox'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
@@ -82,7 +84,14 @@ function ScaleLegend() {
 }
 
 export function CheckIn({ client, period, profile, onBack, onEditClient }: Props) {
-  const checkin = useCheckin(client, period, profile)
+  // Spec 2026-11-04 §7: the month's Productive hours. Read first, and needing
+  // nothing from useCheckin, so whether the hours question applies can be
+  // handed to it. Gated at the read like the payment: without view_revenue no
+  // fetch is made, the result is null, and useCheckin falls back to the stored
+  // fin_hours_applies. Try again bumps the version.
+  const [hoursVersion, setHoursVersion] = useState(0)
+  const hours = useMonthHours(client.id, period, can(profile.role, 'view_revenue'), hoursVersion)
+  const checkin = useCheckin(client, period, profile, hours === null ? null : hours.applies)
   const {
     status,
     loadError,
@@ -125,22 +134,39 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // and only where neither the database nor the form holds an answer. Once,
   // because a person who clears a filled answer has decided -- refilling it on
   // the next render would overrule them.
+  //
+  // Spec 2026-11-04 §7: the hours answer is filled by the same rule, in the
+  // same effect and the same setAnswers call -- two calls in one tick would
+  // each start from the same draft and the second would drop the first. It has
+  // its own once-per-visit marker because it can arrive later than the revenue
+  // answers (or only after Try again), and it is marked only once there is an
+  // answer to fill: a "couldn't reach" or "month not finished" result has none,
+  // and must not use up the visit's one fill.
   const prefilled = useRef<string | null>(null)
+  const hoursPrefilled = useRef<string | null>(null)
   useEffect(() => {
     // Edit rights too: a viewer's form is read-only, so a fill would only mark
     // it unsaved with no way to save. (canEdit is declared below this effect.)
-    if (status !== 'ready' || finance === null || !can(profile.role, 'edit_scores')) return
+    if (status !== 'ready' || !can(profile.role, 'edit_scores')) return
     const visit = `${client.id}:${period}`
-    if (prefilled.current === visit) return
-    prefilled.current = visit
     const values: Record<string, number> = {}
-    for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
-      const answer = finance[key]
-      const storedValue = stored?.[key] ?? null
-      if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
+    if (finance !== null && prefilled.current !== visit) {
+      prefilled.current = visit
+      for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
+        const answer = finance[key]
+        const storedValue = stored?.[key] ?? null
+        if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
+      }
+    }
+    if (hours !== null && hours.applies && hours.answer && hoursPrefilled.current !== visit) {
+      hoursPrefilled.current = visit
+      const storedValue = stored?.fin_hours_in_budget ?? null
+      if (storedValue === null && draft.answers[HOURS_QUESTION] === undefined) {
+        values[HOURS_QUESTION] = hours.answer.value
+      }
     }
     if (Object.keys(values).length > 0) checkin.setAnswers(values)
-  }, [status, finance, client.id, period, stored, draft.answers, checkin, profile.role])
+  }, [status, finance, hours, client.id, period, stored, draft.answers, checkin, profile.role])
 
   // Spec 2026-11-02 §5, separate from the once-per-visit prefill above: after a
   // payment save, the two finance answers take the newly computed values, OVER
@@ -157,6 +183,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // `finance` here is the post-save answer, never the one from before the save.
   //
   // Edit rights, as the prefill: a read-only form must not be marked unsaved.
+  // Hours are not touched here: a payment changes revenue, not hours.
   const refreshFor = useRef<string | null>(null)
   useEffect(() => {
     if (refreshFor.current !== `${client.id}:${period}`) return
@@ -177,6 +204,10 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   }
 
   const readFailed = status === 'error'
+
+  const hoursBox = hours !== null && (
+    <HoursBox onRetry={() => setHoursVersion((version) => version + 1)} result={hours} />
+  )
   const label = submitLabel(scored, required)
   const gate = advocacyGate(client.started_on, period)
 
@@ -476,22 +507,28 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
 
               {questions.map((question) =>
                 question.kind === 'choice' ? (
-                  <ChoiceRow
-                    key={question.key}
-                    question={question}
-                    value={draft.answers[question.key] as number | undefined}
-                    lastValue={
-                      (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
-                    }
-                    hint={
-                      question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
-                        ? finance?.[question.key]?.reason
-                        : undefined
-                    }
-                    disabled={saving || !canEdit || shut}
-                    onChange={(value) => checkin.setAnswer(question.key, value)}
-                    onClear={() => checkin.setAnswer(question.key, null)}
-                  />
+                  <Fragment key={question.key}>
+                    {/* Spec 2026-11-04 §7: the hours lines sit beside the
+                        question they answer, directly above it. */}
+                    {question.key === HOURS_QUESTION && hoursBox}
+                    <ChoiceRow
+                      question={question}
+                      value={draft.answers[question.key] as number | undefined}
+                      lastValue={
+                        (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
+                      }
+                      hint={
+                        question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
+                          ? finance?.[question.key]?.reason
+                          : question.key === HOURS_QUESTION && hours?.applies
+                            ? hours.answer?.reason
+                            : undefined
+                      }
+                      disabled={saving || !canEdit || shut}
+                      onChange={(value) => checkin.setAnswer(question.key, value)}
+                      onClear={() => checkin.setAnswer(question.key, null)}
+                    />
+                  </Fragment>
                 ) : (
                   <QuestionRow
                     key={question.key}
@@ -506,6 +543,12 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                   />
                 ),
               )}
+
+              {/* No hours question this month: the box still says why (no
+                  budget, not linked), in the place the question would be. */}
+              {bucket === PAYMENTS_BUCKET &&
+                !questions.some((question) => question.key === HOURS_QUESTION) &&
+                hoursBox}
             </section>
           )
         })}

@@ -61,6 +61,10 @@ const finance = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('./useFinanceSuggestion', () => ({
   useFinanceSuggestion: () => finance.current,
 }))
+// Productive hours read through lib/supabase; nothing here is about hours.
+vi.mock('./useMonthHours', () => ({
+  useMonthHours: () => null,
+}))
 
 // Imported dynamically, after the mock above is registered, rather than with
 // a static `import` at the top of the file: CheckIn.tsx's own import of

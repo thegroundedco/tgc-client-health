@@ -33,8 +33,8 @@ export type UseCheckin = {
   // The gate, and the count that follows from it. §4.4: every count on screen is
   // against this number, never a hardcoded 21.
   advocacyApplies: boolean
-  // Whether the hours question is asked. A placeholder (always false) until
-  // Task 5 wires the stored fin_hours_applies.
+  // Whether the hours question is asked (spec 2026-11-04 §4): the hours result
+  // when the screen has read one, else the stored fin_hours_applies.
   hoursApplies: boolean
   required: number
   scored: number
@@ -78,6 +78,11 @@ export function useCheckin(
   client: { id: number; started_on: string | null },
   period: string,
   profile: Profile,
+  // Whether the month's Productive hours say the question applies, or null when
+  // they are unknown (still loading, failed, or unreadable without
+  // view_revenue). Passed in rather than read here so useMonthHours, which
+  // needs nothing from this hook, can run first without a circular dependency.
+  hoursResultApplies: boolean | null,
 ): UseCheckin {
   const clientId = client.id
   const lastPeriod = previousPeriod(period)
@@ -87,13 +92,16 @@ export function useCheckin(
   // does not -- which is every check-in, the first time somebody opens it.
   // tests/gateParity.test.ts is what keeps the two answers the same.
   const applies = gateApplies(client.started_on, period)
-  // Placeholder: Task 5 supplies the real source (stored fin_hours_applies).
-  const hoursApplies = false
-  const required = requiredQuestions(applies, hoursApplies).length
-
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [stored, setStored] = useState<CheckinRow | null>(null)
+
+  // The hours result when there is one; otherwise what the database decided
+  // (private.hours_applies, kept on the row by trigger) -- never a guess. Review
+  // Focus 5: an editor who cannot read revenue gets no hours result at all, and
+  // the stored flag is then the only honest answer. No row yet reads as false.
+  const hoursApplies = hoursResultApplies ?? (stored?.fin_hours_applies === true)
+  const required = requiredQuestions(applies, hoursApplies).length
   const [lastMonth, setLastMonth] = useState<CheckinRow | null>(null)
   const [scores, setScores] = useState<ScoreRow[]>([])
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)

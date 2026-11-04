@@ -92,9 +92,11 @@ beforeEach(() => {
 function renderCheckin(opts: {
   client: { id: number; name: string; started_on: string | null }
   period?: string
+  hoursResultApplies?: boolean | null
 }) {
   const period = opts.period ?? '2026-08-01'
-  const rendered = renderHook(() => useCheckin(opts.client, period, PROFILE))
+  const hoursResultApplies = opts.hoursResultApplies ?? null
+  const rendered = renderHook(() => useCheckin(opts.client, period, PROFILE, hoursResultApplies))
   return { ...rendered, upsert: db.upsert }
 }
 
@@ -505,5 +507,39 @@ describe('useCheckin: setAnswers', () => {
     expect(result.current.draft).toBe(draftBefore)
     expect(result.current.saveState.kind).toBe('clean')
     expect(readDraft(1, '2026-08-01')).toBeNull()
+  })
+})
+
+// Spec 2026-11-04 §4: whether the hours question is asked.
+describe('useCheckin: hoursApplies', () => {
+  const client = { id: 1, name: 'Acme', started_on: '2020-01-01' }
+  const row = (applies: boolean) => ({ client_id: 1, period: '2026-10-01', fin_hours_applies: applies, notes: null })
+
+  it('follows the stored row when the hours result is unknown', async () => {
+    db.checkins = async () => ({ data: [row(true)], error: null })
+    const { result } = renderCheckin({ client, period: '2026-10-01', hoursResultApplies: null })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.hoursApplies).toBe(true)
+    expect(result.current.required).toBe(22)
+  })
+
+  it('is false with no stored row and no hours result', async () => {
+    const { result } = renderCheckin({ client, period: '2026-10-01', hoursResultApplies: null })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.hoursApplies).toBe(false)
+    expect(result.current.required).toBe(21)
+  })
+
+  it('takes the hours result over the stored row, either way', async () => {
+    db.checkins = async () => ({ data: [row(true)], error: null })
+    const off = renderCheckin({ client, period: '2026-10-01', hoursResultApplies: false })
+    await waitFor(() => expect(off.result.current.status).toBe('ready'))
+    expect(off.result.current.hoursApplies).toBe(false)
+    off.unmount()
+
+    db.checkins = async () => ({ data: [row(false)], error: null })
+    const on = renderCheckin({ client, period: '2026-10-01', hoursResultApplies: true })
+    await waitFor(() => expect(on.result.current.status).toBe('ready'))
+    expect(on.result.current.hoursApplies).toBe(true)
   })
 })
