@@ -16,6 +16,10 @@ describe('CHECKIN_COLUMNS', () => {
     for (const key of ALL_QUESTIONS) expect(named).toContain(key)
   })
 
+  it('reads fin_hours_applies', () => {
+    expect(CHECKIN_COLUMNS.split(',').map((c) => c.trim())).toContain('fin_hours_applies')
+  })
+
   it('names all six bucket score columns', () => {
     const named = CHECKIN_COLUMNS.split(',').map((c) => c.trim())
     for (const bucket of BUCKETS) expect(named).toContain(BUCKET_SCORE_KEY[bucket])
@@ -96,6 +100,14 @@ describe('cardFooter', () => {
   it('counts against 21 when the gate is open', () => {
     const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
     expect(cardFooter(row, VIEWER, true, false)).toBe('Draft, 17 of 21 scored')
+  })
+
+  // seventeenAnswered() also holds the hours answer (questionsFor defaults to
+  // including it), which counts only when the question applies.
+  it('counts against 22 when hours applies and Advocacy is open, 21 when not', () => {
+    const base = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null, ...seventeenAnswered() }
+    expect(cardFooter({ ...base, fin_hours_applies: true }, VIEWER, true, true)).toBe('Draft, 18 of 22 scored')
+    expect(cardFooter({ ...base, fin_hours_applies: false }, VIEWER, true, false)).toBe('Draft, 17 of 21 scored')
   })
 
   // Same row, gate shut: the same seventeen answers are a COMPLETE check-in.

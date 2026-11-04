@@ -53,7 +53,9 @@ export type CardCheckin = {
   rel_score?: number | null
   del_score?: number | null
   adv_score?: number | null
-  [key: string]: number | string | null | undefined
+  // Set by a DB trigger; the app only reads it.
+  fin_hours_applies?: boolean
+  [key: string]: number | string | boolean | null | undefined
 }
 
 // Built from the rubric with .join(', '), so column drift against it is not
@@ -71,6 +73,7 @@ export const CHECKIN_COLUMNS = [
   'submitted_at',
   'submitted_by',
   'suggested_at',
+  'fin_hours_applies',
   ...ALL_QUESTIONS,
   ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket]),
 ].join(', ')

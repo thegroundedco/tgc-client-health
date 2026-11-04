@@ -376,6 +376,23 @@ describe('a client card', () => {
   })
 })
 
+describe('the footer denominator on a card', () => {
+  const row = (applies: boolean): CardCheckin => ({
+    client_id: 7, submitted_at: null, submitted_by: null, suggested_at: null,
+    comm_constructive: 5, fin_hours_applies: applies,
+  })
+
+  it('counts out of 22 when the stored row says hours applies', () => {
+    renderCard({ checkin: row(true), score: { client_id: 7, overall_score: 4, advocacy_applies: true } })
+    expect(screen.getByText(/Draft, 1 of 22 scored/)).toBeTruthy()
+  })
+
+  it('counts out of 21 when it does not', () => {
+    renderCard({ checkin: row(false), score: { client_id: 7, overall_score: 4, advocacy_applies: true } })
+    expect(screen.getByText(/Draft, 1 of 21 scored/)).toBeTruthy()
+  })
+})
+
 describe('what a client is worth per month, on the card', () => {
   it('shows a retainer client their monthly rate', () => {
     renderCard({ rate: { cents: 500_000, kind: 'retainer' } })
