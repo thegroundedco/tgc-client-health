@@ -53,6 +53,10 @@ export function isFixedMonthly(
   )
 }
 
+// A failure on Productive's side (bad status, unexpected body, foreign deal).
+// index.ts maps it to a 502.
+export class ProductiveError extends Error {}
+
 type Json = Record<string, unknown>
 const isObject = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -65,9 +69,16 @@ export function budgetsFromDeals(json: unknown, period: string): StoredBudget[] 
   for (const deal of json.data as unknown[]) {
     if (!isObject(deal) || !isObject(deal.attributes)) throw new Error('Productive returned an unexpected deal.')
     const a = deal.attributes
-    if (typeof a.date !== 'string') continue
+    // A deal with no date, or with no budgeted_time key at all, means the API
+    // changed under us: fail the fetch rather than call the month "no budget".
+    // An explicit null budgeted_time is real -- an open-hour deal -- and kept.
+    if (typeof a.date !== 'string') throw new ProductiveError('Productive returned a deal with no date.')
+    // A missing key reads as undefined, so this one check covers it too.
+    if (a.budgeted_time !== null && typeof a.budgeted_time !== 'number') {
+      throw new ProductiveError('Productive returned a deal with no budgeted_time, or one that is not a number.')
+    }
     const attrs = {
-      budgeted_time: typeof a.budgeted_time === 'number' ? a.budgeted_time : null,
+      budgeted_time: a.budgeted_time as number | null,
       date: a.date,
       end_date: typeof a.end_date === 'string' ? a.end_date : null,
     }
@@ -107,10 +118,6 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0)
   return diff === 0
 }
-
-// A failure on Productive's side (bad status, unexpected body, foreign deal).
-// index.ts maps it to a 502.
-export class ProductiveError extends Error {}
 
 export type PageResponse = { ok: boolean; status: number; json: () => Promise<unknown> }
 

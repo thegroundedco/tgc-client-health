@@ -78,6 +78,26 @@ describe('budgetsFromDeals', () => {
     expect(() => budgetsFromDeals(null, P)).toThrow()
   })
 
+  // M1: a changed API is a failed fetch, never "no budget".
+  it('throws ProductiveError on a deal with no date, or a date that is not a string', () => {
+    const noDate = { data: [deal('5', 'Budget E', { end_date: '2026-10-31', budgeted_time: 1800, worked_time: 0 })] }
+    const numDate = { data: [deal('5', 'Budget E', { date: 20261001, end_date: '2026-10-31', budgeted_time: 1800, worked_time: 0 })] }
+    expect(() => budgetsFromDeals(noDate, P)).toThrow(ProductiveError)
+    expect(() => budgetsFromDeals(numDate, P)).toThrow(ProductiveError)
+  })
+
+  it('throws ProductiveError when the budgeted_time key is missing or not a number', () => {
+    const noKey = { data: [deal('6', 'Budget F', { date: '2026-10-01', end_date: '2026-10-31', worked_time: 0 })] }
+    const text = { data: [deal('6', 'Budget F', { date: '2026-10-01', end_date: '2026-10-31', budgeted_time: '1800', worked_time: 0 })] }
+    expect(() => budgetsFromDeals(noKey, P)).toThrow(ProductiveError)
+    expect(() => budgetsFromDeals(text, P)).toThrow(ProductiveError)
+  })
+
+  it('still reads an explicit null budgeted_time as an open-hour deal, not an error', () => {
+    const open = { data: [deal('7', 'Budget G', { date: '2026-10-01', end_date: '2026-10-31', budgeted_time: null, worked_time: 30 })] }
+    expect(budgetsFromDeals(open, P)).toEqual([])
+  })
+
   it('throws on a fixed deal with no project', () => {
     const bad = { data: [{ id: '9', attributes: { name: 'Budget Z', date: '2026-10-01', end_date: '2026-10-31', budgeted_time: 60, worked_time: 0 } }] }
     expect(() => budgetsFromDeals(bad, P)).toThrow()
