@@ -25,6 +25,7 @@ import {
 import type { AdminClient, ClientDraft, ClientStatus, WriteState } from './clientForm'
 import type { OwnerOption } from './useClients'
 import { useRetainer } from './useRetainer'
+import { useProductiveLinks } from './useProductiveLinks'
 import { can } from '../lib/capabilities'
 import { MAX_CENTS, formatMoney, parseMoney } from '../revenue/money'
 import styles from './ClientsAdmin.module.css'
@@ -135,6 +136,97 @@ function RetainerEditor({
         {line}
       </p>
     </>
+  )
+}
+
+// The Productive projects this client is linked to, each with a Remove button.
+// Gated at the read (no query without manage_clients). Links save on their own,
+// like the retainer: no client-form Save needed.
+function ProductiveLinksBlock({ clientId, role }: { clientId: number; role: string }) {
+  const canManage = can(role, 'manage_clients')
+  const links = useProductiveLinks(clientId, canManage)
+  const [text, setText] = useState('')
+  const [line, setLine] = useState('')
+  const [busy, setBusy] = useState(false)
+  if (!canManage) return null
+
+  async function run(action: () => Promise<string | null>, ok: string) {
+    setBusy(true)
+    setLine('')
+    const message = await action()
+    setBusy(false)
+    setLine(message ?? ok)
+    return message === null
+  }
+
+  return (
+    <div className={styles.field}>
+      <p className="t-caption" id="edit-client-productive-label">
+        Productive projects
+      </p>
+      <p className="t-caption" id="edit-client-productive-hint">
+        The number in the project's Productive URL
+      </p>
+      {links.status === 'loading' && <p className="t-caption">Loading…</p>}
+      {links.status === 'error' && (
+        <p className="alert" role="alert">
+          The linked projects could not be read.
+        </p>
+      )}
+      {links.status === 'ready' && (
+        <>
+          {links.projectIds.length === 0 ? (
+            <p className="t-body">Not linked to Productive</p>
+          ) : (
+            <ul aria-labelledby="edit-client-productive-label" className={styles.list} role="list">
+              {links.projectIds.map((id) => (
+                <li className="t-body" key={id}>
+                  {id}{' '}
+                  <button
+                    aria-label={`Remove Productive project ${id}`}
+                    className="button button--quiet"
+                    disabled={busy}
+                    onClick={() => void run(() => links.remove(id), `Removed ${id}.`)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <input
+            aria-describedby="edit-client-productive-hint"
+            aria-labelledby="edit-client-productive-label"
+            className="field"
+            disabled={busy}
+            id="edit-client-productive"
+            inputMode="numeric"
+            onChange={(event) => {
+              setText(event.target.value)
+              setLine('')
+            }}
+            type="text"
+            value={text}
+          />
+          <button
+            className="button button--quiet"
+            disabled={busy}
+            onClick={() =>
+              void run(() => links.add(text), `Linked ${text.trim()}.`).then((done) => {
+                if (done) setText('')
+              })
+            }
+            type="button"
+          >
+            Add project
+          </button>
+          <p className="t-caption" data-testid="productive-status" role="status">
+            {line}
+          </p>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -458,6 +550,8 @@ export function EditClientForm({
       </div>
 
       <RetainerBlock clientId={client.id} role={role} />
+
+      <ProductiveLinksBlock clientId={client.id} role={role} />
 
       {/* Both live OUTSIDE the churned block above, deliberately. Those three
           fields appear only for a client who has left, because they describe a

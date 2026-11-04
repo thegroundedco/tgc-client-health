@@ -16,11 +16,14 @@ import type { UseClients } from './useClients'
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('./useClients', () => ({ useClients: vi.fn() }))
 vi.mock('./useRetainer', () => ({ useRetainer: vi.fn() }))
+vi.mock('./useProductiveLinks', () => ({ useProductiveLinks: vi.fn() }))
 
 import { ClientsAdmin } from './ClientsAdmin'
 import { useClients } from './useClients'
 import { useRetainer } from './useRetainer'
 import type { UseRetainer } from './useRetainer'
+import { useProductiveLinks } from './useProductiveLinks'
+import type { UseProductiveLinks } from './useProductiveLinks'
 
 function retainer(overrides: Partial<UseRetainer> = {}): UseRetainer {
   return {
@@ -32,8 +35,19 @@ function retainer(overrides: Partial<UseRetainer> = {}): UseRetainer {
   }
 }
 
+function links(overrides: Partial<UseProductiveLinks> = {}): UseProductiveLinks {
+  return {
+    status: 'ready',
+    projectIds: [],
+    add: vi.fn(async () => null),
+    remove: vi.fn(async () => null),
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   vi.mocked(useRetainer).mockReturnValue(retainer())
+  vi.mocked(useProductiveLinks).mockReturnValue(links())
 })
 
 afterEach(() => {
@@ -1112,5 +1126,62 @@ describe('the monthly retainer on the edit form', () => {
     expect(screen.getByRole('alert').textContent).toContain('permission denied')
     expect(screen.queryByText('No retainer')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save retainer' })).toBeNull()
+  })
+})
+
+describe('the Productive projects on the edit form', () => {
+  const CLIENT = client({ id: 1, name: 'Acme' })
+
+  async function open(role: string, l: Partial<UseProductiveLinks> = {}) {
+    vi.mocked(useProductiveLinks).mockReturnValue(links(l))
+    mount({ clients: [CLIENT] }, vi.fn(), undefined, role)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Acme' }))
+  }
+
+  it('lists linked ids, each with a Remove button that calls remove', async () => {
+    const remove = vi.fn(async () => null)
+    await open('admin', { projectIds: ['111', '222'], remove })
+    expect(screen.getAllByText('Productive projects')).toHaveLength(1)
+    expect(screen.getByText("The number in the project's Productive URL")).toBeTruthy()
+    expect(screen.getByText('111')).toBeTruthy()
+    expect(screen.getByText('222')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Productive project 222' }))
+    expect(remove).toHaveBeenCalledWith('222')
+    expect(screen.getAllByRole('button', { name: /^Remove Productive project/ })).toHaveLength(2)
+  })
+
+  it('adding an id calls add, and says the error it returns', async () => {
+    const add = vi.fn(async () => 'That project is already linked to another client.')
+    await open('account_manager', { add })
+    await userEvent.type(screen.getByLabelText('Productive projects'), '333')
+    await userEvent.click(screen.getByRole('button', { name: 'Add project' }))
+    expect(add).toHaveBeenCalledWith('333')
+    expect(screen.getByTestId('productive-status').textContent).toBe(
+      'That project is already linked to another client.',
+    )
+    expect((screen.getByLabelText('Productive projects') as HTMLInputElement).value).toBe('333')
+  })
+
+  it('a confirmed add clears the field', async () => {
+    await open('admin')
+    await userEvent.type(screen.getByLabelText('Productive projects'), '444')
+    await userEvent.click(screen.getByRole('button', { name: 'Add project' }))
+    expect((screen.getByLabelText('Productive projects') as HTMLInputElement).value).toBe('')
+  })
+
+  it('shows Not linked to Productive when there are none', async () => {
+    await open('admin')
+    expect(screen.getByText('Not linked to Productive')).toBeTruthy()
+  })
+
+  it('a role without manage_clients gets no field and no query', async () => {
+    await open('viewer', { status: 'off' })
+    expect(screen.queryByText('Productive projects')).toBeNull()
+    expect(vi.mocked(useProductiveLinks)).toHaveBeenCalledWith(1, false)
+  })
+
+  it('a manager calls the hook with the capability', async () => {
+    await open('admin')
+    expect(vi.mocked(useProductiveLinks)).toHaveBeenCalledWith(1, true)
   })
 })
