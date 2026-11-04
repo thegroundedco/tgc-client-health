@@ -636,11 +636,10 @@ Expected: FAIL, then PASS. Before writing the migration, confirm on staging that
 
 - [ ] **Step 3: Update the local routine prompt copy**
 
-Add an "Hours within budget" paragraph next to the Finance one:
-- Read `checkins.fin_hours_applies` after writing the row. When it's false, leave `fin_hours_in_budget` null.
-- When it's true, apply `src/checkin/hoursFromBudgets.ts` to `client_month_budgets` and `client_month_hours_fetch`, and write its answer.
-- When the rule gives no answer because the month isn't finished, write 3 with the note `hours pending – month not finished`.
-- For two budgets, a part-month or unreachable, leave it null and say why in the note.
+Add the "Hours within budget" paragraph next to the Finance one, and make the line changes, exactly as written in `docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md` (final review I1, I3: the earlier bullets here read `fin_hours_applies` back after writing, which contradicted writing the hours answer in the same statement). In short:
+- Decide applicability BEFORE writing, with the same three-part rule as `private.hours_applies`. When it doesn't apply, leave `fin_hours_in_budget` null.
+- When the month isn't finished by the run date, write 3 with the note `hours pending – month not finished`, whether or not hours are stored.
+- For a finished month, judge by the fetch's as-of date in America/Denver. No fetch row, two budgets or a part-month: leave it null and say why in the note.
 - A manually scored row the routine may not overwrite keeps its hours answer.
 
 - [ ] **Step 4: Run the full checks**
@@ -661,16 +660,20 @@ Run superpowers:requesting-code-review over the whole branch on the strongest mo
 
 - [ ] **Step 7: [OWNER] Rollout**
 
-Each step needs the owner's go-ahead:
-1. Staging: push the schedule migration, set the Vault secrets, and seed links for 2–3 clients. The owner tries October on staging, checks the layout by eye, and confirms the lines match Productive.
-2. Propose a production link list from the Productive project names, as a table of client to project IDs. The owner confirms or edits it.
-3. Production:
-   - Set the function secrets and Vault secrets.
-   - Run `apply_migration` for both migrations.
-   - Run `verify:hours`, `verify:score`, `verify:scoring-view` and `verify:privileges` against production.
-   - Deploy the function.
-   - Insert the confirmed links.
-   - Run the function in user mode for October.
-4. Update the live routine prompt on `trig_01BA2jJY2nCCd1MozSm17pS3` to match the local copy.
-5. Push `productive-hours` to `main`. Then check that the live bundle's hash changed, because a push is not a deploy.
-6. Expect October cards for linked clients to show "Not scored" until the hours answer is filled, by the screen or by a routine re-run. That's the intended effect of the question applying.
+Each step needs the owner's go-ahead.
+
+**Staging first**, steps 1, 2, 5 and 6 only, on the staging project: seed links for 2–3 clients at step 5, and the owner tries October from `npm run dev` (`.env.local` points at staging), checks the layout by eye and confirms the lines match Productive. Steps 3 and 4 touch production only (the live site and the live routine), so they are not part of the staging pass.
+
+**Then production, steps 1 to 6 in order.** Before step 5, propose a production link list from the Productive project names, as a table of client to project IDs, and let the owner confirm or edit it.
+
+The order is not negotiable. The frontend must never deploy before the migration: the screen selects the new columns, and PostgREST answers 400 for a missing column, so every check-in would fail to load. Links go in last, because a link is what makes the hours question apply.
+
+1. **Migrations, then the verifiers.** Run `apply_migration` for `20261104120000_productive_hours.sql`, then `20261104130000_schedule_productive_hours.sql`. Then run `verify:hours`, `verify:score`, `verify:scoring-view` and `verify:privileges`. Stop on any failure.
+2. **The function and its secrets.** Set the function secrets `PRODUCTIVE_API_TOKEN`, `PRODUCTIVE_ORG_ID` and `HOURS_CRON_SECRET`, and deploy `fetch-productive-hours`. Set the three Vault secrets: `productive_hours_fn_url`, `productive_hours_cron_secret` (the same value as `HOURS_CRON_SECRET`) and `productive_hours_anon_key`.
+   - Check the anon key's format before storing it as the cron's bearer. The function is deployed with `verify_jwt` on (the default), so the bearer must be a JWT: the legacy anon key (three dot-separated parts, starting `eyJ`). An `sb_publishable_…` key is not a JWT, and the gateway refuses it with 401 before the function runs. If the project has only `sb_publishable_` keys, stop and ask.
+3. **Push `productive-hours` to `main`**, then confirm the live bundle's hash changed. A push is not a deploy.
+4. **Update the live routine prompt** on `trig_01BA2jJY2nCCd1MozSm17pS3`, and the local copy, from `docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md` (the paragraph and its line changes).
+5. **Insert the confirmed links, last.** Not near a routine run: the routine runs Mondays and the 1st at 14:00 UTC, so not within a few hours before then.
+6. **Run the October fetch in user mode**, from the check-in screen or the function, for each linked client.
+
+Afterwards, expect October cards for linked clients to show "Not scored" until the hours answer is filled, by the screen or by a routine re-run. That's the intended effect of the question applying. After the first cron run on the 1st, check `net._http_response`: `net.http_post` failures are silent.
