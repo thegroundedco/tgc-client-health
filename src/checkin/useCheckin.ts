@@ -47,7 +47,10 @@ export type UseCheckin = {
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
   setAnswer: (key: string, value: number | null) => void
-  setAnswers: (values: Record<string, number>, options?: { overwrite?: boolean }) => void
+  setAnswers: (
+    values: Record<string, number>,
+    options?: { overwrite?: boolean; replacing?: Record<string, number> },
+  ) => void
   setNotes: (notes: string) => void
   reload: () => void
   submit: () => void
@@ -265,12 +268,21 @@ export function useCheckin(
   // keys named in `values` change; every other answer, typed or stored, is
   // kept. A key already holding the same value is no change, so a refresh that
   // agrees with the form leaves it clean and Confirm still offered.
+  //
+  // `replacing` (spec 2026-11-04 §7) lets a FILL also replace a key whose form
+  // value is still exactly the value given there -- the AI's stored
+  // placeholder -- and nothing else. It is still a fill, not persisted; a key
+  // the person changed no longer holds that value and is left alone.
   const setAnswers = useCallback(
-    (values: Record<string, number>, options?: { overwrite?: boolean }) => {
+    (values: Record<string, number>, options?: { overwrite?: boolean; replacing?: Record<string, number> }) => {
       const answers: QuestionScores = { ...draft.answers }
       let changed = false
       for (const [key, value] of Object.entries(values)) {
-        const fills = options?.overwrite ? answers[key] !== value : answers[key] === undefined
+        const replaces =
+          options?.replacing !== undefined &&
+          answers[key] === options.replacing[key] &&
+          answers[key] !== value
+        const fills = options?.overwrite ? answers[key] !== value : answers[key] === undefined || replaces
         if (fills) {
           answers[key] = value
           changed = true

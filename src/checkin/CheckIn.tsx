@@ -142,6 +142,16 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // answers (or only after Try again), and it is marked only once there is an
   // answer to fill: a "couldn't reach" or "month not finished" result has none,
   // and must not use up the visit's one fill.
+  //
+  // Spec §7, the AI's placeholder: the routine writes 3 with "hours pending –
+  // month not finished" when it scores a month that has not ended, and "a
+  // later run, or opening the check-in after month end, replaces it". So the
+  // hours answer is also filled over a stored value while the row is still an
+  // AI suggestion (suggested_at set) -- never over a row a person saved. The
+  // form opens holding the stored value (draftFromRow), so "the form has no
+  // answer of its own" means undefined OR still exactly the stored AI value;
+  // setAnswers' `replacing` names that value, so a person's own change in the
+  // form is never overwritten. It lands as an ordinary unsaved fill.
   const prefilled = useRef<string | null>(null)
   const hoursPrefilled = useRef<string | null>(null)
   useEffect(() => {
@@ -150,6 +160,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     if (status !== 'ready' || !can(profile.role, 'edit_scores')) return
     const visit = `${client.id}:${period}`
     const values: Record<string, number> = {}
+    const replacing: Record<string, number> = {}
     if (finance !== null && prefilled.current !== visit) {
       prefilled.current = visit
       for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
@@ -161,11 +172,17 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     if (hours !== null && hours.applies && hours.answer && hoursPrefilled.current !== visit) {
       hoursPrefilled.current = visit
       const storedValue = stored?.fin_hours_in_budget ?? null
-      if (storedValue === null && draft.answers[HOURS_QUESTION] === undefined) {
+      const formValue = draft.answers[HOURS_QUESTION]
+      const aiSuggested = stored != null && stored.suggested_at != null
+      if (storedValue === null && formValue === undefined) {
         values[HOURS_QUESTION] = hours.answer.value
+      } else if (aiSuggested && storedValue !== null && (formValue === undefined || formValue === storedValue)) {
+        values[HOURS_QUESTION] = hours.answer.value
+        replacing[HOURS_QUESTION] = storedValue
       }
     }
-    if (Object.keys(values).length > 0) checkin.setAnswers(values)
+    if (Object.keys(replacing).length > 0) checkin.setAnswers(values, { replacing })
+    else if (Object.keys(values).length > 0) checkin.setAnswers(values)
   }, [status, finance, hours, client.id, period, stored, draft.answers, checkin, profile.role])
 
   // Spec 2026-11-02 §5, separate from the once-per-visit prefill above: after a

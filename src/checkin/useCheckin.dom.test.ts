@@ -495,6 +495,49 @@ describe('useCheckin: setAnswers', () => {
     expect(readDraft(1, '2026-08-01')?.answers.fin_rate_increased).toBe(5)
   })
 
+  // I2 / spec 2026-11-04 §7: `replacing` lets the hours fill replace the AI's
+  // stored placeholder, still as a fill: dirty, no local draft.
+  it('setAnswers with replacing replaces a form value equal to it, as an unpersisted fill', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, comm_timely: 4, notes: null }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.answers.fin_hours_in_budget).toBe(3)
+    act(() => result.current.setAnswers({ fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
+    expect(result.current.draft.answers.fin_hours_in_budget).toBe(1)
+    expect(result.current.draft.answers.comm_timely).toBe(4)
+    expect(result.current.saveState.kind).toBe('dirty')
+    expect(readDraft(1, '2026-08-01')).toBeNull()
+  })
+
+  it('setAnswers with replacing leaves a form value that differs from it', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, notes: null }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('fin_hours_in_budget', 5))
+    const draftBefore = result.current.draft
+    act(() => result.current.setAnswers({ fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
+    expect(result.current.draft).toBe(draftBefore)
+    expect(result.current.draft.answers.fin_hours_in_budget).toBe(5)
+  })
+
+  it('setAnswers with replacing does not replace a key it does not name', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, fin_rack_rate: 3, notes: null }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswers({ fin_rack_rate: 1, fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
+    expect(result.current.draft.answers.fin_rack_rate).toBe(3)
+    expect(result.current.draft.answers.fin_hours_in_budget).toBe(1)
+  })
+
   it('setAnswers with overwrite and identical values is not an edit', async () => {
     db.checkins = async () => ({
       data: [{ client_id: 1, period: '2026-08-01', fin_rate_increased: 3, notes: null }],

@@ -1017,9 +1017,70 @@ describe('CheckIn, hours from Productive', () => {
     hours.current = SCORED
     renderHours('account_manager', {
       draft: blank,
-      stored: { fin_hours_in_budget: 3, fin_hours_applies: true } as unknown as UseCheckin['stored'],
+      stored: { fin_hours_in_budget: 3, fin_hours_applies: true, suggested_at: null } as unknown as UseCheckin['stored'],
     })
     expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+  })
+
+  // I2 / spec §7: the AI's placeholder 3 is replaced by the rule's answer once
+  // the month can be scored; a row a person saved never is. The form opens
+  // holding the stored value, as draftFromRow builds it.
+  describe('over the AI placeholder', () => {
+    const SCORED_1 = { ...SCORED, answer: { value: 1, reason: 'From Productive: 40h worked vs 20h budgeted (+20h).' } }
+    const row = (suggested_at: string | null) =>
+      ({ id: 'c1', suggested_at, fin_hours_in_budget: 3, fin_hours_applies: true }) as unknown as UseCheckin['stored']
+    const holding3 = { answers: { fin_hours_in_budget: 3 }, notes: '' }
+
+    it('fills 1 over an AI-suggested stored 3, replacing only that 3', () => {
+      hours.current = SCORED_1
+      renderHours('account_manager', { draft: holding3, stored: row('2026-10-29T12:00:00Z') })
+      const h = hookState.current as UseCheckin
+      expect(h.setAnswers).toHaveBeenCalledTimes(1)
+      expect(h.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } })
+    })
+
+    it('fills 1 over an AI-suggested stored 3 when the form is blank too', () => {
+      hours.current = SCORED_1
+      renderHours('account_manager', { draft: blank, stored: row('2026-10-29T12:00:00Z') })
+      expect((hookState.current as UseCheckin).setAnswers).toHaveBeenCalledWith(
+        { fin_hours_in_budget: 1 },
+        { replacing: { fin_hours_in_budget: 3 } },
+      )
+    })
+
+    it('does not touch a person-saved stored 3 (suggested_at null)', () => {
+      hours.current = SCORED_1
+      renderHours('account_manager', { draft: holding3, stored: row(null) })
+      expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    })
+
+    it('does not touch an AI-suggested row whose hours the person has changed in the form', () => {
+      hours.current = SCORED_1
+      renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '' }, stored: row('2026-10-29T12:00:00Z') })
+      expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    })
+
+    it('does not fill over the placeholder without edit_scores', () => {
+      hours.current = SCORED_1
+      renderHours('viewer', { draft: holding3, stored: row('2026-10-29T12:00:00Z') })
+      expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    })
+
+    it('does not fill over the placeholder while the rule has no answer', () => {
+      hours.current = UNREACHABLE
+      renderHours('account_manager', { draft: holding3, stored: row('2026-10-29T12:00:00Z') })
+      expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
+    })
+
+    it('replaces the placeholder once per visit', () => {
+      hours.current = SCORED_1
+      hookState.current = mockCheckin({ hoursApplies: true, draft: holding3, stored: row('2026-10-29T12:00:00Z') })
+      const { rerender } = render(<CheckIn {...props()} />)
+      const again = mockCheckin({ hoursApplies: true, draft: holding3, stored: row('2026-10-29T12:00:00Z') })
+      hookState.current = again
+      rerender(<CheckIn {...props()} />)
+      expect(again.setAnswers).not.toHaveBeenCalled()
+    })
   })
 
   // Withheld from an account manager rather than tested as a viewer: a viewer
