@@ -17,7 +17,7 @@
 --
 -- WHY JSONB ON THE ROW, not a notes table. The columns inherit the existing
 -- checkins RLS policies and grants, so this migration adds no policy and no
--- grant on the table (verify-privileges is unaffected), and the one upsert
+-- grant on the table, and the one upsert
 -- that saves a check-in saves its notes and focus in the same statement.
 -- Notes never feed a score: no generated column, view or trigger reads them.
 --
@@ -37,6 +37,9 @@
 -- let a function read tables the caller cannot, and this one reads none.
 -- anon stays revoked: anon cannot write check-ins. Nothing needs USAGE on
 -- private to run it: the constraint refers to the function by OID.
+-- scripts/verify-privileges.sql section 9 sweeps every private function for
+-- EXECUTE held by anon or authenticated, so the function is added to its
+-- private_fn_allowed list as 'private.valid_bucket_notes(jsonb)|authenticated'.
 -- It is in private, not public, so it is not an RPC-callable surface in the
 -- API's exposed schema.
 

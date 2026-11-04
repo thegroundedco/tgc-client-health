@@ -134,7 +134,8 @@ declare
   absent_uid uuid := 'ffffffff-0000-4000-8000-ffffffffffff';
 
   -- Allowlist for section 9, in the same spirit as the table allowlist in
-  -- section 4: a definer helper in `private` may be EXECUTE-able by a
+  -- section 4: a function in `private` (a definer helper, or the invoker
+  -- function a CHECK constraint needs) may be EXECUTE-able by a
   -- browser-reachable role only by deliberate, reviewable entry. Format is
   -- '<signature>|<role>'. Declared once and read by BOTH directions of the
   -- section 9 sweep, so an entry cannot pin one half and drift on the other.
@@ -150,7 +151,14 @@ declare
     -- bare name. It replaced 'private.is_active_user()|authenticated' in
     -- 20260824160306_has_capability.sql; the reasoning above is older than
     -- either function and outlives both.
-    'private.has_capability(text)|authenticated'
+    'private.has_capability(text)|authenticated',
+    -- private.valid_bucket_notes(jsonb): NOT a definer helper. It is a
+    -- security invoker, immutable function that reads no tables, called by the
+    -- CHECK constraint checkins_bucket_notes_valid on public.checkins. A CHECK
+    -- runs it with the inserting role's privileges, so without this grant every
+    -- check-in save by a signed-in user fails "permission denied for function"
+    -- (confirmed on staging). Added by 20261104150000_bucket_notes_and_focus.sql.
+    'private.valid_bucket_notes(jsonb)|authenticated'
   ];
 begin
   ----------------------------------------------------------------------------
@@ -652,9 +660,10 @@ begin
   end loop;
 
   ----------------------------------------------------------------------------
-  -- 9. The `private` schema stays unreachable by name, and every definer helper
-  --    in it is EXECUTE-able by a browser role only by deliberate allowlist
-  --    entry -- with each entry pinned in BOTH directions.
+  -- 9. The `private` schema stays unreachable by name, and every function in
+  --    it (definer helpers, and the one invoker function a CHECK needs) is
+  --    EXECUTE-able by a browser role only by deliberate allowlist entry --
+  --    with each entry pinned in BOTH directions.
   --
   --    This encodes a measured, non-obvious fact about Postgres (verified on
   --    17.6, this project, 2026-08-21). EXECUTE on a function referenced by a

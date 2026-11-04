@@ -111,4 +111,19 @@ describe('the bucket_notes_and_focus migration', () => {
       expect(body).toContain("case when jsonb_typeof(b.v) = 'object' then b.v else '{}'::jsonb end")
     })
   })
+
+  // verify-privileges section 9b fails on any private function that
+  // authenticated can EXECUTE and the allowlist does not name, and 9c fails on
+  // an entry whose grant is missing. The entry must be spelled as regprocedure
+  // prints the function.
+  it('allowlists the function for authenticated in verify-privileges section 9', () => {
+    const privileges = withoutComments(readFileSync('scripts/verify-privileges.sql', 'utf8'))
+    const list = privileges.match(/private_fn_allowed text\[\] := array\[([\s\S]*?)\];/)
+    expect(list, 'private_fn_allowed').not.toBeNull()
+    const entries = [...list![1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+    expect(entries).toContain(`${FN}(jsonb)|authenticated`)
+    expect(entries).toContain('private.has_capability(text)|authenticated')
+    // Nothing for anon, and service_role is outside the sweep.
+    expect(entries.filter((e) => e.startsWith(`${FN}(`))).toEqual([`${FN}(jsonb)|authenticated`])
+  })
 })
