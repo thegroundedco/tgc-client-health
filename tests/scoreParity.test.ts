@@ -65,17 +65,59 @@ describe('the generated SQL', () => {
     )
     expect(aliasLists).toHaveLength(BUCKETS.length)
     BUCKETS.forEach((bucket, index) => {
-      const expectedAlias = [...questionsFor(bucket, false).map((q) => q.key), 'expected']
+      // Finances also reads fin_hours_applies, the column its expression
+      // branches on (20261104120000_productive_hours.sql), and the hours
+      // answer in both branches.
+      const keys = questionsFor(bucket, true).map((q) => q.key)
+      const expectedAlias =
+        bucket === 'finances' ? [...keys, 'fin_hours_applies', 'expected'] : [...keys, 'expected']
       expect(aliasLists[index], bucket).toEqual(expectedAlias)
+    })
+    expect(aliasLists[BUCKETS.indexOf('finances')]).toEqual([
+      'fin_rack_rate',
+      'fin_pays_on_time',
+      'fin_rate_increased',
+      'fin_hours_in_budget',
+      'fin_hours_applies',
+      'expected',
+    ])
+  })
+
+  it('writes fin_hours_applies as a boolean literal, both ways, in the Finances block only', () => {
+    const blocks = sql.split('do $parity$').slice(1)
+    expect(blocks).toHaveLength(BUCKETS.length)
+    blocks.forEach((block, index) => {
+      const rows = block.slice(block.indexOf('$rows$'), block.lastIndexOf('$rows$'))
+      const trues = rows.match(/, true, -?[\d.]+::numeric\)|, true, null::numeric\)/g) ?? []
+      const falses = rows.match(/, false, -?[\d.]+::numeric\)|, false, null::numeric\)/g) ?? []
+      if (BUCKETS[index] === 'finances') {
+        expect(trues).toHaveLength(1080)
+        expect(falses).toHaveLength(1080)
+      } else {
+        expect(trues.length + falses.length, BUCKETS[index]).toBe(0)
+      }
     })
   })
 
+  it('expects the three-answer mean whatever the hours answer when hours do not apply', () => {
+    const fin = sql.split('do $parity$')[1 + BUCKETS.indexOf('finances')]
+    // rack 5, pays 5, rate 2: 4.00 without hours, whatever hours holds.
+    for (const hours of ['null', '1', '2', '3', '5']) {
+      const h = hours === 'null' ? 'null::smallint' : `${hours}::smallint`
+      expect(fin).toContain(`(5::smallint, 5::smallint, 2::smallint, ${h}, false, 4::numeric)`)
+    }
+    // ...and the four-answer mean, or null, with hours.
+    expect(fin).toContain('(5::smallint, 5::smallint, 2::smallint, 1::smallint, true, 3.25::numeric)')
+    expect(fin).toContain('(5::smallint, 5::smallint, 2::smallint, null::smallint, true, null::numeric)')
+  })
+
   it('states a total that matches the number of states it actually generated', () => {
-    // 3 x 6^3 (Communication, Growth, Finances) + 3 x 6^4 (Relationship,
-    // Delivery, Advocacy) = 648 + 3,888 = 4,536. Asserted explicitly, not
-    // echoed from the generator, so that a change to the rubric has to be
-    // acknowledged here rather than silently absorbed.
-    expect(total).toBe(4536)
+    // 2 x 6^3 (Communication, Growth) + 2 x 6^3 x 5 (Finances, over both
+    // states of fin_hours_applies and the five hours values) + 3 x 6^4
+    // (Relationship, Delivery, Advocacy) = 432 + 2,160 + 3,888 = 6,480.
+    // Asserted explicitly, not echoed from the generator, so that a change to
+    // the rubric has to be acknowledged here rather than silently absorbed.
+    expect(total).toBe(6480)
     expect(sql).toContain(
       `score parity PASSED: all ${total} states agree, across ${BUCKETS.length} buckets`,
     )

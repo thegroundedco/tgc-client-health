@@ -119,6 +119,8 @@ export type Database = {
           del_quantity: number | null
           del_score: number | null
           del_we_are_proud: number | null
+          fin_hours_applies: boolean
+          fin_hours_in_budget: number | null
           fin_pays_on_time: number | null
           fin_rack_rate: number | null
           fin_rate_increased: number | null
@@ -164,6 +166,8 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
+          fin_hours_applies?: boolean
+          fin_hours_in_budget?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
@@ -209,6 +213,8 @@ export type Database = {
           del_quantity?: number | null
           del_score?: number | null
           del_we_are_proud?: number | null
+          fin_hours_applies?: boolean
+          fin_hours_in_budget?: number | null
           fin_pays_on_time?: number | null
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
@@ -249,6 +255,76 @@ export type Database = {
             columns: ["submitted_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_month_budgets: {
+        Row: {
+          budgeted_minutes: number
+          client_id: number
+          ends_on: string
+          name: string
+          period: string
+          productive_deal_id: string
+          productive_project_id: string
+          starts_on: string
+          worked_minutes: number
+        }
+        Insert: {
+          budgeted_minutes: number
+          client_id: number
+          ends_on: string
+          name: string
+          period: string
+          productive_deal_id: string
+          productive_project_id: string
+          starts_on: string
+          worked_minutes: number
+        }
+        Update: {
+          budgeted_minutes?: number
+          client_id?: number
+          ends_on?: string
+          name?: string
+          period?: string
+          productive_deal_id?: string
+          productive_project_id?: string
+          starts_on?: string
+          worked_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_month_budgets_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_month_hours_fetch: {
+        Row: {
+          client_id: number
+          fetched_at: string
+          period: string
+        }
+        Insert: {
+          client_id: number
+          fetched_at: string
+          period: string
+        }
+        Update: {
+          client_id?: number
+          fetched_at?: string
+          period?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_month_hours_fetch_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
@@ -329,6 +405,32 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "client_packages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_productive_projects: {
+        Row: {
+          client_id: number
+          created_at: string
+          productive_project_id: string
+        }
+        Insert: {
+          client_id: number
+          created_at?: string
+          productive_project_id: string
+        }
+        Update: {
+          client_id?: number
+          created_at?: string
+          productive_project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_productive_projects_client_id_fkey"
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
@@ -484,6 +586,11 @@ export type Database = {
     }
     Functions: {
       can_run_ai_suggestions: { Args: never; Returns: boolean }
+      can_view_revenue: { Args: never; Returns: boolean }
+      record_month_budgets: {
+        Args: { p_budgets: Json; p_client_id: number; p_period: string }
+        Returns: undefined
+      }
       save_month_payment: {
         Args: {
           p_client_id: number

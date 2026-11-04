@@ -17,6 +17,7 @@
     "verify:scoring-view": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-scoring-view.sql",
     "verify:invites": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-invites.sql",
     "verify:ai-runs": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-ai-runs.sql",
+    "verify:hours": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/verify-hours.sql",
     "seed:verifier-subjects": "npm run db:which && npx --yes supabase@latest db query --linked -f scripts/seed-verifier-subjects.sql",
     "db:which": "node scripts/db-which.mjs",
     "db:push": "npm run db:which && npx --yes supabase@latest db push --linked"

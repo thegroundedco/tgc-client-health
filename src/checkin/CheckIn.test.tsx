@@ -114,6 +114,8 @@ function storedRow(overrides: Partial<CheckinRow> = {}): CheckinRow {
     fin_rack_rate: null,
     fin_pays_on_time: null,
     fin_rate_increased: null,
+    fin_hours_in_budget: null,
+    fin_hours_applies: false,
     rel_collaborative: null,
     rel_respectful: null,
     rel_fun: null,

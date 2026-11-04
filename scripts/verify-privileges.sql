@@ -452,7 +452,19 @@ begin
         ('client_packages', 'authenticated', 'SELECT'),
         ('client_packages', 'authenticated', 'INSERT'),
         ('client_packages', 'authenticated', 'UPDATE'),
-        ('ai_runs', 'authenticated', 'SELECT')
+        ('ai_runs', 'authenticated', 'SELECT'),
+
+        -- Productive hours (20261104120000_productive_hours.sql). Links are
+        -- added and removed from Clients admin (manage_clients) and never
+        -- updated, so SELECT, INSERT and DELETE -- no UPDATE. Budgets and
+        -- fetch stamps are written only by record_month_budgets as
+        -- service_role, so authenticated holds SELECT alone on both. RLS
+        -- decides who; these say only that the verbs exist.
+        ('client_productive_projects', 'authenticated', 'SELECT'),
+        ('client_productive_projects', 'authenticated', 'INSERT'),
+        ('client_productive_projects', 'authenticated', 'DELETE'),
+        ('client_month_budgets', 'authenticated', 'SELECT'),
+        ('client_month_hours_fetch', 'authenticated', 'SELECT')
 
         -- anon: deliberately absent. It is allowed nothing, anywhere.
     ),
@@ -523,11 +535,12 @@ begin
   --    new functions -- see
   --    20260820232429_revoke_public_function_execute_from_public.sql. So a future
   --    `create function public.x()` IS anon-callable unless its migration
-  --    revokes execute explicitly. `public` holds exactly two browser-callable
-  --    functions today, both security INVOKER and granted to authenticated
+  --    revokes execute explicitly. `public` holds exactly three browser-callable
+  --    functions today, all security INVOKER and granted to authenticated
   --    only (allowlisted below): can_run_ai_suggestions()
-  --    (20261031090000_ai_suggestion_runs.sql) and save_month_payment(...)
-  --    (20261102120000_client_retainers.sql). Anything else, or ANY function
+  --    (20261031090000_ai_suggestion_runs.sql), save_month_payment(...)
+  --    (20261102120000_client_retainers.sql) and can_view_revenue()
+  --    (20261104120000_productive_hours.sql). Anything else, or ANY function
   --    anon can execute, is a failure; this assertion is what makes that stay
   --    deliberate.
   ----------------------------------------------------------------------------
@@ -542,7 +555,11 @@ begin
       -- never in it: an anon-callable function is always a failure.
       and (g, (p.oid::regprocedure)::text) not in (
         ('authenticated', 'can_run_ai_suggestions()'),
-        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean)')
+        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean)'),
+        -- 20261104120000_productive_hours.sql. record_month_budgets is NOT
+        -- here: it is executable by service_role only, and this sweep would
+        -- report it if authenticated or anon could reach it.
+        ('authenticated', 'can_view_revenue()')
       )
   loop
     -- The advice deliberately does NOT say "revoke from public, anon,
@@ -1105,7 +1122,15 @@ begin
         ('client_retainers', 'client_retainers_select_view_revenue'),
         ('client_retainers', 'client_retainers_insert_edit_revenue'),
         ('client_retainers', 'client_retainers_update_edit_revenue'),
-        ('client_retainers', 'client_retainers_delete_edit_revenue')
+        ('client_retainers', 'client_retainers_delete_edit_revenue'),
+        -- Productive hours, 20261104120000. scripts/verify-hours.sql probes a
+        -- viewer's zero rows and refused writes against these; a dropped
+        -- policy would make those pass for the wrong reason.
+        ('client_productive_projects', 'client_productive_projects_select_view_revenue_or_manage_clients'),
+        ('client_productive_projects', 'client_productive_projects_insert_manage_clients'),
+        ('client_productive_projects', 'client_productive_projects_delete_manage_clients'),
+        ('client_month_budgets', 'client_month_budgets_select_view_revenue'),
+        ('client_month_hours_fetch', 'client_month_hours_fetch_select_view_revenue')
     )
     select e.tbl, e.policy
     from expected e

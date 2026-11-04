@@ -2,7 +2,8 @@
 -- in the one-answer-type step (2026-08-31) now that Advocacy's four answers are
 -- smallint like every other question, with Unsure living at 3. Pins
 -- public.checkin_scores: the gate, null propagation, the arithmetic (now
--- including adv_score), and the RLS boundary.
+-- including adv_score), the hours branch (§3c, 20261104120000: eighteen
+-- answers when fin_hours_applies, seventeen when not), and the RLS boundary.
 --
 -- Safe to re-run. Every fixture it creates is deleted in the same transaction.
 -- Aim it at STAGING -- it inserts real rows and advances clients_id_seq.
@@ -44,6 +45,7 @@ declare
   v_client bigint;
   v_open bigint;      -- the check-in under test once the gate is open
   v_closed bigint;    -- a second check-in kept gated shut, for the §2 loop
+  v_hours bigint;     -- an October check-in, for the hours branch in §3c
   v_col text;
   v_applies boolean;
   v_overall numeric;
@@ -292,6 +294,70 @@ begin
   execute format('update public.checkins set %s where id = $1', v_set_adv) using v_open;
 
   raise notice '§3b ok: adv_score is 1.00 on four Nos, 3.00 on four Unsures, null on three Yeses and a blank; overall_score stayed 3.00 with Advocacy all No and all Unsure';
+
+  -- ===================================== §3c the hours branch (18 vs 17)
+  -- 20261104120000_productive_hours.sql made overall_score a CASE over
+  -- checkins.fin_hours_applies: eighteen answers when the hours question
+  -- applies, seventeen when it does not. Everything above runs on periods
+  -- before 2026-10-01, where it never applies, so it pins the seventeen
+  -- branch only. This drives the eighteen branch on a real row: an October
+  -- check-in, flipped to applying by linking a (fake) Productive project to
+  -- the fixture client -- the refresh trigger does the flipping, no re-save.
+  insert into public.checkins (client_id, period)
+  values (v_client, date '2026-10-01')
+  returning id into v_hours;
+  execute format('update public.checkins set %s, %s where id = $1', v_set_core, v_set_adv)
+    using v_hours;
+  -- One 5 among the seventeen 3s, so the seventeen sum to 53 and every
+  -- reading below differs between the two divisors: 53/17 = 3.12;
+  -- with hours 5, 58/18 = 3.22 (58/17 would be 3.41); with hours 1,
+  -- 54/18 = 3.00 (54/17 would be 3.18).
+  update public.checkins set comm_constructive = 5 where id = v_hours;
+
+  select overall_score, fin_hours_applies into v_overall, v_applies
+    from public.checkin_scores s join public.checkins ch using (id) where s.id = v_hours;
+  if v_applies is not false or v_overall is distinct from round(53::numeric / 17, 2) then
+    raise exception '§3c FAILED: unlinked October check-in has fin_hours_applies % and overall % (expected false and %)',
+      v_applies, v_overall, round(53::numeric / 17, 2);
+  end if;
+
+  insert into public.client_productive_projects (client_id, productive_project_id)
+  values (v_client, '__verify_scoring_view_project__');
+
+  select overall_score, fin_hours_applies into v_overall, v_applies
+    from public.checkin_scores s join public.checkins ch using (id) where s.id = v_hours;
+  if v_applies is not true then
+    raise exception '§3c FAILED: linking a project did not flip fin_hours_applies to true (got %)', v_applies;
+  end if;
+  if v_overall is not null then
+    raise exception '§3c FAILED: hours apply but are blank, yet overall is % (expected null)', v_overall;
+  end if;
+
+  update public.checkins set fin_hours_in_budget = 5 where id = v_hours;
+  select overall_score into v_overall from public.checkin_scores where id = v_hours;
+  if v_overall is distinct from round(58::numeric / 18, 2) then
+    raise exception '§3c FAILED: with hours 5 overall is %, expected % (58/18). % would be the seventeen divisor.',
+      v_overall, round(58::numeric / 18, 2), round(58::numeric / 17, 2);
+  end if;
+
+  update public.checkins set fin_hours_in_budget = 1 where id = v_hours;
+  select overall_score into v_overall from public.checkin_scores where id = v_hours;
+  if v_overall is distinct from round(54::numeric / 18, 2) then
+    raise exception '§3c FAILED: with hours 1 overall is %, expected % (54/18)',
+      v_overall, round(54::numeric / 18, 2);
+  end if;
+
+  -- Unlinking flips it back, and the stray hours answer (still 1) no longer
+  -- counts: the seventeen-answer mean again.
+  delete from public.client_productive_projects where client_id = v_client;
+  select overall_score, fin_hours_applies into v_overall, v_applies
+    from public.checkin_scores s join public.checkins ch using (id) where s.id = v_hours;
+  if v_applies is not false or v_overall is distinct from round(53::numeric / 17, 2) then
+    raise exception '§3c FAILED: after unlinking, fin_hours_applies % and overall % (expected false and %)',
+      v_applies, v_overall, round(53::numeric / 17, 2);
+  end if;
+
+  raise notice '§3c ok: October check-in reads 53/17 unlinked, null linked with no hours answer, 58/18 and 54/18 with hours 5 and 1, and 53/17 again once unlinked';
 
   -- ============================================================== §4 RLS
   -- WHY THIS SECTION EXISTS: without `with (security_invoker = true)` the view

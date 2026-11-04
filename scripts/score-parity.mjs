@@ -9,14 +9,22 @@
 // space decomposes per bucket.
 //
 // Every question is a smallint 1-5 (spec §3.2, amended 2026-08-31), so the
-// sweep is uniform: 6 values per question, 3 x 6^3 + 3 x 6^4 = 648 + 3,888 =
-// 4,536 states.
+// sweep is uniform: 6 values per question -- except the hours question, whose
+// column only accepts 1, 2, 3 or 5, so it sweeps {null,1,2,3,5}.
 //
-// That is MORE than the 3,321 the boolean version checked, and deliberately.
-// Enumerating only the values the new controls can write -- null, 5, 3, 1 --
-// would be smaller and would be a verifier that checks the UI's habits rather
-// than the database's contract. The columns accept any smallint 1 to 5, and
-// August 2026's Finance answers contain 2s and 4s that no current control can
+// Finances is the one bucket with two expressions behind one column
+// (20261104120000_productive_hours.sql): fin_score divides by 4 when
+// fin_hours_applies and by 3 when not. So Finances is enumerated over BOTH
+// states of fin_hours_applies, and over every hours value in both -- in the
+// false half, a stray hours answer must not move the score, and enumerating it
+// is what proves that. 2 x 6^3 x 5 = 2,160 Finances states; with Communication
+// and Growth (6^3 each) and the three four-question buckets (6^4 each):
+// 216 + 216 + 2,160 + 3 x 1,296 = 6,480 states.
+//
+// Enumerating only the values the controls can write -- null, 5, 3, 1 -- would
+// be smaller and would be a verifier that checks the UI's habits rather than
+// the database's contract. The columns accept any smallint 1 to 5, and August
+// 2026's Finance answers contain 2s and 4s that no current control can
 // produce. This enumerates what the column can hold.
 //
 // The SQL side does not hard-code any expression: it reads the live one out
@@ -30,7 +38,7 @@ import { writeFileSync } from 'node:fs'
 // -- because plain Node cannot resolve this codebase's extensionless
 // imports. See Global Constraints. Importing scoreV2.ts here would fail
 // ERR_MODULE_NOT_FOUND, because scoreV2.ts imports './buckets'.
-import { BUCKETS, questionsFor } from '../src/lib/buckets.ts'
+import { BUCKETS, HOURS_OPTIONS, HOURS_QUESTION, questionsFor } from '../src/lib/buckets.ts'
 import { meanOrNull } from '../src/lib/scoreMath.ts'
 
 export const OUT = 'scripts/.score-parity.generated.sql'
@@ -38,33 +46,58 @@ export const OUT = 'scripts/.score-parity.generated.sql'
 // The expected bucket score, composed from the same meanOrNull the
 // application uses -- a recomposition of scoreV2.ts's bucketScore(), which
 // cannot be imported directly because it imports './buckets' extensionlessly.
-// There is no dispatch on kind any more: every bucket is one mean over one
-// column type. meanOrNull() is not a reimplementation: it is the shipped
-// function, imported unchanged. bucketScore() is pinned separately, against
-// this same primitive, by scoreV2.test.ts -- this file does not re-prove
-// that.
-// Task 1: the hours question is left out (hoursApplies = false) because the SQL
-// still has the three-question Finances; Task 3 extends this to both branches.
-function expectedBucketScore(state, bucket) {
-  return meanOrNull(questionsFor(bucket, false).map((question) => state[question.key]))
+// There is no dispatch on kind: every bucket is one mean over one column
+// type. meanOrNull() is not a reimplementation: it is the shipped function,
+// imported unchanged. bucketScore() is pinned separately, against this same
+// primitive, by scoreV2.test.ts -- this file does not re-prove that.
+//
+// Which questions are averaged follows the state's own fin_hours_applies,
+// exactly as bucketScore follows its hoursApplies argument. Buckets other than
+// Finances carry no such key, and questionsFor ignores the flag for them.
+export function expectedBucketScore(state, bucket) {
+  const hoursApplies = state[APPLIES_COLUMN] === true
+  return meanOrNull(questionsFor(bucket, hoursApplies).map((question) => state[question.key]))
 }
 
 // The values any question can hold: unanswered, or 1 through 5.
 const SCALE_VALUES = [null, 1, 2, 3, 4, 5]
 
-// Every combination of values across one bucket's own questions. This is the
+// The hours column's own CHECK is (1, 2, 3, 5): its options' values.
+const HOURS_VALUES = [null, ...HOURS_OPTIONS.map((option) => option.value).toSorted((a, b) => a - b)]
+
+// The stored column fin_score's expression branches on.
+export const APPLIES_COLUMN = 'fin_hours_applies'
+
+// The bucket whose generated expression references APPLIES_COLUMN.
+const HOURS_BUCKET = 'finances'
+
+function valuesFor(key) {
+  return key === HOURS_QUESTION ? HOURS_VALUES : SCALE_VALUES
+}
+
+// The columns a bucket's expression reads: every question it can ask (hours
+// included, even when it does not apply), plus fin_hours_applies for Finances.
+export function bucketColumns(bucket) {
+  const keys = questionsFor(bucket, true).map((question) => question.key)
+  return bucket === HOURS_BUCKET ? [...keys, APPLIES_COLUMN] : keys
+}
+
+// Every combination of values across one bucket's own columns. This is the
 // whole reason the check survives 21 questions: a bucket's generated
-// expression references only its own columns, so the space is (3 or 6)^n
-// per bucket rather than 6^21 across the table.
+// expression references only its own columns, so the space is small per
+// bucket rather than 6^21 across the table.
 export function enumerateBucketStates(bucket) {
-  const questions = questionsFor(bucket, false)
   let states = [{}]
-  for (const question of questions) {
-    states = states.flatMap((state) =>
-      SCALE_VALUES.map((value) => ({ ...state, [question.key]: value })),
-    )
+  for (const key of bucketColumns(bucket)) {
+    const values = key === APPLIES_COLUMN ? [false, true] : valuesFor(key)
+    states = states.flatMap((state) => values.map((value) => ({ ...state, [key]: value })))
   }
   return states
+}
+
+function literal(key, value) {
+  if (key === APPLIES_COLUMN) return value ? 'true' : 'false'
+  return value === null ? 'null::smallint' : `${value}::smallint`
 }
 
 const BUCKET_SCORE_COLUMN = {
@@ -78,17 +111,13 @@ const BUCKET_SCORE_COLUMN = {
 
 function bucketCheckSql(bucket) {
   const column = BUCKET_SCORE_COLUMN[bucket]
-  const questions = questionsFor(bucket, false)
-  const keys = questions.map((question) => question.key)
+  const keys = bucketColumns(bucket)
   const states = enumerateBucketStates(bucket)
 
   const rows = states
     .map((state) => {
       const expected = expectedBucketScore(state, bucket)
-      const values = questions.map((question) => {
-        const value = state[question.key]
-        return value === null ? 'null::smallint' : `${value}::smallint`
-      })
+      const values = keys.map((key) => literal(key, state[key]))
       values.push(expected === null ? 'null::numeric' : `${expected}::numeric`)
       return `(${values.join(', ')})`
     })
