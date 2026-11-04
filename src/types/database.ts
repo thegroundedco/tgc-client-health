@@ -108,6 +108,7 @@ export type Database = {
           adv_score: number | null
           adv_would_refer: number | null
           ai_suggestion: Json | null
+          bucket_notes: Json
           client_id: number
           comm_consistent: number | null
           comm_constructive: number | null
@@ -125,6 +126,7 @@ export type Database = {
           fin_rack_rate: number | null
           fin_rate_increased: number | null
           fin_score: number | null
+          focus: string | null
           growth_goals_defined: number | null
           growth_hitting_goals: number | null
           growth_progress_trackable: number | null
@@ -155,6 +157,7 @@ export type Database = {
           adv_score?: number | null
           adv_would_refer?: number | null
           ai_suggestion?: Json | null
+          bucket_notes?: Json
           client_id: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -172,6 +175,7 @@ export type Database = {
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
           fin_score?: number | null
+          focus?: string | null
           growth_goals_defined?: number | null
           growth_hitting_goals?: number | null
           growth_progress_trackable?: number | null
@@ -202,6 +206,7 @@ export type Database = {
           adv_score?: number | null
           adv_would_refer?: number | null
           ai_suggestion?: Json | null
+          bucket_notes?: Json
           client_id?: number
           comm_consistent?: number | null
           comm_constructive?: number | null
@@ -219,6 +224,7 @@ export type Database = {
           fin_rack_rate?: number | null
           fin_rate_increased?: number | null
           fin_score?: number | null
+          focus?: string | null
           growth_goals_defined?: number | null
           growth_hitting_goals?: number | null
           growth_progress_trackable?: number | null
