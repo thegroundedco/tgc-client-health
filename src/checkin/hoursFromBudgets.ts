@@ -34,10 +34,25 @@ export function hoursScore(diffMinutes: number): 1 | 2 | 3 | 5 {
   return 1
 }
 
-const toHours = (minutes: number): number => Math.round(minutes / 6) / 10
+// Minutes to hours at 1dp. The MAGNITUDE is rounded and the sign applied
+// after, so -9 and +9 minutes are -0.2h and +0.2h (Math.round alone rounds
+// halves up, which would make them -0.1h and +0.2h). Never -0.
+export function toHours(minutes: number): number {
+  const magnitude = Math.round(Math.abs(minutes) / 6) / 10
+  if (magnitude === 0) return 0
+  return minutes < 0 ? -magnitude : magnitude
+}
 
 // 25 not 25.0; Number() drops the trailing zero.
 const fmt = (hours: number): string => String(hours)
+
+// A signed difference in hours: a true minus, a plus, and plain 0h (no sign)
+// when it rounds to nothing. Used by the reason line and by HoursBox, so the
+// two always agree.
+export function signedHours(hours: number): string {
+  if (hours === 0) return '0h'
+  return `${hours < 0 ? '−' : '+'}${fmt(Math.abs(hours))}h`
+}
 
 function line(b: BudgetRow): HoursLine {
   const diff = b.worked_minutes - b.budgeted_minutes
@@ -53,8 +68,7 @@ function line(b: BudgetRow): HoursLine {
 
 function reason(b: BudgetRow): string {
   const diff = b.worked_minutes - b.budgeted_minutes
-  const sign = diff < 0 ? '−' : '+'
-  return `From Productive: ${fmt(toHours(b.worked_minutes))}h worked vs ${fmt(toHours(b.budgeted_minutes))}h budgeted (${sign}${fmt(Math.abs(toHours(diff)))}h).`
+  return `From Productive: ${fmt(toHours(b.worked_minutes))}h worked vs ${fmt(toHours(b.budgeted_minutes))}h budgeted (${signedHours(toHours(diff))}).`
 }
 
 // `today` is the date to judge month-end against: the date the budgets are as

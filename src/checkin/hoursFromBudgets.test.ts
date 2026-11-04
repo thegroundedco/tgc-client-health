@@ -61,3 +61,22 @@ describe('hoursFromBudgets', () => {
     expect(r.applies && r.lines.map((l) => l.name)).toEqual(['A', 'Z'])
   })
 })
+
+// M3: the magnitude is rounded, then signed, so a difference and its mirror
+// read the same; anything that rounds to nothing is a plain 0h, never −0h.
+describe('signed differences round symmetrically', () => {
+  const diffOf = (minutes: number) => {
+    const r = hoursFromBudgets({ ...base, budgets: [budget({ budgeted_minutes: 1500, worked_minutes: 1500 + minutes })] })
+    if (!r.applies || !r.answer) throw new Error('expected a scored month')
+    return { line: r.lines[0], diffText: /\(([^)]*)\)\.$/.exec(r.answer.reason)?.[1] }
+  }
+  it.each([
+    [3, 0.1, '+0.1h'], [-3, -0.1, '−0.1h'],
+    [9, 0.2, '+0.2h'], [-9, -0.2, '−0.2h'],
+    [2, 0, '0h'], [-2, 0, '0h'], [0, 0, '0h'],
+  ])('%i minutes is %d hours, written %s', (minutes, hours, text) => {
+    const { line, diffText } = diffOf(minutes)
+    expect(Object.is(line.diffHours, hours)).toBe(true)
+    expect(diffText).toBe(text)
+  })
+})

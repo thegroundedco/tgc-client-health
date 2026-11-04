@@ -113,3 +113,15 @@ describe('HoursBox', () => {
     expect(screen.getAllByTestId('hours-line')).toHaveLength(1)
   })
 })
+
+// M3: the box writes the same signed difference as the reason line.
+describe('HoursBox signed differences', () => {
+  afterEach(cleanup)
+  it.each([
+    [3, '+0.1h'], [-3, '−0.1h'], [9, '+0.2h'], [-9, '−0.2h'], [2, '0h'], [-2, '0h'], [0, '0h'],
+  ])('a %i minute difference reads %s', (minutes, text) => {
+    setup(result({ budgets: [budget({ budgeted_minutes: 1200, worked_minutes: 1200 + minutes })] }))
+    const row = screen.getByTestId('hours-line')
+    expect(within(row).getByText(text)).toBeTruthy()
+  })
+})

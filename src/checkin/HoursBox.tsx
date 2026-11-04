@@ -1,3 +1,4 @@
+import { signedHours } from './hoursFromBudgets'
 import type { HoursLine, HoursResult } from './hoursFromBudgets'
 import styles from './HoursBox.module.css'
 
@@ -15,10 +16,6 @@ const UNREACHABLE = "Couldn't reach Productive – answer by hand or try again"
 // Hours as the rule rounded them: 1 decimal place, and 25 rather than 25.0.
 const fmt = (hours: number): string => String(hours)
 
-// A true minus, as in the reason line the rule writes.
-function signed(hours: number): string {
-  return `${hours < 0 ? '−' : '+'}${fmt(Math.abs(hours))}h`
-}
 
 // Spec 2026-11-04 §7. Draws what hoursFromBudgets decided; no rule lives here.
 // Nothing at all for a month before hours were tracked: there is nothing to say.
@@ -61,7 +58,7 @@ function Line({ line }: { line: HoursLine }) {
       <span className={styles.name}>{line.name}</span>
       <span className="numeric">{`${fmt(line.budgetedHours)}h budgeted`}</span>
       <span className="numeric">{`${fmt(line.workedHours)}h worked`}</span>
-      <span className="numeric">{signed(line.diffHours)}</span>
+      <span className="numeric">{signedHours(line.diffHours)}</span>
       {line.flagged && <strong className={styles.flag}>Outside ±6h</strong>}
     </li>
   )
