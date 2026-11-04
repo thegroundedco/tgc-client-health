@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { HOURS_START_PERIOD } from '../lib/buckets'
 import { supabase } from '../lib/supabase'
 import { hoursFromBudgets } from './hoursFromBudgets'
 import type { BudgetRow, HoursResult } from './hoursFromBudgets'
@@ -43,7 +44,9 @@ export function useMonthHours(
   useEffect(() => {
     let cancelled = false
     setResult(null)
-    if (!canRead) return
+    // Before hours were tracked there is nothing to fetch or read: the rule's
+    // answer does not depend on Productive (see the return below).
+    if (!canRead || period < HOURS_START_PERIOD) return
 
     void (async () => {
       try {
@@ -101,5 +104,16 @@ export function useMonthHours(
     }
   }, [clientId, period, canRead, version])
 
+  if (canRead && period < HOURS_START_PERIOD) return BEFORE_START
   return result !== null && result.version === version ? result.hours : null
 }
+
+// The rule's own answer for any month before HOURS_START_PERIOD. One object, so
+// a consumer's effect that depends on the result does not re-run every render.
+const BEFORE_START: HoursResult = hoursFromBudgets({
+  period: '2000-01-01',
+  today: '2000-01-01',
+  linked: false,
+  fetched: false,
+  budgets: [],
+})

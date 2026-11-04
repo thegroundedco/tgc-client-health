@@ -93,6 +93,24 @@ describe('useMonthHours', () => {
     expect(result.current).toBeNull()
   })
 
+  // E1: a month before hours were tracked asks nothing of Productive or the DB.
+  it('issues no invoke and no query for a month before October 2026, and gives the before-start result', async () => {
+    const invoke = vi.spyOn(supabase.functions, 'invoke')
+    const from = vi.spyOn(supabase, 'from')
+    const { result } = renderHook(() => useMonthHours(7, '2026-09-01', true))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(invoke).toHaveBeenCalledTimes(0)
+    expect(from).toHaveBeenCalledTimes(0)
+    expect(result.current).toEqual({ applies: false, reason: 'before_start', message: null })
+  })
+
+  it('still gives null for a month before October 2026 without view_revenue', async () => {
+    const { result } = renderHook(() => useMonthHours(7, '2026-09-01', false))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(db.invokes).toEqual([])
+    expect(result.current).toBeNull()
+  })
+
   it('invokes the function for the client and period, then reads the three tables for them', async () => {
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
