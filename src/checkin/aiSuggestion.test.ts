@@ -25,6 +25,40 @@ describe('parseAiSuggestion', () => {
     expect(parseAiSuggestion({ ...good, run_id: null })?.run_id).toBeNull()
   })
 
+  // Review Focus 2: every suggestion written before bucket notes existed has
+  // neither field. It must stay a valid suggestion, and say it carries none.
+  it('accepts a suggestion without bucket_notes or focus, and reports them absent', () => {
+    const parsed = parseAiSuggestion(good)
+    expect(parsed).not.toBeNull()
+    expect(parsed?.bucket_notes).toBeUndefined()
+    expect(parsed?.focus).toBeUndefined()
+    expect(parsed && 'bucket_notes' in parsed).toBe(false)
+    expect(parsed && 'focus' in parsed).toBe(false)
+  })
+
+  it('carries cleaned bucket_notes and a trimmed focus when the suggestion has them', () => {
+    const parsed = parseAiSuggestion({
+      ...good,
+      bucket_notes: { growth: { why: ' stalled ', actions: '  ' }, sentiment: { why: 'x' } },
+      focus: ' renewal ',
+    })
+    expect(parsed?.bucket_notes).toEqual({ growth: { why: 'stalled' } })
+    expect(parsed?.focus).toBe('renewal')
+  })
+
+  it('reads a null or blank focus as carried-and-empty, not absent', () => {
+    expect(parseAiSuggestion({ ...good, focus: null })?.focus).toBeNull()
+    expect(parseAiSuggestion({ ...good, focus: '   ' })?.focus).toBeNull()
+  })
+
+  it('treats a malformed bucket_notes or focus as not carried, and keeps the suggestion', () => {
+    const parsed = parseAiSuggestion({ ...good, bucket_notes: 'x', focus: 5 })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.bucket_notes).toBeUndefined()
+    expect(parsed?.focus).toBeUndefined()
+    expect(parseAiSuggestion({ ...good, bucket_notes: null })?.bucket_notes).toBeUndefined()
+  })
+
   it.each([
     ['null', null],
     ['undefined', undefined],

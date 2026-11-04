@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { previousPeriod } from '../lib/month'
 import { ALL_QUESTIONS } from '../lib/buckets'
+import type { Bucket } from '../lib/buckets'
 import { advocacyApplies as gateApplies } from '../lib/gate'
 import { answeredCount, isComplete, overallScore, requiredQuestions } from '../lib/scoreV2'
 import type { Profile } from '../auth/useProfile'
@@ -18,6 +19,13 @@ import {
   writeDraft,
 } from './draftCache'
 import type { Draft, QuestionScores } from './draftCache'
+import {
+  bucketNotesForSave,
+  cleanBucketNotes,
+  focusForSave,
+  setBucketNote as withBucketNote,
+} from './bucketNotes'
+import type { BucketNoteField, BucketNotes } from './bucketNotes'
 
 export type CheckinRow = Database['public']['Tables']['checkins']['Row']
 export type ScoreRow = Database['public']['Views']['checkin_scores']['Row']
@@ -28,6 +36,10 @@ export type UseCheckin = {
   stored: CheckinRow | null
   lastMonth: CheckinRow | null
   lastPeriod: string
+  // Last month's per-bucket notes and focus, cleaned, for the "Last month"
+  // lines under the boxes. Empty and null when there is no row or no text.
+  lastMonthBucketNotes: BucketNotes
+  lastMonthFocus: string | null
   draft: Draft
   saveState: SaveState
   // The gate, and the count that follows from it. §4.4: every count on screen is
@@ -52,6 +64,8 @@ export type UseCheckin = {
     options?: { overwrite?: boolean; replacing?: Record<string, number> },
   ) => void
   setNotes: (notes: string) => void
+  setBucketNote: (bucket: Bucket, field: BucketNoteField, text: string) => void
+  setFocus: (text: string) => void
   reload: () => void
   submit: () => void
 }
@@ -74,7 +88,14 @@ function draftFromRow(row: CheckinRow | null): Draft {
     // truthiness check would silently drop.
     if (typeof value === 'number') answers[key] = value
   }
-  return { answers, notes: row.notes ?? '' }
+  // cleanBucketNotes, not a cast: the column is typed Json, and the CHECK that
+  // guards it is a migration this code cannot see from here.
+  return {
+    answers,
+    notes: row.notes ?? '',
+    bucketNotes: cleanBucketNotes(row.bucket_notes),
+    focus: row.focus ?? '',
+  }
 }
 
 export function useCheckin(
@@ -318,6 +339,22 @@ export function useCheckin(
     [draft, applyEdit],
   )
 
+  // The same path as setNotes: applyEdit, so a keystroke here is persisted
+  // and marks the check-in unsaved exactly as one in the general notes does.
+  const setBucketNote = useCallback(
+    (bucket: Bucket, field: BucketNoteField, text: string) =>
+      applyEdit({ ...draft, bucketNotes: withBucketNote(draft.bucketNotes, bucket, field, text) }),
+    [draft, applyEdit],
+  )
+
+  const setFocus = useCallback(
+    (focus: string) => applyEdit({ ...draft, focus }),
+    [draft, applyEdit],
+  )
+
+  const lastMonthBucketNotes = cleanBucketNotes(lastMonth?.bucket_notes)
+  const lastMonthFocus = focusForSave(lastMonth?.focus ?? '')
+
   const scored = answeredCount(draft.answers, applies, hoursApplies)
   const localOverall = overallScore(draft.answers, hoursApplies)
   const storedOverall = scores.find((row) => row.period === period)?.overall_score ?? null
@@ -357,6 +394,12 @@ export function useCheckin(
               period,
               ...answers,
               notes: draft.notes.trim() === '' ? null : draft.notes,
+              // Trimmed, empties removed and capped at the DB limits
+              // (bucketNotes.ts): the CHECKs refuse "  ", {} for a bucket, and
+              // over-long text, so none of those may be sent. A blank focus
+              // goes as null, never as an empty string.
+              bucket_notes: bucketNotesForSave(draft.bucketNotes),
+              focus: focusForSave(draft.focus),
               // Set on a complete check-in and explicitly cleared otherwise. The
               // board counts submissions as `submitted_at is not null`, so a
               // check-in edited back down below the required count has to stop
@@ -451,6 +494,8 @@ export function useCheckin(
     stored,
     lastMonth,
     lastPeriod,
+    lastMonthBucketNotes,
+    lastMonthFocus,
     draft,
     saveState,
     advocacyApplies: applies,
@@ -468,6 +513,8 @@ export function useCheckin(
     setAnswer,
     setAnswers,
     setNotes,
+    setBucketNote,
+    setFocus,
     reload: () => void load(),
     submit,
   }

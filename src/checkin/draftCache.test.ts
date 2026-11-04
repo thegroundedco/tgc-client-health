@@ -51,10 +51,12 @@ describe('readDraft', () => {
 
   it('round-trips a draft', () => {
     const { store } = memoryStore()
-    writeDraft(1, '2026-08-01', { answers: { comm_timely: 4 }, notes: 'slow month' }, store)
+    writeDraft(1, '2026-08-01', { answers: { comm_timely: 4 }, notes: 'slow month', bucketNotes: {}, focus: '' }, store)
     expect(readDraft(1, '2026-08-01', store)).toEqual({
       answers: { comm_timely: 4 },
       notes: 'slow month',
+      bucketNotes: {},
+      focus: '',
     })
   })
 
@@ -63,7 +65,7 @@ describe('readDraft', () => {
     // surface as this month's. draftKey folds the period into the key, so a
     // draft written for one period must be invisible when reading any other.
     const { store } = memoryStore()
-    writeDraft(7, '2026-08-01', { answers: { comm_timely: 4 }, notes: 'august' }, store)
+    writeDraft(7, '2026-08-01', { answers: { comm_timely: 4 }, notes: 'august', bucketNotes: {}, focus: '' }, store)
     expect(readDraft(7, '2026-09-01', store)).toBeNull()
   })
 
@@ -87,7 +89,7 @@ describe('readDraft', () => {
     const { store } = memoryStore({
       [draftKey(1, '2026-08-01')]: JSON.stringify({ answers: { comm_timely: 2 } }),
     })
-    expect(readDraft(1, '2026-08-01', store)).toEqual({ answers: { comm_timely: 2 }, notes: '' })
+    expect(readDraft(1, '2026-08-01', store)).toEqual({ answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' })
   })
 
   it('returns null for a draft that survives validation with nothing in it', () => {
@@ -150,7 +152,7 @@ describe('the 21 answers', () => {
       ALL_QUESTIONS.map((key, index) => [key, (index % 5) + 1]),
     )
     const { store } = memoryStore()
-    expect(writeDraft(7, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
+    expect(writeDraft(7, '2026-08-01', { answers, notes: '', bucketNotes: {}, focus: '' }, store)).toBe(true)
     expect(readDraft(7, '2026-08-01', store)?.answers).toEqual(answers)
   })
 
@@ -185,24 +187,24 @@ describe('writeDraft', () => {
     // says so rather than implying a safety it does not have.
     const { store } = memoryStore()
     expect(
-      writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '' }, store),
+      writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '', bucketNotes: {}, focus: '' }, store),
     ).toBe(true)
     expect(
       writeDraft(
         1,
         '2026-08-01',
-        { answers: { growth_hitting_goals: 1 }, notes: '' },
+        { answers: { growth_hitting_goals: 1 }, notes: '', bucketNotes: {}, focus: '' },
         throwingStore,
       ),
     ).toBe(false)
     expect(
-      writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '' }, null),
+      writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '', bucketNotes: {}, focus: '' }, null),
     ).toBe(false)
   })
 
   it('removes the key instead of storing an empty draft', () => {
     const { store, map } = memoryStore()
-    writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '' }, store)
+    writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '', bucketNotes: {}, focus: '' }, store)
     writeDraft(1, '2026-08-01', EMPTY_DRAFT, store)
     expect(map.has(draftKey(1, '2026-08-01'))).toBe(false)
   })
@@ -218,7 +220,7 @@ describe('writeDraft', () => {
     const { store, map } = memoryStore()
 
     // A valid draft round-trips to itself.
-    const valid = { answers: { rel_collaborative: 3, del_on_time: 5 }, notes: 'steady' }
+    const valid = { answers: { rel_collaborative: 3, del_on_time: 5 }, notes: 'steady', bucketNotes: {}, focus: '' }
     expect(writeDraft(1, '2026-08-01', valid, store)).toBe(true)
     expect(readDraft(1, '2026-08-01', store)).toEqual(valid)
 
@@ -229,18 +231,20 @@ describe('writeDraft', () => {
     // must be gone, not merely read back as null, because a normalised-write
     // bug that stores instead of removing would still read back as null
     // through readDraft's own normalisation and hide behind it.
-    const onlyInvalid = { answers: { growth_hitting_goals: Number.NaN }, notes: '' }
+    const onlyInvalid = { answers: { growth_hitting_goals: Number.NaN }, notes: '', bucketNotes: {}, focus: '' }
     expect(writeDraft(2, '2026-08-01', onlyInvalid, store)).toBe(true)
     expect(map.has(draftKey(2, '2026-08-01'))).toBe(false)
     expect(readDraft(2, '2026-08-01', store)).toBeNull()
 
     // A draft with one valid and one invalid answer keeps only the valid one,
     // and that is exactly what comes back.
-    const mixed = { answers: { growth_hitting_goals: 2, fin_pays_on_time: Number.NaN }, notes: 'x' }
+    const mixed = { answers: { growth_hitting_goals: 2, fin_pays_on_time: Number.NaN }, notes: 'x', bucketNotes: {}, focus: '' }
     expect(writeDraft(3, '2026-08-01', mixed, store)).toBe(true)
     expect(readDraft(3, '2026-08-01', store)).toEqual({
       answers: { growth_hitting_goals: 2 },
       notes: 'x',
+      bucketNotes: {},
+      focus: '',
     })
   })
 })
@@ -248,8 +252,8 @@ describe('writeDraft', () => {
 describe('clearDraft', () => {
   it('removes only that client and period', () => {
     const { store } = memoryStore()
-    writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '' }, store)
-    writeDraft(2, '2026-08-01', { answers: { growth_hitting_goals: 5 }, notes: '' }, store)
+    writeDraft(1, '2026-08-01', { answers: { growth_hitting_goals: 1 }, notes: '', bucketNotes: {}, focus: '' }, store)
+    writeDraft(2, '2026-08-01', { answers: { growth_hitting_goals: 5 }, notes: '', bucketNotes: {}, focus: '' }, store)
     clearDraft(1, '2026-08-01', store)
     expect(readDraft(1, '2026-08-01', store)).toBeNull()
     expect(readDraft(2, '2026-08-01', store)).not.toBeNull()
@@ -264,19 +268,19 @@ describe('clearDraft', () => {
 describe('isDraftEmpty', () => {
   it('is true for the empty draft', () => {
     expect(isDraftEmpty(EMPTY_DRAFT)).toBe(true)
-    expect(isDraftEmpty({ answers: {}, notes: '   ' })).toBe(true)
+    expect(isDraftEmpty({ answers: {}, notes: '   ', bucketNotes: {}, focus: '' })).toBe(true)
   })
 
   it('is false once any answer or note is present', () => {
-    expect(isDraftEmpty({ answers: { comm_timely: 1 }, notes: '' })).toBe(false)
-    expect(isDraftEmpty({ answers: {}, notes: 'x' })).toBe(false)
+    expect(isDraftEmpty({ answers: { comm_timely: 1 }, notes: '', bucketNotes: {}, focus: '' })).toBe(false)
+    expect(isDraftEmpty({ answers: {}, notes: 'x', bucketNotes: {}, focus: '' })).toBe(false)
   })
 })
 
 describe('draftsDiffer', () => {
   it('is false for two drafts that differ only in key order', () => {
-    const a = { answers: { comm_timely: 3, del_on_time: 4 }, notes: 'x' }
-    const b = { answers: { del_on_time: 4, comm_timely: 3 }, notes: 'x ' }
+    const a = { answers: { comm_timely: 3, del_on_time: 4 }, notes: 'x', bucketNotes: {}, focus: '' }
+    const b = { answers: { del_on_time: 4, comm_timely: 3 }, notes: 'x ', bucketNotes: {}, focus: '' }
     expect(draftsDiffer(a, b)).toBe(false)
   })
 
@@ -287,15 +291,15 @@ describe('draftsDiffer', () => {
     // it could look "different" from one that never had it.
     expect(
       draftsDiffer(
-        { answers: { comm_timely: undefined }, notes: '' },
-        { answers: {}, notes: '' },
+        { answers: { comm_timely: undefined }, notes: '', bucketNotes: {}, focus: '' },
+        { answers: {}, notes: '', bucketNotes: {}, focus: '' },
       ),
     ).toBe(false)
   })
 
   it('is true when any one of the 21 differs', () => {
     for (const key of ALL_QUESTIONS) {
-      expect(draftsDiffer({ answers: {}, notes: '' }, { answers: { [key]: 3 }, notes: '' })).toBe(
+      expect(draftsDiffer({ answers: {}, notes: '', bucketNotes: {}, focus: '' }, { answers: { [key]: 3 }, notes: '', bucketNotes: {}, focus: '' })).toBe(
         true,
       )
     }
@@ -307,8 +311,8 @@ describe('draftsDiffer', () => {
     // ever compared a value against `null` would still pass that test.
     expect(
       draftsDiffer(
-        { answers: { comm_timely: 1 }, notes: '' },
-        { answers: { comm_timely: 2 }, notes: '' },
+        { answers: { comm_timely: 1 }, notes: '', bucketNotes: {}, focus: '' },
+        { answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' },
       ),
     ).toBe(true)
   })
@@ -319,7 +323,7 @@ describe('draftsDiffer', () => {
     // branch always return false would pass this suite undetected without
     // this one "true" case.
     expect(
-      draftsDiffer({ answers: { comm_timely: 3 }, notes: 'x' }, { answers: { comm_timely: 3 }, notes: 'y' }),
+      draftsDiffer({ answers: { comm_timely: 3 }, notes: 'x', bucketNotes: {}, focus: '' }, { answers: { comm_timely: 3 }, notes: 'y', bucketNotes: {}, focus: '' }),
     ).toBe(true)
   })
 
@@ -327,15 +331,82 @@ describe('draftsDiffer', () => {
     // The stored column holds what was typed; a trailing newline from a
     // textarea must not be reported to the person as an unsaved change.
     expect(
-      draftsDiffer({ answers: {}, notes: 'a note\n' }, { answers: {}, notes: 'a note' }),
+      draftsDiffer({ answers: {}, notes: 'a note\n', bucketNotes: {}, focus: '' }, { answers: {}, notes: 'a note', bucketNotes: {}, focus: '' }),
     ).toBe(false)
   })
 })
 
-describe('the version bump to v4', () => {
-  it('carries v4 in the key', () => {
-    expect(DRAFT_VERSION).toBe('v4')
-    expect(draftKey(7, '2026-08-01')).toBe(`${DRAFT_KEY_PREFIX}:v4:7:2026-08-01`)
+describe('the version bump to v5', () => {
+  it('carries v5 in the key', () => {
+    expect(DRAFT_VERSION).toBe('v5')
+    expect(draftKey(7, '2026-08-01')).toBe(`${DRAFT_KEY_PREFIX}:v5:7:2026-08-01`)
+  })
+
+  // Review Focus 1. A v4 draft is the current shape minus bucketNotes and
+  // focus, so unlike v1-v3 it is READ, not discarded: its answers are still
+  // valid, and somebody typed them.
+  const v4Key = `${DRAFT_KEY_PREFIX}:v4:7:2026-08-01`
+
+  it('reads a v4 draft with empty bucket notes and focus, keeping its answers and notes', () => {
+    const { store } = memoryStore({
+      [v4Key]: JSON.stringify({ answers: { comm_timely: 4, adv_left_review: 1 }, notes: 'from v4' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)).toEqual({
+      answers: { comm_timely: 4, adv_left_review: 1 },
+      notes: 'from v4',
+      bucketNotes: {},
+      focus: '',
+    })
+  })
+
+  it('ignores bucket notes or focus a v4 entry somehow holds', () => {
+    const { store } = memoryStore({
+      [v4Key]: JSON.stringify({
+        answers: { comm_timely: 4 },
+        notes: '',
+        bucketNotes: { growth: { why: 'x' } },
+        focus: 'f',
+      }),
+    })
+    const draft = readDraft(7, '2026-08-01', store)
+    expect(draft?.bucketNotes).toEqual({})
+    expect(draft?.focus).toBe('')
+  })
+
+  it('prefers the v5 draft over a v4 one for the same check-in', () => {
+    const { store } = memoryStore({
+      [v4Key]: JSON.stringify({ answers: { comm_timely: 1 }, notes: 'old' }),
+      [draftKey(7, '2026-08-01')]: JSON.stringify({ answers: { comm_timely: 5 }, notes: 'new' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)?.answers).toEqual({ comm_timely: 5 })
+  })
+
+  it('a throwing read of the v4 key gives null, not a crash', () => {
+    const store: StorageLike = {
+      getItem: (key) => {
+        if (key === v4Key) throw new Error('nope')
+        return null
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    }
+    expect(readDraft(7, '2026-08-01', store)).toBeNull()
+  })
+
+  // Once a v5 draft is written it supersedes the v4 one. Left behind, the v4
+  // entry would be read again after a save cleared v5, and come back as
+  // "unsaved changes from an earlier visit" over somebody's newer answers.
+  it('writeDraft removes the v4 entry it supersedes', () => {
+    const { store, map } = memoryStore({ [v4Key]: JSON.stringify({ answers: { comm_timely: 1 }, notes: '' }) })
+    writeDraft(7, '2026-08-01', { answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' }, store)
+    expect(map.has(v4Key)).toBe(false)
+  })
+
+  it('clearDraft removes a v4 entry too', () => {
+    const { store, map } = memoryStore({ [v4Key]: JSON.stringify({ answers: { comm_timely: 1 }, notes: '' }) })
+    clearDraft(7, '2026-08-01', store)
+    expect(map.has(v4Key)).toBe(false)
+    expect(readDraft(7, '2026-08-01', store)).toBeNull()
   })
 
   // The same failure v3 was created for, one type later. A v3 draft holds
@@ -405,7 +476,66 @@ describe('a boolean answer under the current key', () => {
   it('accepts every value the choice control writes', () => {
     const { store } = memoryStore()
     const answers = { adv_left_review: 5, adv_case_study: 3, adv_would_refer: 1 }
-    expect(writeDraft(1, '2026-08-01', { answers, notes: '' }, store)).toBe(true)
+    expect(writeDraft(1, '2026-08-01', { answers, notes: '', bucketNotes: {}, focus: '' }, store)).toBe(true)
     expect(readDraft(1, '2026-08-01', store)?.answers).toEqual(answers)
+  })
+})
+
+describe('bucket notes and focus in the draft', () => {
+  const base = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
+
+  it('round-trips bucket notes and focus', () => {
+    const { store } = memoryStore()
+    const draft = {
+      ...base,
+      bucketNotes: { communication: { why: 'slow', actions: 'weekly call' } },
+      focus: 'renewal',
+    }
+    expect(writeDraft(1, '2026-08-01', draft, store)).toBe(true)
+    expect(readDraft(1, '2026-08-01', store)).toEqual(draft)
+  })
+
+  it('drops invalid bucket notes and a non-string focus read from storage', () => {
+    const { store } = memoryStore({
+      [draftKey(1, '2026-08-01')]: JSON.stringify({
+        answers: { comm_timely: 3 },
+        notes: '',
+        bucketNotes: { sentiment: { why: 'x' }, growth: { why: 5, actions: 'a' } },
+        focus: 7,
+      }),
+    })
+    expect(readDraft(1, '2026-08-01', store)).toEqual({
+      answers: { comm_timely: 3 },
+      notes: '',
+      bucketNotes: { growth: { actions: 'a' } },
+      focus: '',
+    })
+  })
+
+  it('a draft holding only bucket notes, or only a focus, is not empty', () => {
+    expect(isDraftEmpty({ ...base, bucketNotes: { growth: { why: 'x' } } })).toBe(false)
+    expect(isDraftEmpty({ ...base, focus: 'x' })).toBe(false)
+  })
+
+  it('whitespace-only bucket notes and focus are empty', () => {
+    expect(isDraftEmpty({ ...base, bucketNotes: { growth: { why: '  ' } }, focus: ' \n' })).toBe(true)
+  })
+
+  it('a draft holding only a focus survives the round trip', () => {
+    const { store } = memoryStore()
+    writeDraft(1, '2026-08-01', { ...base, focus: 'only this' }, store)
+    expect(readDraft(1, '2026-08-01', store)?.focus).toBe('only this')
+  })
+
+  it('draftsDiffer sees a change in bucket notes', () => {
+    expect(draftsDiffer(base, { ...base, bucketNotes: { delivery: { actions: 'x' } } })).toBe(true)
+    expect(
+      draftsDiffer({ ...base, bucketNotes: { delivery: { why: 'x\n' } } }, { ...base, bucketNotes: { delivery: { why: 'x' } } }),
+    ).toBe(false)
+  })
+
+  it('draftsDiffer sees a change in focus, but not in its whitespace', () => {
+    expect(draftsDiffer(base, { ...base, focus: 'f' })).toBe(true)
+    expect(draftsDiffer({ ...base, focus: 'f ' }, { ...base, focus: 'f' })).toBe(false)
   })
 })

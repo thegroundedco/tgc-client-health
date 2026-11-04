@@ -46,6 +46,14 @@ describe('CHECKIN_COLUMNS', () => {
   // of the screen people open most. Carried over from the five-pillar version
   // of this file: the column still exists, unrenamed, so the reason still
   // holds.
+  // The card shows `Focus: <text>` (spec 2026-11-04 §3). Bounded at 1000
+  // characters by a CHECK, unlike notes. bucket_notes stays off the board.
+  it('reads focus, but not bucket_notes', () => {
+    const named = CHECKIN_COLUMNS.split(',').map((c) => c.trim())
+    expect(named).toContain('focus')
+    expect(named).not.toContain('bucket_notes')
+  })
+
   it('does not fetch notes, which no card renders', () => {
     const named = CHECKIN_COLUMNS.split(',').map((c) => c.trim())
     expect(named).not.toContain('notes')
@@ -93,6 +101,12 @@ describe('cardFooter', () => {
   it('says Not started when a row exists with no answers', () => {
     const row = { client_id: 1, submitted_at: null, submitted_by: null, suggested_at: null }
     expect(cardFooter(row, VIEWER, true, false)).toBe('Not started')
+  })
+
+  // Parity with notes, which the footer has never counted: a focus is not a
+  // score, and "Draft, 0 of 21" would send the reader looking for one.
+  it('still says Not started for a row holding only a focus', () => {
+    expect(cardFooter({ ...blankCheckin(), focus: 'renewal' }, VIEWER, true, false)).toBe('Not started')
   })
 
   // Gate open: the denominator is 21, not 17. This is the number that decides

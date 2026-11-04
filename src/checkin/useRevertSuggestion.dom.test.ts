@@ -81,6 +81,42 @@ describe('useRevertSuggestion', () => {
     expect(result.current.state).toEqual({ kind: 'reverted' })
   })
 
+  // Review Focus 2. Every suggestion on file predates bucket notes. Reverting
+  // to one must not wipe what the person wrote: the columns are not named.
+  it('leaves bucket_notes and focus out of the update when the suggestion has none', async () => {
+    const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
+    await act(async () => {
+      await result.current.revert({ current: CURRENT, ai: ai(FULL_AI), advocacyApplies: true, hoursApplies: false })
+    })
+    expect('bucket_notes' in db.lastUpdate!).toBe(false)
+    expect('focus' in db.lastUpdate!).toBe(false)
+  })
+
+  it('writes the AI bucket_notes and focus, cleaned, when the suggestion carries them', async () => {
+    const withNotes: AiSuggestion = {
+      ...ai(FULL_AI),
+      bucket_notes: { growth: { why: ' stalled ', actions: '   ' } },
+      focus: '  renewal ',
+    }
+    const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
+    await act(async () => {
+      await result.current.revert({ current: CURRENT, ai: withNotes, advocacyApplies: true, hoursApplies: false })
+    })
+    expect(db.lastUpdate!.bucket_notes).toEqual({ growth: { why: 'stalled' } })
+    expect(db.lastUpdate!.focus).toBe('renewal')
+  })
+
+  it('writes a carried null focus and empty bucket_notes as the AI had them', async () => {
+    const empty: AiSuggestion = { ...ai(FULL_AI), bucket_notes: {}, focus: null }
+    const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
+    await act(async () => {
+      await result.current.revert({ current: CURRENT, ai: empty, advocacyApplies: true, hoursApplies: false })
+    })
+    expect(db.lastUpdate!.bucket_notes).toEqual({})
+    expect('focus' in db.lastUpdate!).toBe(true)
+    expect(db.lastUpdate!.focus).toBeNull()
+  })
+
   it('leaves submitted_at null when the merged answers are incomplete with the gate open', async () => {
     const partial = { ...FULL_AI, [AI_ANSWER_KEYS[0]]: null }
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))

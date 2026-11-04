@@ -5,6 +5,7 @@ import { isComplete } from '../lib/scoreV2'
 import type { Answers } from '../lib/scoreV2'
 import { UPDATE_MATCHED_NOTHING_TEXT } from '../clients/clientForm'
 import { AI_ANSWER_KEYS, revertedAnswers } from './aiSuggestion'
+import { bucketNotesForSave, focusForSave } from './bucketNotes'
 import type { AiSuggestion } from './aiSuggestion'
 
 export type RevertState =
@@ -20,6 +21,12 @@ export type RevertState =
 // refuses from the app. suggested_at is set, so the row reads as an unreviewed
 // suggestion again. Filtered on client AND month; .maybeSingle() with null as a
 // failure, for the reason useConfirmSuggestion documents.
+//
+// bucket_notes and focus (spec 2026-11-04 §2) are written ONLY when the
+// suggestion carries them. Every suggestion on file predates them; naming
+// the columns for one of those would wipe what the person wrote with nothing
+// the AI ever said (Review Focus 2). Carried values go through the same
+// cleaning as a save, so the CHECKs cannot refuse them.
 export function useRevertSuggestion(clientId: number, period: string, profileId: string) {
   const [state, setState] = useState<RevertState>({ kind: 'idle' })
   const inFlight = useRef(false)
@@ -34,11 +41,16 @@ export function useRevertSuggestion(clientId: number, period: string, profileId:
         const answers = Object.fromEntries(AI_ANSWER_KEYS.map((key) => [key, merged[key] ?? null]))
         const now = new Date().toISOString()
         const complete = isComplete(merged, args.advocacyApplies, args.hoursApplies)
+        const notesFromAi = {
+          ...(args.ai.bucket_notes !== undefined ? { bucket_notes: bucketNotesForSave(args.ai.bucket_notes) } : {}),
+          ...(args.ai.focus !== undefined ? { focus: focusForSave(args.ai.focus ?? '') } : {}),
+        }
         const { data, error } = await supabase
           .from('checkins')
           .update({
             ...answers,
             notes: args.ai.notes,
+            ...notesFromAi,
             suggested_at: now,
             submitted_at: complete ? now : null,
             submitted_by: complete ? profileId : null,

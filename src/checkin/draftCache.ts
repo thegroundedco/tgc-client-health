@@ -1,5 +1,7 @@
 import { ALL_QUESTIONS } from '../lib/buckets'
 import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
+import { bucketNotesDiffer, cleanBucketNotes, hasBucketNoteText } from './bucketNotes'
+import type { BucketNotes } from './bucketNotes'
 
 // The local draft. Slice 1 spec §5.5: every click and keystroke is written here,
 // and it is cleared only on a confirmed save.
@@ -41,6 +43,17 @@ import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
 // adv_left_review. So the key is now v4, a v3 key can never be read as a v4
 // one, and readDraft deletes any v3 key it passes -- alongside the v1 and v2
 // discards it already did, each one shape further out of date than the last.
+//
+// Sixth, v5 (2026-11-04): the draft gained bucketNotes and focus. This bump is
+// different in kind from the three before it. Nothing a v4 draft holds has
+// changed meaning -- its answers and notes are exactly the v5 ones -- it is
+// only missing two fields. So a v4 entry is READ, not discarded: readDraft
+// falls back to it when there is no v5 entry, and gives it empty bucket notes
+// and focus. Discarding it would throw away answers somebody typed and has not
+// saved. Once a v5 entry is written (writeDraft) or the check-in is saved
+// (clearDraft), the v4 entry is removed: left behind, it would be read again
+// after the v5 one was cleared and resurface as "unsaved changes from an
+// earlier visit" over newer saved answers.
 
 // Absent, not null: an unanswered question has no key. Everything downstream
 // counts on that -- normaliseAnswers builds on it, and scoreV2.answeredCount
@@ -49,11 +62,13 @@ import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
 // not notice a null. A 1 is a real answer, not absence: it gets a key like any
 // other value, and only its absence means unanswered.
 export type QuestionScores = Partial<Record<string, number>>
-export type Draft = { answers: QuestionScores; notes: string }
+// bucketNotes and focus hold the text as typed, untrimmed; the upsert trims
+// (bucketNotesForSave, focusForSave) and comparisons trim.
+export type Draft = { answers: QuestionScores; notes: string; bucketNotes: BucketNotes; focus: string }
 
-export const EMPTY_DRAFT: Draft = { answers: {}, notes: '' }
+export const EMPTY_DRAFT: Draft = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
 export const DRAFT_KEY_PREFIX = 'checkin-draft'
-export const DRAFT_VERSION = 'v4'
+export const DRAFT_VERSION = 'v5'
 
 // Only the three methods used, so a test can supply a plain object rather than
 // a whole Storage.
@@ -74,10 +89,16 @@ function v2DraftKey(clientId: number, period: string): string {
   return `${DRAFT_KEY_PREFIX}:v2:${clientId}:${period}`
 }
 
-// The key v3 wrote, one version behind the current shape rather than two.
-// Only readDraft knows it, and only to delete it.
+// The key v3 wrote, two versions behind the current shape. Only readDraft
+// knows it, and only to delete it.
 function v3DraftKey(clientId: number, period: string): string {
   return `${DRAFT_KEY_PREFIX}:v3:${clientId}:${period}`
+}
+
+// The key v4 wrote. Unlike the three above it is still READ (see the header):
+// readDraft falls back to it, and writeDraft and clearDraft remove it.
+function v4DraftKey(clientId: number, period: string): string {
+  return `${DRAFT_KEY_PREFIX}:v4:${clientId}:${period}`
 }
 
 function defaultStorage(): StorageLike | null {
@@ -126,8 +147,31 @@ function normaliseAnswers(source: unknown): QuestionScores {
 // the key regardless of what it holds, so this is already correct as written
 // -- there is nothing to change here for a "No", only this note for the next
 // reader who reaches for `if (value)` and finds it silently drops one.
+//
+// Bucket notes and a focus are content too (Review Focus 4): a draft holding
+// only them is a draft, not nothing. Whitespace-only text is not content, the
+// same rule as the general notes.
 export function isDraftEmpty(draft: Draft): boolean {
-  return Object.keys(draft.answers).length === 0 && draft.notes.trim() === ''
+  return (
+    Object.keys(draft.answers).length === 0 &&
+    draft.notes.trim() === '' &&
+    !hasBucketNoteText(draft.bucketNotes) &&
+    draft.focus.trim() === ''
+  )
+}
+
+// Untrusted JSON into a Draft. `current` is false for a v4 entry, which
+// predates bucketNotes and focus: anything it holds under those names was not
+// written by this app and is ignored.
+function draftFromStored(parsed: unknown, current: boolean): Draft | null {
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const source = parsed as { answers?: unknown; notes?: unknown; bucketNotes?: unknown; focus?: unknown }
+  return {
+    answers: normaliseAnswers(source.answers),
+    notes: typeof source.notes === 'string' ? source.notes : '',
+    bucketNotes: current ? cleanBucketNotes(source.bucketNotes) : {},
+    focus: current && typeof source.focus === 'string' ? source.focus : '',
+  }
 }
 
 export function readDraft(
@@ -157,9 +201,16 @@ export function readDraft(
     // Nothing to do and nothing to say.
   }
 
+  // The v5 entry, else the v4 one. A v5 entry always wins: it is the newer
+  // write, and its existence means writeDraft has already run.
   let raw: string | null
+  let current = true
   try {
     raw = store.getItem(draftKey(clientId, period))
+    if (raw === null) {
+      raw = store.getItem(v4DraftKey(clientId, period))
+      current = false
+    }
   } catch {
     return null
   }
@@ -171,12 +222,8 @@ export function readDraft(
   } catch {
     return null
   }
-  if (typeof parsed !== 'object' || parsed === null) return null
-
-  const source = parsed as { answers?: unknown; notes?: unknown }
-  const answers = normaliseAnswers(source.answers)
-  const notes = typeof source.notes === 'string' ? source.notes : ''
-  const draft: Draft = { answers, notes }
+  const draft = draftFromStored(parsed, current)
+  if (draft === null) return null
 
   // An empty draft is not a draft. Returning one would let it win over the
   // stored row on load and blank a real check-in.
@@ -206,6 +253,17 @@ export function writeDraft(
   const normalised: Draft = {
     answers: normaliseAnswers(draft.answers),
     notes: typeof draft.notes === 'string' ? draft.notes : '',
+    bucketNotes: cleanBucketNotes(draft.bucketNotes),
+    focus: typeof draft.focus === 'string' ? draft.focus : '',
+  }
+
+  // This write supersedes any v4 entry (see the header). Its own try/catch,
+  // and before the write, so a failure here cannot cost the write itself.
+  try {
+    store.removeItem(v4DraftKey(clientId, period))
+  } catch {
+    // Nothing to do: readDraft prefers v5, so a surviving v4 entry only
+    // matters once v5 is gone, and clearDraft removes it then too.
   }
 
   try {
@@ -235,6 +293,11 @@ export function clearDraft(
 ): void {
   if (!store) return
   try {
+    store.removeItem(v4DraftKey(clientId, period))
+  } catch {
+    // As below.
+  }
+  try {
     store.removeItem(draftKey(clientId, period))
   } catch {
     // Nothing to do and nothing to say. The save it follows already succeeded,
@@ -252,8 +315,12 @@ export function clearDraft(
 // The `?? null` per key already distinguishes `1` from absent -- `1` coalesces
 // to itself, only `undefined` becomes `null` -- so a "No" compares unequal to
 // that same question being unanswered, exactly as it must.
+//
+// Bucket notes and focus are compared by the same trimmed rule as the notes.
 export function draftsDiffer(a: Draft, b: Draft): boolean {
   if (a.notes.trim() !== b.notes.trim()) return true
+  if (a.focus.trim() !== b.focus.trim()) return true
+  if (bucketNotesDiffer(a.bucketNotes, b.bucketNotes)) return true
   for (const key of ALL_QUESTIONS) {
     if ((a.answers[key] ?? null) !== (b.answers[key] ?? null)) return true
   }

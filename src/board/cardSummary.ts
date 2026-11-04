@@ -55,6 +55,9 @@ export type CardCheckin = {
   adv_score?: number | null
   // Set by a DB trigger; the app only reads it.
   fin_hours_applies?: boolean
+  // Spec 2026-11-04 §3: the card's `Focus: <text>` line. Read only; the
+  // footer does not count it, as it has never counted notes.
+  focus?: string | null
   [key: string]: number | string | boolean | null | undefined
 }
 
@@ -74,6 +77,7 @@ export const CHECKIN_COLUMNS = [
   'submitted_by',
   'suggested_at',
   'fin_hours_applies',
+  'focus',
   ...ALL_QUESTIONS,
   ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket]),
 ].join(', ')

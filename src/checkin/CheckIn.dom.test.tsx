@@ -193,7 +193,9 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
     stored: null,
     lastMonth: null,
     lastPeriod: '2026-07-01',
-    draft: { answers: { comm_constructive: 4 }, notes: 'Renewal conversation went well.' },
+    lastMonthBucketNotes: {},
+    lastMonthFocus: null,
+    draft: { answers: { comm_constructive: 4 }, notes: 'Renewal conversation went well.', bucketNotes: {}, focus: '' },
     saveState: { kind: 'dirty' },
     advocacyApplies: true,
     hoursApplies: false,
@@ -210,6 +212,8 @@ function mockCheckin(overrides: Partial<UseCheckin> = {}): UseCheckin {
     setAnswer: vi.fn(),
     setAnswers: vi.fn(),
     setNotes: vi.fn(),
+    setBucketNote: vi.fn(),
+    setFocus: vi.fn(),
     reload: vi.fn(),
     submit: vi.fn(),
     ...overrides,
@@ -347,7 +351,7 @@ describe('CheckIn, when the Advocacy gate is shut', () => {
   // tree (rather than the string-based CheckIn.test.tsx) is what lets this
   // count radios by section rather than by text.
   it('disables every Advocacy radio and leaves the other 17 enabled', () => {
-    hookState.current = mockCheckin({ advocacyApplies: false, required: 17, scored: 0, draft: { answers: {}, notes: '' }, hasContent: false, saveState: { kind: 'clean' } })
+    hookState.current = mockCheckin({ advocacyApplies: false, required: 17, scored: 0, draft: { answers: {}, notes: '', bucketNotes: {}, focus: '' }, hasContent: false, saveState: { kind: 'clean' } })
     render(
       <CheckIn
         client={{ ...CLIENT, started_on: null }}
@@ -519,7 +523,7 @@ describe('CheckIn, finance answers from revenue', () => {
     fin_rack_rate: { value: 1, reason: 'R1' },
     fin_rate_increased: { value: 3, reason: 'R2' },
   }
-  const blank = { answers: {}, notes: '' }
+  const blank = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
 
   function props(role: Profile['role'] = 'account_manager') {
     return { client: CLIENT, period: PERIOD, profile: profile(role), onBack: () => {}, onEditClient: () => {} }
@@ -549,7 +553,7 @@ describe('CheckIn, finance answers from revenue', () => {
 
   it('skips an answer the form already holds', () => {
     finance.current = SUGGESTION
-    renderAs('account_manager', { draft: { answers: { fin_rack_rate: 3 }, notes: '' } })
+    renderAs('account_manager', { draft: { answers: { fin_rack_rate: 3 }, notes: '', bucketNotes: {}, focus: '' } })
     expect((hookState.current as UseCheckin).setAnswers).toHaveBeenCalledWith({ fin_rate_increased: 3 })
   })
 
@@ -561,7 +565,7 @@ describe('CheckIn, finance answers from revenue', () => {
     expect(first.setAnswers).toHaveBeenCalledTimes(1)
 
     // Same visit, draft still blank (as if cleared), same finance object.
-    const cleared = mockCheckin({ draft: { answers: {}, notes: '' } })
+    const cleared = mockCheckin({ draft: { answers: {}, notes: '', bucketNotes: {}, focus: '' } })
     hookState.current = cleared
     rerender(<CheckIn {...props()} />)
     expect(cleared.setAnswers).not.toHaveBeenCalled()
@@ -689,7 +693,7 @@ describe('CheckIn, run and revert controls', () => {
   })
 
   it('still-suggested row with unsaved changes: Revert gets the stored row, then draft cleared and reloaded', async () => {
-    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit' })
+    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit', bucketNotes: {}, focus: '' })
     reverts.revert.mockClear()
     const stored = { id: 'c1', suggested_at: '2026-10-29T12:00:00Z', ai_suggestion: ai } as unknown as UseCheckin['stored']
     let seen: unknown = 'unset'
@@ -706,7 +710,7 @@ describe('CheckIn, run and revert controls', () => {
   })
 
   it('Cancel with unsaved changes: no revert call, no reload, draft kept', () => {
-    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit' })
+    writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'edit', bucketNotes: {}, focus: '' })
     reverts.revert.mockClear()
     const reload = vi.fn()
     const stored = { id: 'c1', suggested_at: null, ai_suggestion: ai } as unknown as UseCheckin['stored']
@@ -730,7 +734,7 @@ describe('CheckIn, run and revert controls', () => {
     renderAs('account_manager', {
       stored,
       saveState: { kind: 'clean' },
-      draft: { answers: { fin_rack_rate: 1 }, notes: '' },
+      draft: { answers: { fin_rack_rate: 1 }, notes: '', bucketNotes: {}, focus: '' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Revert to AI suggested scores' }))
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
@@ -741,7 +745,7 @@ describe('CheckIn, run and revert controls', () => {
   describe('reloading after the stored row is rewritten', () => {
     const seedDraft = () => {
       // A draft that matches the old row: edited, then edited back, never saved.
-      writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'old' })
+      writeDraft(CLIENT.id, PERIOD, { answers: { comm_constructive: 2 }, notes: 'old', bucketNotes: {}, focus: '' })
       expect(readDraft(CLIENT.id, PERIOD)).not.toBeNull()
     }
     const reloadSeesDraft = (overrides: Partial<UseCheckin>) => {
@@ -961,7 +965,7 @@ describe('CheckIn, finance answers after a payment save', () => {
 // Spec 2026-11-04 §4 and §7: Productive hours in Finances and Hours.
 describe('CheckIn, hours from Productive', () => {
   const OCT = '2026-10-01'
-  const blank = { answers: {}, notes: '' }
+  const blank = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
   const LINE = { dealId: 'd1', name: 'Budget A', budgetedHours: 20, workedHours: 21, diffHours: 1, flagged: false }
   const SCORED = {
     applies: true,
@@ -995,7 +999,7 @@ describe('CheckIn, hours from Productive', () => {
     expect(first.setAnswers).toHaveBeenCalledWith({ fin_hours_in_budget: 2 })
 
     // Same visit, cleared by the person: not refilled.
-    const cleared = mockCheckin({ hoursApplies: true, draft: { answers: {}, notes: '' } })
+    const cleared = mockCheckin({ hoursApplies: true, draft: { answers: {}, notes: '', bucketNotes: {}, focus: '' } })
     hookState.current = cleared
     rerender(<CheckIn {...props()} />)
     expect(cleared.setAnswers).not.toHaveBeenCalled()
@@ -1009,7 +1013,7 @@ describe('CheckIn, hours from Productive', () => {
 
   it('does not fill an answer already in the form', () => {
     hours.current = SCORED
-    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '' } })
+    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '', bucketNotes: {}, focus: '' } })
     expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
   })
 
@@ -1029,7 +1033,7 @@ describe('CheckIn, hours from Productive', () => {
     const SCORED_1 = { ...SCORED, answer: { value: 1, reason: 'From Productive: 40h worked vs 20h budgeted (+20h).' } }
     const row = (suggested_at: string | null) =>
       ({ id: 'c1', suggested_at, fin_hours_in_budget: 3, fin_hours_applies: true }) as unknown as UseCheckin['stored']
-    const holding3 = { answers: { fin_hours_in_budget: 3 }, notes: '' }
+    const holding3 = { answers: { fin_hours_in_budget: 3 }, notes: '', bucketNotes: {}, focus: '' }
 
     it('fills 1 over an AI-suggested stored 3, replacing only that 3', () => {
       hours.current = SCORED_1
@@ -1056,7 +1060,7 @@ describe('CheckIn, hours from Productive', () => {
 
     it('does not touch an AI-suggested row whose hours the person has changed in the form', () => {
       hours.current = SCORED_1
-      renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '' }, stored: row('2026-10-29T12:00:00Z') })
+      renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 5 }, notes: '', bucketNotes: {}, focus: '' }, stored: row('2026-10-29T12:00:00Z') })
       expect((hookState.current as UseCheckin).setAnswers).not.toHaveBeenCalled()
     })
 
@@ -1111,7 +1115,7 @@ describe('CheckIn, hours from Productive', () => {
     expect(first.setAnswers).toHaveBeenCalledWith({ fin_rack_rate: 1 })
 
     hours.current = SCORED
-    const later = mockCheckin({ hoursApplies: true, draft: { answers: { fin_rack_rate: 1 }, notes: '' } })
+    const later = mockCheckin({ hoursApplies: true, draft: { answers: { fin_rack_rate: 1 }, notes: '', bucketNotes: {}, focus: '' } })
     hookState.current = later
     rerender(<CheckIn {...props()} />)
     expect(later.setAnswers).toHaveBeenCalledTimes(1)
@@ -1131,7 +1135,7 @@ describe('CheckIn, hours from Productive', () => {
 
   it('shows the hours reason as the hint on the hours question', () => {
     hours.current = SCORED
-    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 2 }, notes: '' } })
+    renderHours('account_manager', { draft: { answers: { fin_hours_in_budget: 2 }, notes: '', bucketNotes: {}, focus: '' } })
     const group = hoursGroup() as HTMLElement
     expect(group.closest('section')?.textContent).toContain('From Productive: 27.5h worked vs 20h budgeted (+7.5h).')
   })
@@ -1167,7 +1171,7 @@ describe('CheckIn, hours from Productive', () => {
     hours.current = SCORED
     finance.after = { fin_rate_increased: { value: 5, reason: 'Up.' } }
     renderHours('admin', {
-      draft: { answers: { fin_hours_in_budget: 3 }, notes: '' },
+      draft: { answers: { fin_hours_in_budget: 3 }, notes: '', bucketNotes: {}, focus: '' },
       stored: { fin_hours_in_budget: 3, fin_hours_applies: true } as unknown as UseCheckin['stored'],
     })
     await act(async () => {

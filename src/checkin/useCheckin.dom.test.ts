@@ -586,3 +586,184 @@ describe('useCheckin: hoursApplies', () => {
     expect(on.result.current.hoursApplies).toBe(true)
   })
 })
+
+describe('useCheckin: bucket notes and focus', () => {
+  const ROW = {
+    client_id: 1,
+    period: '2026-08-01',
+    notes: null,
+    comm_timely: 4,
+    bucket_notes: { growth: { why: 'stalled', actions: 'plan a call' } },
+    focus: 'renewal',
+  }
+
+  it('fills the draft from the stored row', async () => {
+    db.checkins = async () => ({ data: [ROW], error: null })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.bucketNotes).toEqual({ growth: { why: 'stalled', actions: 'plan a call' } })
+    expect(result.current.draft.focus).toBe('renewal')
+  })
+
+  it('fills empty values from a row with a null focus and default bucket_notes', async () => {
+    db.checkins = async () => ({ data: [{ ...ROW, bucket_notes: {}, focus: null }], error: null })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.bucketNotes).toEqual({})
+    expect(result.current.draft.focus).toBe('')
+  })
+
+  it('exposes last month\'s bucket notes and focus', async () => {
+    db.checkins = async () => ({
+      data: [{ ...ROW, period: '2026-07-01', focus: ' july focus ' }],
+      error: null,
+    })
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.lastMonthBucketNotes).toEqual({ growth: { why: 'stalled', actions: 'plan a call' } })
+    expect(result.current.lastMonthFocus).toBe('july focus')
+    // This month has no row: the draft must not borrow last month's text.
+    expect(result.current.draft.bucketNotes).toEqual({})
+    expect(result.current.draft.focus).toBe('')
+  })
+
+  it('gives empty last-month values when there is no row, or a blank focus', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.lastMonthBucketNotes).toEqual({})
+    expect(result.current.lastMonthFocus).toBeNull()
+
+    db.checkins = async () => ({ data: [{ ...ROW, period: '2026-07-01', focus: '  ' }], error: null })
+    const second = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(second.result.current.status).toBe('ready'))
+    expect(second.result.current.lastMonthFocus).toBeNull()
+  })
+
+  // Review Focus 4.
+  it('setBucketNote marks the check-in unsaved and persists the draft; saving clears it', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.saveState.kind).toBe('clean')
+
+    act(() => result.current.setBucketNote('delivery', 'why', 'late twice'))
+    expect(result.current.saveState.kind).toBe('dirty')
+    expect(result.current.draft.bucketNotes).toEqual({ delivery: { why: 'late twice' } })
+    expect(readDraft(1, '2026-08-01')?.bucketNotes).toEqual({ delivery: { why: 'late twice' } })
+    // Notes alone are content: a draft, not "Not started".
+    expect(result.current.hasContent).toBe(true)
+    // ...and never an answer.
+    expect(result.current.scored).toBe(0)
+
+    act(() => result.current.submit())
+    await waitFor(() => expect(result.current.saveState.kind).toBe('saved'))
+    expect(readDraft(1, '2026-08-01')).toBeNull()
+  })
+
+  it('setFocus marks the check-in unsaved and persists the draft', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setFocus('renewal'))
+    expect(result.current.saveState.kind).toBe('dirty')
+    expect(result.current.draft.focus).toBe('renewal')
+    expect(readDraft(1, '2026-08-01')?.focus).toBe('renewal')
+    expect(result.current.hasContent).toBe(true)
+  })
+
+  it('two edits in a row both survive', async () => {
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setBucketNote('growth', 'why', 'w'))
+    act(() => result.current.setBucketNote('growth', 'actions', 'a'))
+    act(() => result.current.setFocus('f'))
+    act(() => result.current.setAnswer('comm_timely', 3))
+    expect(result.current.draft.bucketNotes).toEqual({ growth: { why: 'w', actions: 'a' } })
+    expect(result.current.draft.focus).toBe('f')
+    expect(result.current.draft.answers.comm_timely).toBe(3)
+  })
+
+  it('sends bucket_notes and focus, trimmed, in the upsert', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setBucketNote('communication', 'actions', ' weekly call \n'))
+    act(() => result.current.setFocus('  renewal  '))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    const payload = upsert.mock.calls[0][0]
+    expect(payload.bucket_notes).toEqual({ communication: { actions: 'weekly call' } })
+    expect(payload.focus).toBe('renewal')
+  })
+
+  // Review Focus 3: the DB CHECK refuses "  ", so it must never be sent.
+  it('saves whitespace-only notes as absent and a blank focus as null', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.setBucketNote('growth', 'why', '   '))
+    act(() => result.current.setBucketNote('delivery', 'actions', 'real'))
+    act(() => result.current.setFocus('  '))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    const payload = upsert.mock.calls[0][0]
+    expect(payload.bucket_notes).toEqual({ delivery: { actions: 'real' } })
+    expect('focus' in payload).toBe(true)
+    expect(payload.focus).toBeNull()
+  })
+
+  it('sends {} and null for a check-in with no notes or focus at all', async () => {
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer('comm_timely', 4))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    const payload = upsert.mock.calls[0][0]
+    expect(payload.bucket_notes).toEqual({})
+    expect(payload.focus).toBeNull()
+  })
+
+  it('a stored local draft with different notes wins on load and reads as unsaved', async () => {
+    db.checkins = async () => ({ data: [ROW], error: null })
+    window.localStorage.setItem(
+      'checkin-draft:v5:1:2026-08-01',
+      JSON.stringify({ answers: { comm_timely: 4 }, notes: '', bucketNotes: { growth: { why: 'changed' } }, focus: 'renewal' }),
+    )
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.unsavedFromEarlierVisit).toBe(true)
+    expect(result.current.draft.bucketNotes).toEqual({ growth: { why: 'changed' } })
+    expect(result.current.saveState.kind).toBe('dirty')
+  })
+
+  it('a local draft matching the row, bar whitespace, is not an unsaved change', async () => {
+    db.checkins = async () => ({ data: [ROW], error: null })
+    window.localStorage.setItem(
+      'checkin-draft:v5:1:2026-08-01',
+      JSON.stringify({
+        answers: { comm_timely: 4 },
+        notes: '',
+        bucketNotes: { growth: { why: 'stalled ', actions: 'plan a call' } },
+        focus: 'renewal\n',
+      }),
+    )
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.unsavedFromEarlierVisit).toBe(false)
+    expect(result.current.saveState.kind).toBe('clean')
+  })
+
+  // Review Focus 1, through the hook: a v4 draft from before this change
+  // still wins over the row with its answers, and does not crash.
+  it('restores a v4 local draft\'s answers with empty notes', async () => {
+    db.checkins = async () => ({ data: [{ ...ROW, bucket_notes: {}, focus: null }], error: null })
+    window.localStorage.setItem(
+      'checkin-draft:v4:1:2026-08-01',
+      JSON.stringify({ answers: { comm_timely: 2 }, notes: 'typed before the upgrade' }),
+    )
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.draft.answers.comm_timely).toBe(2)
+    expect(result.current.draft.notes).toBe('typed before the upgrade')
+    expect(result.current.draft.bucketNotes).toEqual({})
+    expect(result.current.draft.focus).toBe('')
+    expect(result.current.unsavedFromEarlierVisit).toBe(true)
+  })
+})

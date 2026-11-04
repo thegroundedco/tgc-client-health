@@ -1,5 +1,7 @@
 import { ALL_QUESTIONS, HOURS_QUESTION } from '../lib/buckets'
 import type { Answers } from '../lib/scoreV2'
+import { cleanBucketNotes, focusForSave } from './bucketNotes'
+import type { BucketNotes } from './bucketNotes'
 
 // The two finance answers an AI run never scores: they are facts about the
 // contract, not judgments, so a revert leaves the person's values alone. The
@@ -17,6 +19,13 @@ export type AiSuggestion = {
   run_id: number | null
   notes: string
   answers: Answers
+  // Optional, and absent from every suggestion written before 2026-11-04.
+  // Absent (undefined) means "this suggestion says nothing about them", and a
+  // revert then leaves the person's own values alone. Present means the AI
+  // had a view, even an empty one: {} and null are carried values, and a
+  // revert writes them.
+  bucket_notes?: BucketNotes
+  focus?: string | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -36,7 +45,15 @@ export function parseAiSuggestion(value: unknown): AiSuggestion | null {
     if (answer !== null && typeof answer !== 'number') return null
     clean[key] = answer
   }
-  return { suggested_at, run_id, notes, answers: clean }
+  const parsed: AiSuggestion = { suggested_at, run_id, notes, answers: clean }
+  // Tolerant, unlike the fields above: a malformed bucket_notes or focus
+  // costs only that field, never the whole suggestion -- the answers are what
+  // revert exists for. Malformed reads as not carried, so revert keeps the
+  // person's own text rather than writing nothing over it.
+  if (isRecord(value.bucket_notes)) parsed.bucket_notes = cleanBucketNotes(value.bucket_notes)
+  if (value.focus === null) parsed.focus = null
+  else if (typeof value.focus === 'string') parsed.focus = focusForSave(value.focus)
+  return parsed
 }
 
 export function revertedAnswers(current: Answers, ai: AiSuggestion): Answers {
