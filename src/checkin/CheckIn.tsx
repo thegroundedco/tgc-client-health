@@ -1,8 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, HOURS_QUESTION, PAYMENTS_BUCKET, questionsFor } from '../lib/buckets'
-import { BAND_LABELS, MAX_SCORE, bandFor } from '../lib/scoreV2'
+import { BAND_LABELS, MAX_SCORE, bandFor, bucketScore } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
-import { formatPeriod, formatSavedAt } from '../lib/month'
+import { formatPeriod, formatSavedAt, monthName } from '../lib/month'
+import { scoreChange } from '../lib/scoreChange'
+import { BUCKET_SCORE_KEY } from '../board/cardSummary'
+import { ChangeText } from '../board/ChangeMark'
 import { bandClassName } from '../styles/bandClass'
 import type { Profile } from '../auth/useProfile'
 import { can } from '../lib/capabilities'
@@ -230,6 +233,9 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     <HoursBox onRetry={() => setHoursVersion((version) => version + 1)} result={hours} />
   )
   const label = submitLabel(scored, required)
+  // "vs Sep": the month this screen compares against, short (brief 2026-11-04 B).
+  const since = monthName(lastPeriod, 'short')
+  const overallChange = scoreChange(localOverall, lastOverall)
   const gate = advocacyGate(client.started_on, period)
 
   // The third caller of can() in the application, after the two in
@@ -413,6 +419,14 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           <span className={bandClassName(bandFor(overall))} data-testid="overall-band">
             {BAND_LABELS[bandFor(overall)]}
           </span>
+          {/* Brief 2026-11-04 B: the draft's overall against last month's
+              stored one. Nothing when either is missing -- an arrow against a
+              month with no score would invent a rise or a fall. */}
+          {overallChange !== null && (
+            <p className={`t-caption ${styles.change}`} data-testid="overall-change">
+              <ChangeText change={overallChange} /> vs {since}
+            </p>
+          )}
         </div>
 
         {/* §5.2: last month alongside, because a score compared is a judgment
@@ -500,6 +514,12 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           // Only Advocacy is gated, and it is named rather than compared to a
           // string so the gate has one definition (buckets.ts).
           const shut = bucket === GATED_BUCKET && !advocacyApplies
+          // Brief 2026-11-04 B: this month's bucket score from the live draft,
+          // beside last month's stored column. Only a finished bucket has a
+          // score (bucketScore is null until every question is answered), and
+          // a shut Advocacy bucket has neither score nor change.
+          const now = shut ? null : bucketScore(draft.answers, bucket, hoursApplies)
+          const change = scoreChange(now, lastMonth?.[BUCKET_SCORE_KEY[bucket]] ?? null)
           return (
             // Spec 2026-11-04 §2: questions on the left, a notes panel on the
             // right (a grid, CheckIn.module.css; one column on a narrow
@@ -512,9 +532,22 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
               key={bucket}
             >
               <div className={styles.bucketQuestions}>
-                <h3 className="t-subhead" data-testid="bucket-heading">
-                  {definition.label}
-                </h3>
+                <div className={styles.bucketHead}>
+                  <h3 className="t-subhead" data-testid="bucket-heading">
+                    {definition.label}
+                  </h3>
+                  {now !== null && (
+                    <p className={`t-caption ${styles.change}`} data-testid={`bucket-score-${bucket}`}>
+                      <span className="t-label numeric">{formatOverall(now)}</span>
+                      {change !== null && (
+                        <>
+                          {' '}
+                          <ChangeText change={change} /> vs {since}
+                        </>
+                      )}
+                    </p>
+                  )}
+                </div>
 
                 {hasScale && <ScaleLegend />}
 

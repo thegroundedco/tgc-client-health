@@ -1481,3 +1481,113 @@ describe('CheckIn, bucket notes through the real hook', () => {
     })
   })
 })
+
+// Brief 2026-11-04 part B: the month-over-month change beside each bucket
+// heading and under the overall. The hook's lastPeriod is 2026-07-01, so the
+// comparison month reads "Jul". Fixtures carry only the columns read.
+describe('CheckIn, month-over-month change', () => {
+  const COMM_COMPLETE = { comm_constructive: 4, comm_timely: 4, comm_consistent: 3 } // 3.67
+  const ADV_COMPLETE = { adv_left_review: 5, adv_case_study: 5, adv_would_refer: 5, adv_reference_check: 5 }
+  const last = (row: Record<string, unknown>) => row as unknown as UseCheckin['lastMonth']
+  const draftWith = (answers: Record<string, number>) => ({ answers, notes: '', bucketNotes: {}, focus: '' })
+  const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim()
+
+  it('shows the bucket score and an up arrow against last month', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: last({ comm_score: 3.34 }) })
+    const score = screen.getByTestId('bucket-score-communication')
+    expect(text(score)).toBe('3.67 ▲ +0.33 vs Jul')
+    expect(within(score).getByTestId('score-change').dataset.direction).toBe('up')
+  })
+
+  it('sits beside the heading, inside the bucket it scores', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: last({ comm_score: 3.33 }) })
+    const bucket = screen.getByTestId('bucket-communication')
+    const score = within(bucket).getByTestId('bucket-score-communication')
+    const heading = within(bucket).getByTestId('bucket-heading')
+    expect(score.parentElement).toBe(heading.parentElement)
+    // The heading's own text is untouched.
+    expect(heading.textContent).toBe('Communication')
+  })
+
+  it('shows a down arrow with a true minus', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: last({ comm_score: 4.17 }) })
+    const score = screen.getByTestId('bucket-score-communication')
+    expect(text(score)).toBe('3.67 ▼ −0.50 vs Jul')
+    expect(within(score).getByTestId('score-change').dataset.direction).toBe('down')
+  })
+
+  it('says no change in words when the scores match', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: last({ comm_score: 3.67 }) })
+    expect(text(screen.getByTestId('bucket-score-communication'))).toBe('3.67 no change vs Jul')
+  })
+
+  it('shows the score alone when last month has no score for the bucket', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: last({ comm_score: null }) })
+    const score = screen.getByTestId('bucket-score-communication')
+    expect(text(score)).toBe('3.67')
+    expect(within(score).queryByTestId('score-change')).toBeNull()
+  })
+
+  it('shows the score alone when there is no check-in last month at all', () => {
+    renderAs('account_manager', { draft: draftWith(COMM_COMPLETE), lastMonth: null })
+    expect(text(screen.getByTestId('bucket-score-communication'))).toBe('3.67')
+  })
+
+  it('shows nothing for a bucket this month has not finished', () => {
+    renderAs('account_manager', {
+      draft: draftWith({ comm_constructive: 4, comm_timely: 4 }),
+      lastMonth: last({ comm_score: 3.33 }),
+    })
+    expect(screen.queryByTestId('bucket-score-communication')).toBeNull()
+  })
+
+  it('reads each bucket against its own column', () => {
+    renderAs('account_manager', {
+      draft: draftWith({ ...COMM_COMPLETE, del_on_time: 2, del_quantity: 2, del_client_likes: 2, del_we_are_proud: 2 }),
+      lastMonth: last({ comm_score: 3.67, del_score: 3 }),
+    })
+    expect(text(screen.getByTestId('bucket-score-communication'))).toBe('3.67 no change vs Jul')
+    expect(text(screen.getByTestId('bucket-score-delivery'))).toBe('2.00 ▼ −1.00 vs Jul')
+  })
+
+  it('shows an open Advocacy bucket like any other', () => {
+    renderAs('account_manager', { draft: draftWith(ADV_COMPLETE), lastMonth: last({ adv_score: 3 }) })
+    expect(text(screen.getByTestId('bucket-score-advocacy'))).toBe('5.00 ▲ +2.00 vs Jul')
+  })
+
+  it('shows no score and no change for Advocacy while its gate is shut', () => {
+    hookState.current = mockCheckin({
+      advocacyApplies: false,
+      draft: draftWith(ADV_COMPLETE),
+      lastMonth: last({ adv_score: 3 }),
+    })
+    render(
+      <CheckIn
+        client={{ ...CLIENT, started_on: null }}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+        onEditClient={() => {}}
+      />,
+    )
+    expect(screen.queryByTestId('bucket-score-advocacy')).toBeNull()
+    expect(within(screen.getByTestId('bucket-advocacy')).queryByTestId('score-change')).toBeNull()
+  })
+
+  it('gives the overall the same change line, this month against last', () => {
+    renderAs('account_manager', { localOverall: 3.5, lastOverall: 3 })
+    const change = screen.getByTestId('overall-change')
+    expect(text(change)).toBe('▲ +0.50 vs Jul')
+    expect(within(change).getByTestId('score-change').dataset.direction).toBe('up')
+  })
+
+  it('draws no overall change when this month has no overall', () => {
+    renderAs('account_manager', { localOverall: null, lastOverall: 3 })
+    expect(screen.queryByTestId('overall-change')).toBeNull()
+  })
+
+  it('draws no overall change when last month has no overall', () => {
+    renderAs('account_manager', { localOverall: 3.5, lastOverall: null })
+    expect(screen.queryByTestId('overall-change')).toBeNull()
+  })
+})

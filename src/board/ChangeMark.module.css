@@ -1,0 +1,47 @@
+/* The month-over-month change chip (brief 2026-11-04, part B): the owner's
+   "little green and red arrows". Up is the healthy teal, down the risk red,
+   no change the not-scored stone -- the band fills, all three pinned out of
+   the dark flip, so the chip is the same in both themes.
+
+   A filled chip with an ink label, exactly like .band in base.css, and for
+   the same reason: no semantic token is a green that passes as TEXT on paper
+   (teal type is 1.89:1), so the colour goes on the fill and the label takes
+   --text-on-band. Measured with the WCAG 2.x formula: ink on teal 8.13:1, on
+   red 4.61:1, on stone 9.88:1, in both themes, because neither side flips.
+
+   Colour is never the only signal (Nick is colourblind, and teal against red
+   is 1.76:1): every chip carries its arrow glyph and its sign, or the words
+   "no change", and the board's compact form carries an aria-label and a title.
+
+   The two custom properties are this module's own, set per direction below,
+   rather than new tokens in tokens.css. They only ever point at SEMANTIC
+   tokens, so the palette stays where it is. */
+.change {
+  --change-fill: var(--band-none);
+  --change-text: var(--text-on-band);
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--change-fill);
+  color: var(--change-text);
+  font-family: var(--face-caption);
+  font-stretch: var(--wdth-caption);
+  font-weight: var(--wght-caption);
+  font-size: var(--step--1);
+  line-height: var(--leading-numeric);
+  white-space: nowrap;
+}
+
+.up {
+  --change-fill: var(--band-healthy);
+}
+
+.down {
+  --change-fill: var(--band-risk);
+}
+
+.same {
+  --change-fill: var(--band-none);
+}

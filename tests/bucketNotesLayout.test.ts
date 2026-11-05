@@ -131,3 +131,15 @@ describe('the bucket notes panel weight', () => {
     expect(block(checkin, '.bucket')).not.toMatch(/align-items|place-items/)
   })
 })
+
+describe('the bucket heading line', () => {
+  const source = css('src/checkin/CheckIn.module.css')
+
+  it('puts the score beside the heading, wrapping under it when there is no room', () => {
+    const head = block(source, '.bucketHead')
+    expect(declares(head, 'display', 'flex')).toBe(true)
+    expect(declares(head, 'flex-wrap', 'wrap')).toBe(true)
+    expect(declares(head, 'align-items', 'baseline')).toBe(true)
+    expect(head).not.toMatch(/justify-content|margin/)
+  })
+})
