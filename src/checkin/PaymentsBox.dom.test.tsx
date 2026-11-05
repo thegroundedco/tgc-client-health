@@ -168,6 +168,15 @@ describe('PaymentsBox', () => {
     })
   })
 
+  it('keeps the saved notes when only the project amount changes', async () => {
+    const p = fake({ row: { ...ROW, project_notes: 'x' } })
+    setup(p)
+    await userEvent.clear(project())
+    await userEvent.type(project(), '900')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 90000, projectNotes: 'x', setRetainer: false })
+  })
+
   it('sends whitespace-only notes as null', async () => {
     const p = fake()
     setup(p)
