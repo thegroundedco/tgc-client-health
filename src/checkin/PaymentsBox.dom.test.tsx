@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { MonthRow } from '../revenue/paymentBox'
@@ -165,7 +165,9 @@ describe('PaymentsBox', () => {
     expect(screen.getByText('Project line items')).toBeTruthy()
     expect(label().value).toBe('')
     expect(label().placeholder).toBe('e.g. Photo shoot')
-    expect(label().maxLength).toBe(120)
+    // No maxLength: padding must not count. The trimmed label is what is
+    // checked, at Save (see the 120-character test below).
+    expect(label().hasAttribute('maxlength')).toBe(false)
     expect(amount().value).toBe('')
     expect(amount().placeholder).toBe('$0')
     expect(amount().inputMode).toBe('decimal')
@@ -190,6 +192,60 @@ describe('PaymentsBox', () => {
     await userEvent.type(label(2), 'Dev')
     await userEvent.type(amount(2), '250.50')
     expect(total()).toBe('Project total: $1,250.50')
+  })
+
+  // Review of brief 2026-11-05 B, Important 3: real multi-item months.
+  it('a saved month with two items, editing only the retainer, sends both items unchanged', async () => {
+    const p = fake({ row: { ...ROW, project_cents: 175000 }, items: ITEMS })
+    setup(p)
+    await userEvent.clear(retainer())
+    await userEvent.type(retainer(), '3000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.queryByText(/from now on/)).toBeNull()
+    expect(p.save).toHaveBeenCalledWith({
+      retainerCents: 300000, projectCents: 175000, projectNotes: null, items: ITEMS, setRetainer: false,
+    })
+  })
+
+  it('removing both items sends an empty list and a project of 0', async () => {
+    const p = fake({ row: { ...ROW, project_cents: 175000 }, items: ITEMS })
+    setup(p)
+    await userEvent.click(screen.getByRole('button', { name: 'Remove line item 2' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove line item 1' }))
+    expect(screen.queryByLabelText('Line item 1 label')).toBeNull()
+    expect(total()).toBe('Project total: $0')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(p.save).toHaveBeenCalledWith({
+      retainerCents: 300000, projectCents: 0, projectNotes: null, items: [], setRetainer: false,
+    })
+  })
+
+  it('keeps each row with its own text when an earlier row is removed (stable keys)', async () => {
+    setup(fake({ row: { ...ROW, project_cents: 175000 }, items: ITEMS }))
+    const second = label(2)
+    await userEvent.click(screen.getByRole('button', { name: 'Remove line item 1' }))
+    // The same input element now sits first, still holding its own label.
+    expect(label(1)).toBe(second)
+    expect(label(1).value).toBe('Dev fees')
+  })
+
+  it('counts a label\'s length after trimming: 120 characters with padding saves, 121 does not', async () => {
+    const p = fake()
+    setup(p)
+    fireEvent.change(label(), { target: { value: `  ${'a'.repeat(120)}  ` } })
+    await userEvent.type(amount(), '5')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(p.save).toHaveBeenCalledWith(expect.objectContaining({ items: [{ label: 'a'.repeat(120), cents: 500 }] }))
+    fireEvent.change(label(), { target: { value: 'a'.repeat(121) } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByText('Keep the label to 120 characters.')).toBeTruthy()
+    expect(p.save).toHaveBeenCalledTimes(1)
+  })
+
+  it('labels an older month\'s single row with its short note', () => {
+    setup(fake({ row: { ...ROW, project_notes: 'Photo shoot' } }))
+    expect(label().value).toBe('Photo shoot')
+    expect(screen.getByTestId('earlier-note').textContent).toBe('Earlier note: Photo shoot')
   })
 
   it('Remove takes the row out, and its amount out of the total', async () => {
@@ -272,7 +328,7 @@ describe('PaymentsBox', () => {
     expect(screen.getByTestId('earlier-note').textContent).toBe('Earlier note: $500 dev fees')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(p.save).toHaveBeenCalledWith({
-      retainerCents: 300000, projectCents: 50000, projectNotes: '$500 dev fees', items: [{ label: 'Project', cents: 50000 }], setRetainer: false,
+      retainerCents: 300000, projectCents: 50000, projectNotes: '$500 dev fees', items: [{ label: '$500 dev fees', cents: 50000 }], setRetainer: false,
     })
   })
 

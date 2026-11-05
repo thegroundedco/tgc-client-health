@@ -46,6 +46,15 @@ describe('initialFields', () => {
   it('turns an older month with a project amount and no items into one Project row', () => {
     expect(initialFields(row(400000, 50000), []).items).toEqual([{ label: 'Project', amount: '500' }])
   })
+  it("labels that older row with the month's note when the note fits a label", () => {
+    const noted = (note: string) => ({ ...row(400000, 50000), project_notes: note })
+    expect(initialFields(noted('  Photo shoot  '), []).items).toEqual([{ label: 'Photo shoot', amount: '500' }])
+    expect(initialFields(noted('a'.repeat(120)), []).items[0].label).toBe('a'.repeat(120))
+    expect(initialFields(noted('a'.repeat(121)), []).items[0].label).toBe('Project')
+    expect(initialFields(noted('   '), []).items[0].label).toBe('Project')
+    // Saved items keep their own labels whatever the note says.
+    expect(initialFields(noted('Photo shoot'), [{ label: 'Dev', cents: 1 }]).items[0].label).toBe('Dev')
+  })
   it('gives a saved month with no project work one empty row', () => {
     expect(initialFields(row(400000, 0), []).items).toEqual([EMPTY])
   })
@@ -62,6 +71,9 @@ describe('displayItems', () => {
   })
   it('is one Project item for an older month with only an amount', () => {
     expect(displayItems(row(1, 50000), [])).toEqual([{ label: 'Project', cents: 50000 }])
+  })
+  it('takes a short note as that item\'s label', () => {
+    expect(displayItems({ ...row(1, 50000), project_notes: 'Photo shoot' }, [])).toEqual([{ label: 'Photo shoot', cents: 50000 }])
   })
   it('is nothing with no project amount, or no row', () => {
     expect(displayItems(row(1, 0), [])).toEqual([])

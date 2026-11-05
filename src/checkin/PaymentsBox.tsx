@@ -1,11 +1,11 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { shortDay } from '../lib/month'
 import { formatMoney, MAX_CENTS } from '../revenue/money'
 import {
-  boxMode, checkItems, displayItems, effectiveRetainer, ghostRetainer, initialFields, LABEL_MAX, monthName, paymentCaption,
+  boxMode, checkItems, displayItems, effectiveRetainer, ghostRetainer, initialFields, monthName, paymentCaption,
   projectTotal, retainerQuestion, shouldAskRetainer,
 } from '../revenue/paymentBox'
-import type { Fields, ItemField, ProjectItem } from '../revenue/paymentBox'
+import type { ItemField, MonthRow, ProjectItem } from '../revenue/paymentBox'
 import type { UseMonthPayment } from '../revenue/useMonthPayment'
 import styles from './PaymentsBox.module.css'
 
@@ -23,12 +23,21 @@ type Props = {
 
 type Ask = { retainerCents: number; projectCents: number; items: ProjectItem[] }
 
-const EMPTY_ITEM: ItemField = { label: '', amount: '' }
+// A row as typed, with a key of its own: removing row 1 must not hand row
+// 2's input (and its focus or caret) to what was row 3.
+type KeyedItem = ItemField & { key: number }
+type KeyedFields = { retainer: string; items: KeyedItem[] }
 
 // Spec 2026-11-02 §3-4. Draws what paymentBox.ts decided; no rule lives here.
 export function PaymentsBox({ clientId, clientName, period, canEdit, payment, onSaved }: Props) {
   const { status, row, items, storedRetainer } = payment
-  const [fields, setFields] = useState<Fields>(() => initialFields(row, items))
+  const nextKey = useRef(0)
+  const keyed = (item: ItemField): KeyedItem => ({ ...item, key: nextKey.current++ })
+  const fresh = (r: MonthRow | null, saved: ProjectItem[]): KeyedFields => {
+    const initial = initialFields(r, saved)
+    return { retainer: initial.retainer, items: initial.items.map(keyed) }
+  }
+  const [fields, setFields] = useState<KeyedFields>(() => fresh(row, items))
   // One per line item, null where the row is fine. Set by a refused save and
   // cleared row by row as the person edits.
   const [itemErrors, setItemErrors] = useState<(string | null)[]>([])
@@ -40,7 +49,7 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
   // Reset when the row or its items are replaced (a reload after save, or
   // another month), not on every render: typing must survive a re-render.
   useEffect(() => {
-    setFields(initialFields(row, items))
+    setFields(fresh(row, items))
     setItemErrors([])
     setProblem(null)
     setAsk(null)
@@ -154,7 +163,7 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
   }
 
   function addItem() {
-    setFields({ ...fields, items: [...fields.items, EMPTY_ITEM] })
+    setFields({ ...fields, items: [...fields.items, keyed({ label: '', amount: '' })] })
     setAsk(null)
   }
 
@@ -192,12 +201,11 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
           const errorId = `${errorIdBase}-item-${index}`
           const described = error ? { 'aria-describedby': errorId, 'aria-invalid': true as const } : {}
           return (
-            <div className={styles.itemRow} key={index}>
+            <div className={styles.itemRow} key={item.key}>
               <input
                 aria-label={`Line item ${n} label`}
                 className={`field ${styles.itemLabel}`}
                 disabled={saving}
-                maxLength={LABEL_MAX}
                 onChange={(e) => editItem(index, { label: e.target.value })}
                 placeholder="e.g. Photo shoot"
                 value={item.label}

@@ -97,7 +97,7 @@
   gap: var(--space-1);
 }
 
-/* The overall's change chip, on the score's line. */
+/* The overall's change mark (coloured text), on the score's line. */
 .change {
   display: inline-flex;
   align-self: center;

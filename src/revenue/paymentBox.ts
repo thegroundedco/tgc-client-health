@@ -34,11 +34,16 @@ const isEmptyItem = (item: ItemField) => item.label.trim() === '' && item.amount
 const plain = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))
 
 // What a month shows as its line items, read-only. An older month saved before
-// items existed has only an amount: it shows as one item labelled Project, so
-// the figure is never hidden.
+// items existed has only an amount: it shows as one item, so the figure is
+// never hidden. Its label is the month's note when the note, trimmed, fits a
+// label (it usually said what the amount was for), and Project otherwise.
 export function displayItems(row: MonthRow | null, items: ProjectItem[]): ProjectItem[] {
   if (items.length > 0) return items
-  if (row && row.project_cents > 0) return [{ label: 'Project', cents: row.project_cents }]
+  if (row && row.project_cents > 0) {
+    const note = row.project_notes?.trim() ?? ''
+    const label = note !== '' && note.length <= LABEL_MAX ? note : 'Project'
+    return [{ label, cents: row.project_cents }]
+  }
   return []
 }
 

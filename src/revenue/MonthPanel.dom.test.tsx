@@ -87,8 +87,10 @@ describe('MonthPanel project line items', () => {
     const items = screen.getAllByTestId('month-panel-project-item')
     expect(items.map((item) => item.textContent)).toEqual(['Photo shoot – $600', 'Dev – $400'])
     expect(items.every((item) => item.closest('tr')?.textContent?.includes('Acme'))).toBe(true)
-    // The items replace the notes line.
-    expect(screen.queryByTestId('month-panel-project-notes')).toBeNull()
+    // The earlier note still shows, under the items, so nothing is lost.
+    const notes = screen.getByTestId('month-panel-project-notes')
+    expect(notes.textContent).toBe('Project notes: older words')
+    expect(items[items.length - 1].compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows the notes line when a client has notes and no items', () => {
