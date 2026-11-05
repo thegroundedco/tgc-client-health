@@ -1534,6 +1534,26 @@ describe('CheckIn, month-over-month change', () => {
     expect(within(change).getByTestId('score-change').dataset.direction).toBe('up')
   })
 
+  // Brief 2026-11-05 B2: the owner circled the change under the HEALTHY band
+  // and drew it to the right of the big numbers. It is the next item after
+  // last month's block, in the same row, and not inside this month's column.
+  it('puts the overall change after both score blocks, outside this month', () => {
+    renderAs('account_manager', { localOverall: 3.5, lastOverall: 3 })
+    const change = screen.getByTestId('overall-change')
+    const thisMonth = screen.getByTestId('total-this-month')
+    const lastMonth = screen.getByTestId('total-last-month')
+    expect(thisMonth.contains(change)).toBe(false)
+    expect(lastMonth.contains(change)).toBe(false)
+    expect(thisMonth.compareDocumentPosition(lastMonth) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(lastMonth.compareDocumentPosition(change) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Same row: a sibling of the two blocks, and the very next one.
+    expect(change.parentElement).toBe(lastMonth.parentElement)
+    expect(lastMonth.nextElementSibling).toBe(change)
+    // Not under the band any more.
+    expect(thisMonth.contains(screen.getByTestId('overall-band'))).toBe(true)
+    expect(thisMonth.querySelector('[data-testid="score-change"]')).toBeNull()
+  })
+
   it('draws no overall change when this month has no overall', () => {
     renderAs('account_manager', { localOverall: null, lastOverall: 3 })
     expect(screen.queryByTestId('overall-change')).toBeNull()

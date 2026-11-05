@@ -398,7 +398,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       />
 
       <div className={styles.totals}>
-        <div className={styles.total}>
+        <div className={styles.total} data-testid="total-this-month">
           <p className="t-label">This month</p>
           <p className={styles.totalLine}>
             {/* An incomplete check-in shows an em dash, never a number. §3.3:
@@ -417,20 +417,11 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           <span className={bandClassName(bandFor(overall))} data-testid="overall-band">
             {BAND_LABELS[bandFor(overall)]}
           </span>
-          {/* Brief 2026-11-04 B: the draft's overall against last month's
-              stored one. Nothing when either is missing -- an arrow against a
-              month with no score would invent a rise or a fall. */}
-          {overallChange !== null && (
-            <p className={`t-caption ${styles.change}`} data-testid="overall-change">
-              <ChangeText change={overallChange} label={describeChange('Overall', overallChange, sinceLong)} />{' '}
-              <span aria-hidden="true">vs {since}</span>
-            </p>
-          )}
         </div>
 
         {/* §5.2: last month alongside, because a score compared is a judgment
             and a score alone is a guess. */}
-        <div className={styles.total}>
+        <div className={styles.total} data-testid="total-last-month">
           <p className="t-label">{formatPeriod(lastPeriod)}</p>
           <p className={styles.totalLine}>
             <span className={`t-display ${styles.totalValue} numeric`}>
@@ -444,6 +435,32 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
             {BAND_LABELS[bandFor(lastOverall)]}
           </span>
         </div>
+
+        {/* Brief 2026-11-04 B: the draft's overall against last month's
+            stored one. Nothing when either is missing -- an arrow against a
+            month with no score would invent a rise or a fall.
+            Brief 2026-11-05 B2: beside the big numbers, the next item after
+            last month's block, not under this month's band. It is a third
+            column shaped like the two before it -- an empty label row, then a
+            line with a display-size strut -- so flex baseline alignment puts
+            the mark on the numbers' baseline with no offsets. Both struts are
+            aria-hidden non-breaking spaces. */}
+        {overallChange !== null && (
+          <div className={styles.total} data-testid="overall-change">
+            <p aria-hidden="true" className="t-label">
+              {'\u00a0'}
+            </p>
+            <p className={styles.totalLine}>
+              <span aria-hidden="true" className={`t-display ${styles.totalValue}`}>
+                {'\u00a0'}
+              </span>
+              <span className={`t-caption ${styles.change}`}>
+                <ChangeText change={overallChange} label={describeChange('Overall', overallChange, sinceLong)} />{' '}
+                <span aria-hidden="true">vs {since}</span>
+              </span>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Fix round 1: mounted unconditionally, once the screen is ready,
