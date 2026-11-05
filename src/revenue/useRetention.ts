@@ -37,7 +37,7 @@ const ROSTER_COLUMNS = 'id, name, status, started_on, ended_on, end_reason_code'
 // arrive. retentionMath.test.ts proves it behaviourally -- feeding it rows WITH
 // project work leaves every rate unchanged -- which is a stronger statement than
 // a column missing from a string.
-const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents'
+const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents, project_notes'
 
 export type UseRetention = {
   status: 'loading' | 'ready' | 'error'

@@ -42,6 +42,31 @@ function show(over: Partial<Parameters<typeof MonthPanel>[0]> = {}) {
   )
 }
 
+describe('MonthPanel project notes', () => {
+  it('shows the notes under the project amount, prefixed, only for the client that has them', () => {
+    show({ rows: [...ROWS.slice(0, 2), { ...row(1, PERIOD, 500000, 100000), project_notes: '$1,000 dev fees' }, row(2, PERIOD, 200000)] })
+
+    const notes = screen.getAllByTestId('month-panel-project-notes')
+    expect(notes).toHaveLength(1)
+    expect(notes[0].textContent).toBe('Project notes: $1,000 dev fees')
+    expect(notes[0].closest('tr')?.textContent).toContain('Acme')
+  })
+
+  it('shows nothing when notes are absent, null or blank', () => {
+    show({
+      rows: [
+        row(1, PERIOD, 500000, 100000),
+        { ...row(2, PERIOD, 200000), project_notes: null },
+        { ...row(3, PERIOD, 100000), project_notes: '   ' },
+      ],
+      clients: [...CLIENTS, client(3, 'Gamma')],
+    })
+
+    expect(screen.queryByTestId('month-panel-project-notes')).toBeNull()
+    expect(document.body.textContent).not.toContain('Project notes')
+  })
+})
+
 describe('MonthPanel', () => {
   it('names the month it is showing', () => {
     show()

@@ -6,7 +6,13 @@ import { formatMoney, parseMoney } from './money'
 // wrong (blank under a ghost, a typed 0, an untouched retainer) are invisible
 // until somebody hits them, and a pure function is where they can be pinned.
 
-export type MonthRow = { retainer_cents: number; project_cents: number; entered_by: string | null; updated_at: string }
+export type MonthRow = {
+  retainer_cents: number
+  project_cents: number
+  project_notes: string | null
+  entered_by: string | null
+  updated_at: string
+}
 export type BoxMode = 'confirm' | 'save' | 'readonly'
 
 // Plain-number strings, NOT formatMoney output: no "$" and no commas, so
@@ -14,9 +20,17 @@ export type BoxMode = 'confirm' | 'save' | 'readonly'
 // anything else keeps both digits so no cent is lost on the round trip.
 const plain = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))
 
-export function initialFields(row: MonthRow | null): { retainer: string; project: string } {
-  if (!row) return { retainer: '', project: '' }
-  return { retainer: plain(row.retainer_cents), project: plain(row.project_cents) }
+export function initialFields(row: MonthRow | null): { retainer: string; project: string; notes: string } {
+  if (!row) return { retainer: '', project: '', notes: '' }
+  return { retainer: plain(row.retainer_cents), project: plain(row.project_cents), notes: row.project_notes ?? '' }
+}
+
+// What the notes field sends: trimmed, and null when nothing is left, so a
+// whitespace-only note is no note. The database does the same (nullif/btrim);
+// this keeps the wire value honest too.
+export function notesForSave(typed: string): string | null {
+  const trimmed = typed.trim()
+  return trimmed === '' ? null : trimmed
 }
 
 // Blank under a ghost means the ghost: the person who types only a project

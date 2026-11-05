@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { shortDay } from '../lib/month'
 import { formatMoney, MAX_CENTS, parseMoney } from '../revenue/money'
 import {
-  boxMode, effectiveRetainer, ghostRetainer, initialFields, monthName, paymentCaption, retainerQuestion, shouldAskRetainer,
+  boxMode, effectiveRetainer, ghostRetainer, initialFields, monthName, notesForSave, paymentCaption, retainerQuestion, shouldAskRetainer,
 } from '../revenue/paymentBox'
 import type { UseMonthPayment } from '../revenue/useMonthPayment'
 import styles from './PaymentsBox.module.css'
@@ -21,6 +21,8 @@ type Props = {
 
 type Ask = { retainerCents: number; projectCents: number }
 
+const NOTES_MAX = 500
+
 // Spec 2026-11-02 §3-4. Draws what paymentBox.ts decided; no rule lives here.
 export function PaymentsBox({ clientId, clientName, period, canEdit, payment, onSaved }: Props) {
   const { status, row, storedRetainer } = payment
@@ -28,6 +30,7 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
   const [problem, setProblem] = useState<string | null>(null)
   const [ask, setAsk] = useState<Ask | null>(null)
   const [saving, setSaving] = useState(false)
+  const notesId = useId()
 
   // Reset when the row is replaced (a reload after save, or another month),
   // not on every render: typing must survive a re-render.
@@ -64,6 +67,9 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
           <dl className={styles.figures}>
             <div className={styles.figure}><dt className="t-label">Retainer</dt><dd className="numeric">{formatMoney(row.retainer_cents)}</dd></div>
             <div className={styles.figure}><dt className="t-label">Project</dt><dd className="numeric">{formatMoney(row.project_cents)}</dd></div>
+            {row.project_notes && (
+              <div className={styles.figure}><dt className="t-label">Project notes</dt><dd className={styles.notesText}>{row.project_notes}</dd></div>
+            )}
           </dl>
         ) : (
           <p className="t-body">Not entered yet</p>
@@ -74,9 +80,10 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
   }
 
   async function write(retainerCents: number, projectCents: number, setRetainer: boolean) {
+    const projectNotes = notesForSave(fields.notes)
     setSaving(true)
     setProblem(null)
-    const result = await payment.save({ retainerCents, projectCents, setRetainer })
+    const result = await payment.save({ retainerCents, projectCents, projectNotes, setRetainer })
     setSaving(false)
     setAsk(null)
     if (result.ok) onSaved()
@@ -129,6 +136,19 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
             disabled={saving}
             placeholder="$0"
             value={fields.project}
+          />
+        </label>
+        <label className={`${styles.field} ${styles.notes}`} htmlFor={notesId}>
+          <span className="t-label">Project notes</span>
+          <textarea
+            className="field"
+            id={notesId}
+            maxLength={NOTES_MAX}
+            onChange={(e) => { setFields({ ...fields, notes: e.target.value }); setAsk(null) }}
+            disabled={saving}
+            placeholder="e.g. $1,500 dev fees · $2,500 photo shoot"
+            rows={2}
+            value={fields.notes}
           />
         </label>
       </div>

@@ -748,3 +748,5 @@
 .shareOnProject {
   color: var(--text-on-band);
 }
+
+.projectNotes { text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 22rem; margin-inline-start: auto; }

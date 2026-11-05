@@ -6,6 +6,7 @@ import {
   ghostRetainer,
   monthName,
   initialFields,
+  notesForSave,
   paymentCaption,
   retainerQuestion,
   shouldAskRetainer,
@@ -15,21 +16,34 @@ import {
 const row = (retainer_cents: number, project_cents: number): MonthRow => ({
   retainer_cents,
   project_cents,
+  project_notes: null,
   entered_by: null,
   updated_at: '2026-10-28T12:00:00Z',
 })
-const blank = { retainer: '', project: '' }
+const blank = { retainer: '', project: '', notes: '' }
 
 describe('initialFields', () => {
   it('is two empty strings with no row', () => {
-    expect(initialFields(null)).toEqual({ retainer: '', project: '' })
+    expect(initialFields(null)).toEqual({ retainer: '', project: '', notes: '' })
   })
   it('writes saved cents as plain numbers', () => {
-    expect(initialFields(row(400000, 12345))).toEqual({ retainer: '4000', project: '123.45' })
+    expect(initialFields(row(400000, 12345))).toEqual({ retainer: '4000', project: '123.45', notes: '' })
+  })
+  it('carries the saved project notes, and an empty string for none', () => {
+    expect(initialFields({ ...row(1, 1), project_notes: '$1 dev' }).notes).toBe('$1 dev')
+    expect(initialFields(row(1, 1)).notes).toBe('')
   })
   it('round-trips through parseMoney', () => {
     expect(parseMoney(initialFields(row(12345, 5)).retainer)).toBe(12345)
     expect(parseMoney(initialFields(row(12345, 5)).project)).toBe(5)
+  })
+})
+
+describe('notesForSave', () => {
+  it('trims, and turns blank or whitespace-only into null', () => {
+    expect(notesForSave('  $1,500 dev fees \n')).toBe('$1,500 dev fees')
+    expect(notesForSave('')).toBeNull()
+    expect(notesForSave(' \n\t ')).toBeNull()
   })
 })
 
@@ -109,7 +123,7 @@ describe('retainerQuestion', () => {
 })
 
 describe('ghostRetainer', () => {
-  const row: MonthRow = { retainer_cents: 300000, project_cents: 0, entered_by: null, updated_at: '2026-11-04T12:00:00Z' }
+  const row: MonthRow = { retainer_cents: 300000, project_cents: 0, project_notes: null, entered_by: null, updated_at: '2026-11-04T12:00:00Z' }
   it('is the stored retainer only when the month has no row', () => {
     expect(ghostRetainer(null, 400000)).toBe(400000)
     expect(ghostRetainer(null, null)).toBeNull()

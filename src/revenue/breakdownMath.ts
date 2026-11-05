@@ -15,6 +15,8 @@ export type ClientMonth = {
   name: string
   retainerCents: number
   projectCents: number
+  /** What the project amount covers, or null when none was entered. */
+  projectNotes: string | null
   totalCents: number
 }
 
@@ -101,6 +103,7 @@ export function monthBreakdown(
       name: client.name,
       retainerCents: row.retainer_cents,
       projectCents: row.project_cents,
+      projectNotes: row.project_notes?.trim() || null,
       totalCents: row.retainer_cents + row.project_cents,
     })
   }

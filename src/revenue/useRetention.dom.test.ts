@@ -121,6 +121,8 @@ describe('useRetention', () => {
     expect(revenue).toContain('client_id')
     expect(revenue).toContain('period')
     expect(revenue).toContain('retainer_cents')
+    // The month panel shows the notes; a missing column arrives as undefined.
+    expect(revenue).toContain('project_notes')
   })
 
   it('reads project work too, because the billing chart needs it', async () => {

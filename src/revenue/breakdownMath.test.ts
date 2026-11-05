@@ -22,8 +22,21 @@ describe('monthBreakdown — who paid what', () => {
     )
 
     expect(report.clients).toEqual([
-      { clientId: 1, name: 'Acme', retainerCents: 400000, projectCents: 100000, totalCents: 500000 },
+      { clientId: 1, name: 'Acme', retainerCents: 400000, projectCents: 100000, projectNotes: null, totalCents: 500000 },
     ])
+  })
+
+  it('carries trimmed project notes, and null for absent or blank ones', () => {
+    const report = monthBreakdown(
+      [client(1, 'Acme'), client(2, 'Beta'), client(3, 'Gamma')],
+      [
+        { ...row(1, PERIOD, 3, 1), project_notes: '  $1 dev  ' },
+        { ...row(2, PERIOD, 2, 1), project_notes: '   ' },
+        row(3, PERIOD, 1, 1),
+      ],
+      PERIOD,
+    )
+    expect(report.clients.map((c) => c.projectNotes)).toEqual(['$1 dev', null, null])
   })
 
   it('sorts by total descending, so the biggest payer leads', () => {

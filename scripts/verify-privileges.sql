@@ -547,7 +547,8 @@ begin
   --    functions today, all security INVOKER and granted to authenticated
   --    only (allowlisted below): can_run_ai_suggestions()
   --    (20261031090000_ai_suggestion_runs.sql), save_month_payment(...)
-  --    (20261102120000_client_retainers.sql) and can_view_revenue()
+  --    (20261102120000_client_retainers.sql, re-created with a sixth argument by
+  --    20261104170000_project_notes.sql) and can_view_revenue()
   --    (20261104120000_productive_hours.sql). Anything else, or ANY function
   --    anon can execute, is a failure; this assertion is what makes that stay
   --    deliberate.
@@ -563,7 +564,7 @@ begin
       -- never in it: an anon-callable function is always a failure.
       and (g, (p.oid::regprocedure)::text) not in (
         ('authenticated', 'can_run_ai_suggestions()'),
-        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean)'),
+        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean,text)'),
         -- 20261104120000_productive_hours.sql. record_month_budgets is NOT
         -- here: it is executable by service_role only, and this sweep would
         -- report it if authenticated or anon could reach it.
@@ -1596,7 +1597,7 @@ begin
         -- the function let them write.
         begin
           perform public.save_month_payment(
-            probe_client_id, (probe_period + interval '2 month')::date, 1, 1, true);
+            probe_client_id, (probe_period + interval '2 month')::date, 1, 1, true, null);
           raise exception 'probe rollback';
         exception
           when insufficient_privilege then

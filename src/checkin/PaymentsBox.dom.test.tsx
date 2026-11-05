@@ -6,7 +6,7 @@ import type { MonthRow } from '../revenue/paymentBox'
 import type { UseMonthPayment } from '../revenue/useMonthPayment'
 import { PaymentsBox } from './PaymentsBox'
 
-const ROW: MonthRow = { retainer_cents: 300000, project_cents: 50000, entered_by: 'p1', updated_at: '2026-11-04T12:00:00Z' }
+const ROW: MonthRow = { retainer_cents: 300000, project_cents: 50000, project_notes: null, entered_by: 'p1', updated_at: '2026-11-04T12:00:00Z' }
 
 function fake(over: Partial<UseMonthPayment> = {}): UseMonthPayment {
   return {
@@ -21,6 +21,7 @@ function setup(payment: UseMonthPayment, canEdit = true) {
   return { onSaved, view }
 }
 const retainer = () => screen.getByLabelText('Retainer') as HTMLInputElement
+const notes = () => screen.getByLabelText('Project notes') as HTMLTextAreaElement
 const project = () => screen.getByLabelText('Project') as HTMLInputElement
 
 describe('PaymentsBox', () => {
@@ -49,7 +50,7 @@ describe('PaymentsBox', () => {
     const p = fake()
     const { onSaved } = setup(p)
     await userEvent.click(screen.getByRole('button', { name: 'Confirm $4,000 retainer' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 400000, projectCents: 0, setRetainer: false })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 400000, projectCents: 0, projectNotes: null, setRetainer: false })
     expect(screen.queryByText(/from now on/)).toBeNull()
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
   })
@@ -59,7 +60,7 @@ describe('PaymentsBox', () => {
     setup(p)
     await userEvent.type(project(), '1,500')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 400000, projectCents: 150000, setRetainer: false })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 400000, projectCents: 150000, projectNotes: null, setRetainer: false })
     expect(screen.queryByText(/from now on/)).toBeNull()
   })
 
@@ -71,7 +72,7 @@ describe('PaymentsBox', () => {
     expect(p.save).not.toHaveBeenCalled()
     expect(screen.getByText(/Change it to \$3,000 from now on\?/)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'No, just October' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 0, setRetainer: false })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 0, projectNotes: null, setRetainer: false })
   })
 
   it('Yes, update the retainer sets the retainer', async () => {
@@ -80,7 +81,7 @@ describe('PaymentsBox', () => {
     await userEvent.type(retainer(), '3000')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await userEvent.click(screen.getByRole('button', { name: 'Yes, update the retainer' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 0, setRetainer: true })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 0, projectNotes: null, setRetainer: true })
   })
 
   it('typing 0 offers to remove the retainer', async () => {
@@ -91,7 +92,7 @@ describe('PaymentsBox', () => {
     expect(p.save).not.toHaveBeenCalled()
     expect(screen.getByText(/Remove it from now on\?/)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Yes, update the retainer' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 0, projectCents: 0, setRetainer: true })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 0, projectCents: 0, projectNotes: null, setRetainer: true })
   })
 
   it('a saved month shows its figures as values and editing only project asks nothing', async () => {
@@ -105,7 +106,7 @@ describe('PaymentsBox', () => {
     await userEvent.type(project(), '600')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(screen.queryByText(/from now on/)).toBeNull()
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 60000, setRetainer: false })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 60000, projectNotes: null, setRetainer: false })
   })
 
   it('a saved month never shows the stored retainer as ghost text', async () => {
@@ -139,6 +140,74 @@ describe('PaymentsBox', () => {
     expect(view.container.textContent).toContain('$500')
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('has a labelled Project notes textarea with the placeholder and a 500 limit', () => {
+    setup(fake())
+    expect(notes().tagName).toBe('TEXTAREA')
+    expect(notes().id).not.toBe('')
+    expect((notes().closest('label') as HTMLLabelElement).htmlFor).toBe(notes().id)
+    expect(notes().placeholder).toBe('e.g. $1,500 dev fees · $2,500 photo shoot')
+    expect(notes().maxLength).toBe(500)
+    expect(notes().value).toBe('')
+  })
+
+  it('shows the saved notes in the textarea', () => {
+    setup(fake({ row: { ...ROW, project_notes: '$500 dev fees' } }))
+    expect(notes().value).toBe('$500 dev fees')
+  })
+
+  it('sends typed notes, trimmed, with the save', async () => {
+    const p = fake()
+    setup(p)
+    await userEvent.type(project(), '4000')
+    await userEvent.type(notes(), '  $1,500 dev fees · $2,500 photo shoot ')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(p.save).toHaveBeenCalledWith({
+      retainerCents: 400000, projectCents: 400000, projectNotes: '$1,500 dev fees · $2,500 photo shoot', setRetainer: false,
+    })
+  })
+
+  it('sends whitespace-only notes as null', async () => {
+    const p = fake()
+    setup(p)
+    await userEvent.type(project(), '10')
+    await userEvent.type(notes(), '   ')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect((p.save as ReturnType<typeof vi.fn>).mock.calls[0][0].projectNotes).toBeNull()
+  })
+
+  it('sends the notes through the retainer question too', async () => {
+    const p = fake()
+    setup(p)
+    await userEvent.type(retainer(), '3000')
+    await userEvent.type(notes(), 'shoot')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Yes, update the retainer' }))
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 300000, projectCents: 0, projectNotes: 'shoot', setRetainer: true })
+  })
+
+  it('disables the notes while saving', async () => {
+    let release: () => void = () => {}
+    const p = fake({ save: vi.fn(() => new Promise((r) => { release = () => r({ ok: true }) })) as UseMonthPayment['save'] })
+    setup(p)
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm $4,000 retainer' }))
+    await waitFor(() => expect(notes().disabled).toBe(true))
+    release()
+    await waitFor(() => expect(notes().disabled).toBe(false))
+  })
+
+  it('a viewer sees the notes as text, with no textarea', () => {
+    const { view } = setup(fake({ row: { ...ROW, project_notes: '$500 dev fees' } }), false)
+    expect(view.container.textContent).toContain('Project notes')
+    expect(view.container.textContent).toContain('$500 dev fees')
+    expect(screen.queryByLabelText('Project notes')).toBeNull()
+    expect(view.container.querySelector('textarea')).toBeNull()
+  })
+
+  it('a viewer sees no Project notes label when there are none', () => {
+    const { view } = setup(fake({ row: ROW }), false)
+    expect(view.container.textContent).not.toContain('Project notes')
   })
 
   it('an invalid amount is refused and nothing is saved', async () => {
@@ -197,7 +266,7 @@ describe('PaymentsBox', () => {
     expect(p.save).not.toHaveBeenCalled()
     expect(screen.getByText(/Remove it from now on\?/)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'No, just October' }))
-    expect(p.save).toHaveBeenCalledWith({ retainerCents: 0, projectCents: 50000, setRetainer: false })
+    expect(p.save).toHaveBeenCalledWith({ retainerCents: 0, projectCents: 50000, projectNotes: null, setRetainer: false })
   })
 
   it('a new month with no row clears typed fields and an open question', async () => {

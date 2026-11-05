@@ -19,7 +19,7 @@ export type UseMonthPayment = {
   row: MonthRow | null
   storedRetainer: number | null
   enteredByName: string | null
-  save: (p: { retainerCents: number; projectCents: number; setRetainer: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>
+  save: (p: { retainerCents: number; projectCents: number; projectNotes: string | null; setRetainer: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>
   reload: () => void
 }
 
@@ -57,7 +57,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
       try {
         const month = await supabase
           .from('client_month_revenue')
-          .select('retainer_cents, project_cents, entered_by, updated_at')
+          .select('retainer_cents, project_cents, project_notes, entered_by, updated_at')
           .eq('client_id', clientId)
           .eq('period', period)
           .maybeSingle()
@@ -127,7 +127,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
   const reload = useCallback(() => void refresh(false), [refresh])
 
   const save = useCallback<UseMonthPayment['save']>(
-    async ({ retainerCents, projectCents, setRetainer }) => {
+    async ({ retainerCents, projectCents, projectNotes, setRetainer }) => {
       try {
         const { error } = await supabase.rpc('save_month_payment', {
           p_client_id: clientId,
@@ -135,6 +135,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
           p_retainer_cents: retainerCents,
           p_project_cents: projectCents,
           p_set_retainer: setRetainer,
+          p_project_notes: projectNotes,
         })
         if (error) return { ok: false, error: describeError(error) }
         // Resolve only once the refreshed read has landed (or failed), so a

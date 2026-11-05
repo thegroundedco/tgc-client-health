@@ -111,7 +111,14 @@ export function MonthPanel({
                     {entry.name}
                   </th>
                   <td className={styles.figure}>{formatMoney(entry.retainerCents)}</td>
-                  <td className={styles.figure}>{formatMoney(entry.projectCents)}</td>
+                  <td className={styles.figure}>
+                    {formatMoney(entry.projectCents)}
+                    {entry.projectNotes && (
+                      <div className={`t-caption ${styles.projectNotes}`} data-testid="month-panel-project-notes">
+                        Project notes: {entry.projectNotes}
+                      </div>
+                    )}
+                  </td>
                   <td className={styles.figure}>{formatMoney(entry.totalCents)}</td>
                 </tr>
               ))}

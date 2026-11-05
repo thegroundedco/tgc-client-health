@@ -342,6 +342,7 @@ export type Database = {
           entered_by: string | null
           period: string
           project_cents: number
+          project_notes: string | null
           retainer_cents: number
           updated_at: string
         }
@@ -351,6 +352,7 @@ export type Database = {
           entered_by?: string | null
           period: string
           project_cents?: number
+          project_notes?: string | null
           retainer_cents?: number
           updated_at?: string
         }
@@ -360,6 +362,7 @@ export type Database = {
           entered_by?: string | null
           period?: string
           project_cents?: number
+          project_notes?: string | null
           retainer_cents?: number
           updated_at?: string
         }
@@ -602,6 +605,7 @@ export type Database = {
           p_client_id: number
           p_period: string
           p_project_cents: number
+          p_project_notes?: string | null
           p_retainer_cents: number
           p_set_retainer: boolean
         }

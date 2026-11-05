@@ -12,6 +12,9 @@ export type RevenueRow = {
   period: string
   retainer_cents: number
   project_cents: number
+  // Only the revenue page's read selects it, to show under a month's project
+  // amount. Absent everywhere else, and every total ignores it.
+  project_notes?: string | null
 }
 
 // `entered` is the whole point of this type. A month with rows totalling zero
