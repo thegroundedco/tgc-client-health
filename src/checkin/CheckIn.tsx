@@ -3,7 +3,7 @@ import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, HOURS_QUESTION, PAYMENTS_BUC
 import { BAND_LABELS, MAX_SCORE, bandFor, bucketScore } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
 import { formatPeriod, formatSavedAt, monthName } from '../lib/month'
-import { scoreChange } from '../lib/scoreChange'
+import { describeChange, scoreChange } from '../lib/scoreChange'
 import { BUCKET_SCORE_KEY } from '../board/cardSummary'
 import { ChangeText } from '../board/ChangeMark'
 import { bandClassName } from '../styles/bandClass'
@@ -235,8 +235,12 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   const label = submitLabel(scored, required)
   // "vs Sep": the month this screen compares against, short (brief 2026-11-04 B).
   const since = monthName(lastPeriod, 'short')
-  const overallChange = scoreChange(localOverall, lastOverall)
+  // The spoken form names the month in full: "up 0.33 from September".
+  const sinceLong = monthName(lastPeriod, 'long')
   const gate = advocacyGate(client.started_on, period)
+  // Last month's own gate. A stored adv_score from a month Advocacy was not
+  // asked is not a score to compare against, so it reads as null.
+  const lastGateOpen = advocacyGate(client.started_on, lastPeriod).open
 
   // The third caller of can() in the application, after the two in
   // src/board/Board.tsx. Convenience, not security, same as those two: a
@@ -265,6 +269,10 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     localOverall,
     storedOverall,
   })
+  // Against the number the summary actually shows (the stored overall while
+  // the form is clean, the draft's while it differs), so the arrow can never
+  // describe a different number from the one beside it.
+  const overallChange = scoreChange(overall, lastOverall)
   const statusLines = saveStatus({
     state: saveState,
     block,
@@ -424,7 +432,8 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
               month with no score would invent a rise or a fall. */}
           {overallChange !== null && (
             <p className={`t-caption ${styles.change}`} data-testid="overall-change">
-              <ChangeText change={overallChange} /> vs {since}
+              <ChangeText change={overallChange} label={describeChange('Overall', overallChange, sinceLong)} />{' '}
+              <span aria-hidden="true">vs {since}</span>
             </p>
           )}
         </div>
@@ -519,7 +528,9 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           // score (bucketScore is null until every question is answered), and
           // a shut Advocacy bucket has neither score nor change.
           const now = shut ? null : bucketScore(draft.answers, bucket, hoursApplies)
-          const change = scoreChange(now, lastMonth?.[BUCKET_SCORE_KEY[bucket]] ?? null)
+          const lastScore =
+            bucket === GATED_BUCKET && !lastGateOpen ? null : (lastMonth?.[BUCKET_SCORE_KEY[bucket]] ?? null)
+          const change = scoreChange(now, lastScore)
           return (
             // Spec 2026-11-04 §2: questions on the left, a notes panel on the
             // right (a grid, CheckIn.module.css; one column on a narrow
@@ -542,7 +553,8 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                       {change !== null && (
                         <>
                           {' '}
-                          <ChangeText change={change} /> vs {since}
+                          <ChangeText change={change} label={describeChange(definition.label, change, sinceLong)} />{' '}
+                          <span aria-hidden="true">vs {since}</span>
                         </>
                       )}
                     </p>

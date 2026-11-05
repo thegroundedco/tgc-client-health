@@ -48,11 +48,9 @@ describe('scoreChange', () => {
 describe('formatChange', () => {
   it('writes an increase with an up triangle and a plus sign', () => {
     expect(formatChange({ direction: 'up', delta: 0.33 })).toBe('▲ +0.33')
-    expect(formatChange({ direction: 'up', delta: 0.33 })).toBe('▲ +0.33')
   })
 
   it('writes a decrease with a down triangle and a true minus sign, two places', () => {
-    expect(formatChange({ direction: 'down', delta: -0.5 })).toBe('▼ −0.50')
     expect(formatChange({ direction: 'down', delta: -0.5 })).toBe('▼ −0.50')
     expect(formatChange({ direction: 'down', delta: -0.5 })).not.toContain('-')
   })

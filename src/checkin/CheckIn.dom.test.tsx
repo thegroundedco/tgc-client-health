@@ -1590,4 +1590,51 @@ describe('CheckIn, month-over-month change', () => {
     renderAs('account_manager', { localOverall: 3.5, lastOverall: null })
     expect(screen.queryByTestId('overall-change')).toBeNull()
   })
+
+  it('compares the overall the summary shows: the stored one while the form is clean', () => {
+    renderAs('account_manager', { saveState: { kind: 'clean' }, storedOverall: 4, localOverall: 3.5, lastOverall: 3 })
+    expect(text(screen.getByTestId('overall-value'))).toBe('4.00')
+    expect(text(screen.getByTestId('overall-change'))).toBe('▲ +1.00 vs Jul')
+  })
+
+  it("compares the draft's overall while the form differs", () => {
+    renderAs('account_manager', { saveState: { kind: 'dirty' }, storedOverall: 4, localOverall: 3.5, lastOverall: 3 })
+    expect(text(screen.getByTestId('overall-value'))).toBe('3.50')
+    expect(text(screen.getByTestId('overall-change'))).toBe('▲ +0.50 vs Jul')
+  })
+
+  it("draws no Advocacy change against a month whose own gate was shut", () => {
+    // Started 2026-05-01: day 90 is 2026-07-30, so August is gated in and
+    // July was not. July's stored adv_score is not a score to compare with.
+    hookState.current = mockCheckin({ draft: draftWith(ADV_COMPLETE), lastMonth: last({ adv_score: 3, comm_score: 3.34 }) })
+    render(
+      <CheckIn
+        client={{ ...CLIENT, started_on: '2026-05-01' }}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+        onEditClient={() => {}}
+      />,
+    )
+    const score = screen.getByTestId('bucket-score-advocacy')
+    expect(text(score)).toBe('5.00')
+    expect(within(score).queryByTestId('score-change')).toBeNull()
+  })
+
+  it('names each chip in words for a screen reader, and hides the short suffix', () => {
+    renderAs('account_manager', {
+      draft: draftWith(COMM_COMPLETE),
+      lastMonth: last({ comm_score: 3.34 }),
+      localOverall: 3.5,
+      lastOverall: 3,
+    })
+    const bucket = screen.getByTestId('bucket-score-communication')
+    within(bucket).getByRole('img', { name: 'Communication up 0.33 from July' })
+    const suffix = within(bucket).getByText('vs Jul')
+    expect(suffix.getAttribute('aria-hidden')).toBe('true')
+
+    const overall = screen.getByTestId('overall-change')
+    within(overall).getByRole('img', { name: 'Overall up 0.50 from July' })
+    expect(within(overall).getByText('vs Jul').getAttribute('aria-hidden')).toBe('true')
+  })
 })

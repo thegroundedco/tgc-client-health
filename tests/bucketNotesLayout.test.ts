@@ -107,7 +107,10 @@ describe('the check-in screen edges', () => {
     // Both fill the bucket list, so all three share its edges.
     expect(block(css('src/checkin/FocusBox.module.css'), '.box')).not.toMatch(/max-(width|inline-size)/)
     expect(block(source, '.bucket')).not.toMatch(/max-(width|inline-size)/)
-    expect(block(source, '.totals')).not.toMatch(/max-(width|inline-size)/)
+    // Every block whose prelude is exactly .totals, not only the first.
+    const totals = [...source.matchAll(/(^|\n)[ \t]*\.totals\s*\{([^}]*)\}/g)].map((match) => match[2])
+    expect(totals.length).toBeGreaterThan(0)
+    for (const body of totals) expect(body).not.toMatch(/max-(width|inline-size)/)
   })
 })
 

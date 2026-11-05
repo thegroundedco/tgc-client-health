@@ -367,7 +367,7 @@ describe('the board hook, last month', () => {
     expect(LAST_CHECKIN_COLUMNS.split(', ').sort()).toEqual(
       ['adv_score', 'client_id', 'comm_score', 'del_score', 'fin_score', 'growth_score', 'rel_score'],
     )
-    expect(LAST_SCORE_COLUMNS).toBe('client_id, overall_score')
+    expect(LAST_SCORE_COLUMNS).toBe('client_id, advocacy_applies, overall_score')
   })
 
   it("hands back last month's bucket scores and overall per client", async () => {
@@ -380,8 +380,8 @@ describe('the board hook, last month', () => {
     })
     db.lastScores = async () => ({
       data: [
-        { client_id: 1, overall_score: 3.5 },
-        { client_id: null, overall_score: 2 },
+        { client_id: 1, overall_score: 3.5, advocacy_applies: true },
+        { client_id: null, overall_score: 2, advocacy_applies: true },
       ],
       error: null,
     })
@@ -416,25 +416,79 @@ describe('the board hook, last month', () => {
     })
   })
 
-  it("reports a failed read of last month's check-ins, like this month's", async () => {
+  // The arrows are context: a failed read of last month degrades to no
+  // arrows, and this month's board is drawn as normal.
+  const THIS_MONTH = () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 2, submitted_at: '2026-08-30T12:00:00Z', submitted_by: null, suggested_at: null }],
+      error: null,
+    })
+    db.scores = async () => ({ data: [{ client_id: 2, overall_score: 3.5, advocacy_applies: true }], error: null })
+  }
+  const expectDegraded = async () => {
+    const { result } = renderHook(() => useBoard('2026-08-01'))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.loadError).toBeNull()
+    expect(result.current.clients).toHaveLength(4)
+    expect(result.current.checkins.get(2)?.submitted_at).toBe('2026-08-30T12:00:00Z')
+    expect(result.current.scores.get(2)?.overall_score).toBe(3.5)
+    expect(result.current.lastMonth.size).toBe(0)
+  }
+
+  it("degrades a refused read of last month's check-ins to no arrows", async () => {
+    THIS_MONTH()
+    db.lastScores = async () => ({ data: [{ client_id: 2, overall_score: 3, advocacy_applies: true }], error: null })
     db.lastCheckins = async () => ({ data: null, error: { message: 'last month refused' } })
-    const { result } = renderHook(() => useBoard('2026-08-01'))
-    await waitFor(() => expect(result.current.status).toBe('error'))
-    expect(result.current.loadError).toContain('last month refused')
-    expect(result.current.clients).toEqual([])
+    await expectDegraded()
   })
 
-  it("reports a failed read of last month's scores, like this month's", async () => {
+  it("degrades a refused read of last month's scores to no arrows", async () => {
+    THIS_MONTH()
+    db.lastCheckins = async () => ({ data: [{ client_id: 2, comm_score: 3 }], error: null })
     db.lastScores = async () => ({ data: null, error: { message: 'last view refused' } })
-    const { result } = renderHook(() => useBoard('2026-08-01'))
-    await waitFor(() => expect(result.current.status).toBe('error'))
-    expect(result.current.loadError).toContain('last view refused')
-    expect(result.current.clients).toEqual([])
+    await expectDegraded()
   })
 
-  it("stops a cancelled run before it asks for last month's overall", async () => {
-    // The period changes while last month's check-ins are in flight: the old
-    // run must make no further request, not merely discard what comes back.
+  it('degrades a thrown read of last month to no arrows', async () => {
+    THIS_MONTH()
+    db.lastCheckins = async () => {
+      throw new Error('network down')
+    }
+    await expectDegraded()
+  })
+
+  it("drops last month's Advocacy score where last month's gate was shut", async () => {
+    const all = { comm_score: 3, growth_score: 3, fin_score: 3, rel_score: 3, del_score: 3, adv_score: 4 }
+    db.lastCheckins = async () => ({
+      data: [
+        { client_id: 1, ...all },
+        { client_id: 2, ...all },
+        { client_id: 3, ...all },
+        { client_id: 4, ...all },
+      ],
+      error: null,
+    })
+    db.lastScores = async () => ({
+      data: [
+        { client_id: 1, overall_score: 3, advocacy_applies: true },
+        { client_id: 2, overall_score: 3, advocacy_applies: false },
+        { client_id: 3, overall_score: 3, advocacy_applies: null },
+      ],
+      error: null,
+    })
+    const { result } = await ready()
+    expect(result.current.lastMonth.get(1)?.adv_score).toBe(4)
+    expect(result.current.lastMonth.get(2)?.adv_score).toBeNull()
+    // A null gate, or no view row at all, counts as shut.
+    expect(result.current.lastMonth.get(3)?.adv_score).toBeNull()
+    expect(result.current.lastMonth.get(4)?.adv_score).toBeNull()
+    // The other buckets are untouched by the gate.
+    expect(result.current.lastMonth.get(2)?.comm_score).toBe(3)
+  })
+
+  it("drops a stale run's last month when the period changes during that read", async () => {
+    // The old run is cancelled while ITS last-month read is in flight; what
+    // that read brings back must not reach the newer month's board.
     let release!: (value: Result) => void
     const held = new Promise<Result>((resolve) => {
       release = resolve
@@ -446,8 +500,9 @@ describe('the board hook, last month', () => {
     await waitFor(() => expect(db.reads.some(([table, , period]) => table === 'checkins' && period === '2026-07-01')).toBe(true))
     rerender({ period: '2026-10-01' })
     await waitFor(() => expect(result.current.status).toBe('ready'))
-    release({ data: [], error: null })
+    expect(result.current.lastMonth.size).toBe(0)
+    release({ data: [{ client_id: 1, comm_score: 2 }], error: null })
     await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(db.reads).not.toContainEqual(['checkin_scores', LAST_SCORE_COLUMNS, '2026-07-01'])
+    expect(result.current.lastMonth.size).toBe(0)
   })
 })

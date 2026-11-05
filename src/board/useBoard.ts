@@ -45,7 +45,10 @@ export type LastMonthScores = Record<BucketScoreKey, number | null> & { overall_
 // Built from BUCKET_SCORE_KEY so the six columns cannot drift from the ones
 // the card draws this month. useBoard.dom.test.ts pins the list.
 export const LAST_CHECKIN_COLUMNS = ['client_id', ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket])].join(', ')
-export const LAST_SCORE_COLUMNS = 'client_id, overall_score'
+// The same three columns as SCORE_COLUMNS, gate first: the gate decides
+// whether last month's adv_score counts at all. A distinct string, so a test
+// double can tell this read from this month's by its select alone.
+export const LAST_SCORE_COLUMNS = 'client_id, advocacy_applies, overall_score'
 
 const NO_LAST_SCORES: LastMonthScores = {
   comm_score: null,
@@ -55,6 +58,51 @@ const NO_LAST_SCORES: LastMonthScores = {
   del_score: null,
   adv_score: null,
   overall_score: null,
+}
+
+type LastCheckinRow = Partial<LastMonthScores> & { client_id: number }
+type LastScoreRow = { client_id: number | null; overall_score: number | null; advocacy_applies: boolean | null }
+
+// Last month's bucket scores and overall, keyed by client; empty on any
+// failure (see the call site). Last month's Advocacy score counts only where
+// last month's own gate was open: a stored adv_score from a month the bucket
+// was not asked is not a score to compare against. A null gate, or no row in
+// the view, counts as shut -- the same side the board falls back to this month.
+async function readLastMonth(lastPeriod: string): Promise<Map<number, LastMonthScores>> {
+  const empty = new Map<number, LastMonthScores>()
+  try {
+    const [checkinResult, scoreResult] = await Promise.all([
+      supabase.from('checkins').select(LAST_CHECKIN_COLUMNS).eq('period', lastPeriod),
+      supabase.from('checkin_scores').select(LAST_SCORE_COLUMNS).eq('period', lastPeriod),
+    ])
+    if (checkinResult.error || scoreResult.error) return empty
+
+    // String column lists, so the row types are asserted, as checkinRows is.
+    const checkinRows = checkinResult.data as unknown as LastCheckinRow[]
+    const scoreRows = scoreResult.data as unknown as LastScoreRow[]
+
+    const byClient = new Map<number, LastMonthScores>()
+    for (const row of checkinRows) {
+      const { client_id: clientId, ...columns } = row
+      byClient.set(clientId, { ...NO_LAST_SCORES, ...columns, overall_score: null })
+    }
+    const gateOpen = new Set<number>()
+    for (const row of scoreRows) {
+      // Nullable in the view's types; nothing to key by.
+      if (row.client_id === null) continue
+      if (row.advocacy_applies === true) gateOpen.add(row.client_id)
+      byClient.set(row.client_id, {
+        ...(byClient.get(row.client_id) ?? NO_LAST_SCORES),
+        overall_score: row.overall_score,
+      })
+    }
+    for (const [clientId, scores] of byClient) {
+      if (!gateOpen.has(clientId)) byClient.set(clientId, { ...scores, adv_score: null })
+    }
+    return byClient
+  } catch {
+    return empty
+  }
 }
 
 export type UseBoard = {
@@ -184,57 +232,17 @@ export function useBoard(period: string): UseBoard {
         }
 
         // Brief 2026-11-04 B: last month, for the arrows. One extra query per
-        // table, the same shape and the same failure handling as this
-        // month's: a failed read is a failed board, never a board whose
-        // arrows silently vanish.
-        const lastPeriod = previousPeriod(period)
-        const lastCheckinResult = await supabase
-          .from('checkins')
-          .select(LAST_CHECKIN_COLUMNS)
-          .eq('period', lastPeriod)
+        // table, read together. Unlike the three reads above, a failure here
+        // DEGRADES rather than failing the board: the arrows are context, and
+        // this month's board must not be lost because last month could not be
+        // read. A refused or thrown read leaves an empty map -- no arrows,
+        // which is also what a client with no last month draws.
+        const lastByClient = await readLastMonth(previousPeriod(period))
 
         if (isCancelled()) return
-
-        if (lastCheckinResult.error) {
-          setLoadError(describeError(lastCheckinResult.error))
-          setStatus('error')
-          return
-        }
-
-        const lastScoreResult = await supabase
-          .from('checkin_scores')
-          .select(LAST_SCORE_COLUMNS)
-          .eq('period', lastPeriod)
-
-        if (isCancelled()) return
-
-        if (lastScoreResult.error) {
-          setLoadError(describeError(lastScoreResult.error))
-          setStatus('error')
-          return
-        }
-
-        // A string column list, so the row type is asserted here, as
-        // checkinRows is above.
-        const lastCheckinRows = lastCheckinResult.data as unknown as (Partial<LastMonthScores> & {
-          client_id: number
-        })[]
-        const lastByClient = new Map<number, LastMonthScores>()
-        for (const row of lastCheckinRows) {
-          const { client_id: clientId, ...columns } = row
-          lastByClient.set(clientId, { ...NO_LAST_SCORES, ...columns, overall_score: null })
-        }
-        for (const row of lastScoreResult.data) {
-          // Nullable in the view's types, as above; nothing to key by.
-          if (row.client_id === null) continue
-          lastByClient.set(row.client_id, {
-            ...(lastByClient.get(row.client_id) ?? NO_LAST_SCORES),
-            overall_score: row.overall_score,
-          })
-        }
 
         // Never write after a failed read: everything below runs only because
-        // all five queries succeeded.
+        // this month's three queries succeeded.
         setLoadError(null)
         setClients(clientResult.data)
         setCheckins(byClient)
