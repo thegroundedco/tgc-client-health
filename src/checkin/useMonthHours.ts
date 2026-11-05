@@ -4,15 +4,20 @@ import { supabase } from '../lib/supabase'
 import { hoursFromBudgets } from './hoursFromBudgets'
 import type { BudgetRow, HoursResult } from './hoursFromBudgets'
 
-// The viewer's local calendar date, YYYY-MM-DD. Built from the date's parts,
-// the way src/lib/month.ts builds periods, never through toISOString: that is
-// UTC, and west of UTC it would call the evening of the 31st the 1st of the
-// next month, filling an answer for a month that has not ended here.
-export function localDay(date: Date = new Date()): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+// The calendar date in America/Denver, YYYY-MM-DD: the zone
+// private.hours_applies judges fetched_at in ((fetched_at at time zone
+// 'America/Denver')::date), so the screen and the score agree for a viewer in
+// any zone (brief 2026-11-05 §4). en-CA formats as YYYY-MM-DD.
+const DENVER_DAY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Denver',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+export function denverDay(date: Date): string {
+  const parts = Object.fromEntries(DENVER_DAY.formatToParts(date).map((part) => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 // A month's Productive budget hours for one client (spec 2026-11-04 §7). Null
@@ -76,13 +81,13 @@ export function useMonthHours(
         // taken on the 20th is "hours so far" for good, even when it is read
         // on the 4th of the next month because that day's fetch failed. When
         // the fetch succeeds the row was just written, so this is today. The
-        // viewer's local date of fetched_at, as localDay explains. An
+        // Denver date of fetched_at, as denverDay explains. An
         // unparseable timestamp reads as the period's own first day: not
         // finished, so nothing is filled from data of unknown age.
         const row = (fetches.data ?? [])[0] as { fetched_at: string } | undefined
         const fetchedAt = row ? new Date(row.fetched_at) : null
         const asOf =
-          fetchedAt !== null && !Number.isNaN(fetchedAt.getTime()) ? localDay(fetchedAt) : period
+          fetchedAt !== null && !Number.isNaN(fetchedAt.getTime()) ? denverDay(fetchedAt) : period
 
         setResult({
           version,

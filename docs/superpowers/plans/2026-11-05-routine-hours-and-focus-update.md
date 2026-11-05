@@ -1,7 +1,7 @@
 Replaces blocks of the LIVE routine prompt (routine-prompt-current.md in the ai-runs worktree, the text of the live routine) after brief 2026-11-05 A, and supersedes 2026-11-04-productive-budget-hours-routine-paragraph.md, whose hours paragraph is the first block below. Each block is quoted exactly as it reads in the live prompt now, with its line numbers there, then the text that replaces it. Apply them bottom-up so the line numbers stay true.
 
 What changes, in short:
-- Hours: the database sets fin_hours_in_budget and fin_hours_applies. The routine never writes fin_hours_in_budget; it reads it back after writing the row if it needs it, and hours counts toward "complete" only when fin_hours_applies is true.
+- Hours: the database sets fin_hours_in_budget and fin_hours_applies. The routine never writes fin_hours_in_budget; before writing the row it asks the database (private.hours_applies and private.hours_score) and uses the answer in "complete" and in the Finances why. Hours counts toward "complete" only when it applies. The Step 3 heading and the manual-row line say so too (Blocks 10 and 11).
 - Monday runs: no hours placeholder 3 any more.
 - Focus: a focus for EVERY scored client, not only below 3.6. For a healthy client, it is what to protect or grow.
 
@@ -43,8 +43,8 @@ Replace with:
 Hours within budget (fin_hours_in_budget) is NOT yours to write. The database sets it, and whether it applies (fin_hours_applies), on the row itself, from the Productive budget hours the tool has stored: every time the row is inserted or updated, and again whenever Productive is fetched. Anything you send for fin_hours_in_budget is overwritten.
   - Never write fin_hours_in_budget. Leave it out of every insert and every update, and out of ai_suggestion's answers.
   - There is no hours placeholder any more. Never write 3 for hours, on a Monday run or any other: a month that is not finished is simply unscored for hours, and the database leaves it null.
-  - If you need it (for example to mention it in the Finances why), read it back after writing the row: select fin_hours_applies, fin_hours_in_budget from public.checkins where client_id = <id> and period = <period>; Hours counts toward "complete" only when fin_hours_applies is true, and then the database has always filled it, so hours never makes a row incomplete.
-  - Say nothing about hours in the note unless you read it back, and never invent hours or a score of your own.
+  - Before writing the row, run: select private.hours_applies(<id>, <period>) as applies, private.hours_score(<id>, <period>) as score; (the routine runs as postgres, so it can call them). Use the result in "complete" and in the Finances why: hours counts toward "complete" only when applies is true, and then score is the answer the database writes, so hours never makes a row incomplete. Never write the column.
+  - Say nothing about hours in the note beyond what that query returned, and never invent hours or a score of your own.
 ```
 
 ## Block 2: the calibration line on complete answers
@@ -161,4 +161,32 @@ Replace with:
 ```
 - No row for (client_id, period): insert the 21 answers (19 scored + the 2 finance answers; never fin_hours_in_budget), notes, bucket_notes, focus, ai_suggestion=ai, suggested_at=now(), submitted_at = (now() if complete else null), submitted_by = (owner if complete else null).
 - Row with suggested_at IS NOT NULL: update the 21 answers (never fin_hours_in_budget), notes, bucket_notes, focus, ai_suggestion, suggested_at=now(), submitted_at/submitted_by as above.
+```
+
+## Block 10: the Step 3 heading
+
+**Line 31**, now:
+
+```
+## Step 3: score. 22 questions; every answer is an integer 1-5 or null
+```
+
+Replace with:
+
+```
+## Step 3: score. 21 questions are yours to answer, each an integer 1-5 or null, plus "Hours within budget", which the database sets
+```
+
+## Block 11: the manual-row update
+
+**Line 114**, now:
+
+```
+  - otherwise: update ONLY ai_suggestion = ai (it still carries bucket_notes and focus). Leave every answer (finance and hours included), notes, bucket_notes, focus, suggested_at, submitted_at untouched.
+```
+
+Replace with:
+
+```
+  - otherwise: update ONLY ai_suggestion = ai (it still carries bucket_notes and focus). Leave every answer (finance included), notes, bucket_notes, focus, suggested_at, submitted_at untouched. Hours is never yours to write anyway: the database sets it on every row.
 ```

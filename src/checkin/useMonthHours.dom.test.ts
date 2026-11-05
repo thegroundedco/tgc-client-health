@@ -52,7 +52,7 @@ vi.mock('../lib/supabase', () => ({
 }))
 
 import { supabase } from '../lib/supabase'
-import { localDay, useMonthHours } from './useMonthHours'
+import { denverDay, useMonthHours } from './useMonthHours'
 
 const OCT = '2026-10-01'
 const BUDGET = {
@@ -184,14 +184,26 @@ describe('useMonthHours', () => {
     expect(result.current).toEqual({ applies: false, reason: 'not_linked', message: 'Not linked to Productive', lines: [], answer: null })
   })
 
-  // A fetch late on the 31st, local: its stored timestamp may already be Nov 1
-  // in UTC, and the month must still read as not finished.
-  it('takes the fetch date as the local date, so the last day of the month is not finished', async () => {
-    vi.setSystemTime(new Date(2026, 9, 31, 23, 30, 0))
-    db.fetches = async () => ({ data: [{ fetched_at: new Date(2026, 9, 31, 23, 30, 0).toISOString() }], error: null })
+  // Brief 2026-11-05 §4: month-end is judged in America/Denver, the zone
+  // private.hours_applies uses, so the screen and the score agree whatever
+  // zone the viewer is in. 05:59:59Z on Nov 1 is still 23:59:59 on Oct 31 in
+  // Denver (MDT, UTC-6, until 2am that morning); 06:00:00Z is midnight Nov 1.
+  it('reads a fetch at 2026-11-01T05:59:59Z as Oct 31 in Denver: not finished', async () => {
+    db.fetches = async () => ({ data: [{ fetched_at: '2026-11-01T05:59:59Z' }], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
     expect(result.current).toMatchObject({ applies: false, reason: 'not_finished', answer: null, message: 'Month not finished – hours so far' })
+  })
+
+  it('reads a fetch at 2026-11-01T06:00:00Z as Nov 1 in Denver: finished', async () => {
+    db.fetches = async () => ({ data: [{ fetched_at: '2026-11-01T06:00:00Z' }], error: null })
+    const { result } = renderHook(() => useMonthHours(7, OCT, true))
+    await waitFor(() => expect(result.current).not.toBeNull())
+    expect(result.current).toMatchObject({
+      applies: true,
+      answer: { value: 5, reason: 'From Productive: 21h worked vs 20h budgeted (+1h).' },
+      message: null,
+    })
   })
 
   it('stays null on a failed read', async () => {
@@ -233,16 +245,35 @@ describe('useMonthHours', () => {
   })
 })
 
-describe('localDay', () => {
-  it('formats the local calendar date, not the UTC one', () => {
-    expect(localDay(new Date(2026, 9, 31, 23, 59))).toBe('2026-10-31')
-    expect(localDay(new Date(2026, 0, 5, 0, 1))).toBe('2026-01-05')
+describe('denverDay', () => {
+  it('is the calendar date in America/Denver, YYYY-MM-DD', () => {
+    expect(denverDay(new Date('2026-11-01T05:59:59Z'))).toBe('2026-10-31')
+    expect(denverDay(new Date('2026-11-01T06:00:00Z'))).toBe('2026-11-01')
+    expect(denverDay(new Date('2026-01-05T07:01:00Z'))).toBe('2026-01-05')
+    // Winter: MST, UTC-7.
+    expect(denverDay(new Date('2026-01-05T06:59:00Z'))).toBe('2026-01-04')
   })
 
-  // In a UTC test run local and UTC agree, so the case above cannot tell them
-  // apart. Poisoning toISOString makes a UTC-based implementation fail anywhere.
-  it('does not go through toISOString', () => {
-    vi.spyOn(Date.prototype, 'toISOString').mockReturnValue('1999-01-01T00:00:00.000Z')
-    expect(localDay(new Date(2026, 9, 31, 23, 59))).toBe('2026-10-31')
+  // The viewer's own zone must not move it. Node re-reads TZ when it is
+  // assigned, and the module is re-imported under each zone, so a formatter
+  // built at load in the viewer's zone would be caught here too. `process` is
+  // cast through globalThis: src/ compiles without Node types (see
+  // src/revenue/tenureMath.test.ts).
+  it("does not depend on the viewer's zone", async () => {
+    const process = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
+    const saved = process.env.TZ
+    try {
+      for (const zone of ['Pacific/Kiritimati', 'UTC', 'Pacific/Pago_Pago']) {
+        process.env.TZ = zone
+        vi.resetModules()
+        const fresh = await import('./useMonthHours')
+        expect(fresh.denverDay(new Date('2026-11-01T05:59:59Z')), zone).toBe('2026-10-31')
+        expect(fresh.denverDay(new Date('2026-11-01T06:00:00Z')), zone).toBe('2026-11-01')
+      }
+    } finally {
+      if (saved === undefined) delete process.env.TZ
+      else process.env.TZ = saved
+      vi.resetModules()
+    }
   })
 })

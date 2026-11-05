@@ -46,11 +46,37 @@ describe('the 2026-11-05 routine update', () => {
     const hours = byTitle('the hours rule').next
     expect(hours).toContain('The database sets it, and whether it applies (fin_hours_applies)')
     expect(hours).toContain('Never write fin_hours_in_budget.')
-    expect(hours).toContain('read it back after writing the row')
+    // Brief 2026-11-05 B §4: ask the database BEFORE writing, not read back after.
+    expect(hours).not.toMatch(/read it back/)
     expect(hours).toContain(
-      'select fin_hours_applies, fin_hours_in_budget from public.checkins where client_id = <id> and period = <period>;',
+      'Before writing the row, run: select private.hours_applies(<id>, <period>) as applies, private.hours_score(<id>, <period>) as score;',
     )
-    expect(hours).toContain('Hours counts toward "complete" only when fin_hours_applies is true')
+    expect(hours).toContain('(the routine runs as postgres, so it can call them)')
+    expect(hours).toContain('Use the result in "complete" and in the Finances why')
+    expect(hours).toContain('hours counts toward "complete" only when applies is true')
+    expect(hours).toContain('Never write the column.')
+    expect(UPDATE).not.toMatch(/read(s)? it back after writing/)
+  })
+
+  // The two live lines that still said the routine scores 22 questions and
+  // leaves hours untouched as if it could write it. Quoted exactly from the
+  // live prompt (routine-prompt-current.md, lines 31 and 114).
+  it('the Step 3 heading: 21 questions are the routine\'s, plus hours, which the database sets', () => {
+    const heading = byTitle('the Step 3 heading')
+    expect(heading.old).toBe('## Step 3: score. 22 questions; every answer is an integer 1-5 or null')
+    expect(heading.next).toContain('21 questions are yours to answer')
+    expect(heading.next).toContain('plus "Hours within budget", which the database sets')
+    expect(heading.next).not.toMatch(/22/)
+  })
+
+  it('the manual-row line: hours is never written by the routine anyway', () => {
+    const line = byTitle('the manual-row update')
+    expect(line.old).toBe(
+      '  - otherwise: update ONLY ai_suggestion = ai (it still carries bucket_notes and focus). Leave every answer (finance and hours included), notes, bucket_notes, focus, suggested_at, submitted_at untouched.',
+    )
+    expect(line.next).not.toContain('(finance and hours included)')
+    expect(line.next).toContain('Hours is never yours to write anyway: the database sets it on every row.')
+    expect(line.next).toContain('update ONLY ai_suggestion = ai')
   })
 
   it('Monday runs: no hours placeholder anywhere in the new text', () => {
