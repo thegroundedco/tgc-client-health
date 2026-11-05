@@ -274,13 +274,13 @@ describe('the clients admin screen, adding', () => {
     const addClient = vi.fn()
     mount({ addClient })
 
-    await userEvent.type(screen.getByLabelText('Name'), 'Polar Divide')
+    await userEvent.type(screen.getByLabelText('Name'), 'Client B')
     await userEvent.selectOptions(screen.getByLabelText('Owner'), AMY)
     await userEvent.click(screen.getByRole('button', { name: 'Add client' }))
 
     expect(addClient).toHaveBeenCalledTimes(1)
     expect(addClient.mock.calls[0][0]).toMatchObject({
-      name: 'Polar Divide',
+      name: 'Client B',
       ownerId: AMY,
       status: 'active',
     })

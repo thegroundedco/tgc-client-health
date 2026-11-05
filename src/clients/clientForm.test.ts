@@ -217,7 +217,7 @@ describe('a row becoming a form', () => {
 
   it('round-trips through updatePayload without inventing or losing a value', () => {
     const original = row({
-      name: 'Polar Divide',
+      name: 'Client B',
       owner_id: 'owner-1',
       status: 'cancelled',
       ended_on: '2026-07-15',
@@ -227,7 +227,7 @@ describe('a row becoming a form', () => {
       type_code: 'ecommerce',
     })
     expect(updatePayload(draftFromRow(original))).toEqual({
-      name: 'Polar Divide',
+      name: 'Client B',
       owner_id: 'owner-1',
       status: 'cancelled',
       started_on: null,

@@ -12,7 +12,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const CLIENT: BoardClient = { id: 7, name: 'Polar Divide', status: 'active', started_on: null, ended_on: null }
+const CLIENT: BoardClient = { id: 7, name: 'Client B', status: 'active', started_on: null, ended_on: null }
 const ME = '11111111-1111-1111-1111-111111111111'
 
 // Defaults a client past its 90 days, no check-in and no score -- the emptiest
@@ -56,7 +56,7 @@ function renderCard(overrides: RenderOptions = {}) {
 }
 
 const bars = () => screen.getAllByTestId('bucket-bar')
-const nameButton = () => screen.getByRole('button', { name: /Polar Divide/ })
+const nameButton = () => screen.getByRole('button', { name: /Client B/ })
 
 describe('a client card', () => {
   const SUGGESTED_ROW = {
@@ -92,7 +92,7 @@ describe('a client card', () => {
   it('shows an em dash for the total when there is no check-in', () => {
     renderCard({ checkin: null, score: null })
 
-    expect(screen.getByText('Polar Divide')).toBeTruthy()
+    expect(screen.getByText('Client B')).toBeTruthy()
     // Not a 0: an unscored client is not a client scoring zero, and a false
     // "at risk" is as harmful as a false "healthy".
     expect(screen.getByTestId('total').textContent).toBe('—')
@@ -491,7 +491,7 @@ describe('an archived client card', () => {
     const onOpen = vi.fn()
     renderCard({ onOpen })
 
-    await userEvent.click(screen.getByRole('button', { name: /Polar Divide/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Client B/ }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('card-locked')).toBeNull()
   })
@@ -500,7 +500,7 @@ describe('an archived client card', () => {
 describe('a card by membership, not by status', () => {
   it('opens a cancelled client the month they are a member of', () => {
     renderCard({
-      client: { id: 5, name: 'Polar Divide', status: 'cancelled', started_on: null, ended_on: '2026-09-30' },
+      client: { id: 5, name: 'Client B', status: 'cancelled', started_on: null, ended_on: '2026-09-30' },
       openable: true,
     })
 
@@ -509,7 +509,7 @@ describe('a card by membership, not by status', () => {
 
   it('explains a client who had not started yet, and is not a link', () => {
     renderCard({
-      client: { id: 6, name: 'Polar Divide', status: 'active', started_on: '2026-10-07', ended_on: null },
+      client: { id: 6, name: 'Client B', status: 'active', started_on: '2026-10-07', ended_on: null },
       openable: false,
       period: '2026-09-01',
     })
@@ -517,7 +517,7 @@ describe('a card by membership, not by status', () => {
     expect(screen.getByTestId('card-locked').textContent).toContain(
       'This client starts on October 7, 2026, after September 2026, so there is nothing to score yet.',
     )
-    expect(screen.queryByRole('button', { name: /Polar Divide/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Client B/ })).toBeNull()
   })
 })
 
