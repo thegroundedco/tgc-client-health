@@ -98,9 +98,10 @@ routine is a separate owner-approved step.
 
 ## 5. Rollout
 
-Same pattern as the hours work:
-1. Migration on staging, then checks, then production (owner approval).
-2. Then push.
-3. Then the routine text.
+Local `main` also carries the unpushed Productive-hours work, and `.github/workflows/deploy.yml` deploys on any push to `main`, so one push ships both features. The order is therefore fixed, and every step is an [OWNER] step:
+1. Both migrations, `20261104120000_productive_hours` and `20261104150000_bucket_notes_and_focus`, must be on production before the push to `main`. (The schedule migration `20261104130000` goes with the hours one.)
+2. Then run the read-only checks. `verify-privileges` writes test data and must not be pointed at production unless the owner says so.
+3. Then push, and confirm the live bundle hash changed.
+4. Then paste the routine text, applying the hours paragraph first and then the notes paragraph.
 
-The frontend must not deploy before the migration, because it selects the new columns.
+If the push goes first, the board breaks, because `CHECKIN_COLUMNS` selects `focus`, and every Save fails, because the upsert sends `bucket_notes` and `focus`; PostgREST answers 400 for a missing column.

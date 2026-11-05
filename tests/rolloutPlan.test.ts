@@ -29,3 +29,33 @@ describe('Task 8 Step 7, the rollout', () => {
     expect(STEP7).toMatch(/Not near a routine run[^.]*14:00 UTC/)
   })
 })
+
+// Bucket-notes final fix I1: one push to main ships both features, so both
+// migrations must be on production first. Pinned in both plans.
+describe('the combined rollout with the bucket-notes branch', () => {
+  const NOTES_PLAN = readFileSync('docs/superpowers/plans/2026-11-04-bucket-notes-and-focus.md', 'utf8')
+  const ROLLOUT = NOTES_PLAN.slice(NOTES_PLAN.lastIndexOf('## Rollout'))
+
+  it('names both migrations before the word "push" in the bucket-notes rollout', () => {
+    // From step 1: the intro necessarily mentions the push first, to say why.
+    const steps = ROLLOUT.slice(ROLLOUT.indexOf('1. **[OWNER]'))
+    const push = steps.search(/push/i)
+    expect(push).toBeGreaterThan(-1)
+    for (const name of ['20261104120000_productive_hours', '20261104150000_bucket_notes_and_focus']) {
+      const at = steps.indexOf(name)
+      expect(at, name).toBeGreaterThan(-1)
+      expect(at, name).toBeLessThan(push)
+    }
+  })
+
+  it('says what breaks if the push goes first', () => {
+    expect(ROLLOUT).toContain('CHECKIN_COLUMNS')
+    expect(ROLLOUT).toMatch(/every Save/)
+  })
+
+  it('the hours plan push line mentions 20261104150000', () => {
+    const line = STEP7.split('\n').find((l) => l.includes('Push only after'))
+    expect(line).toBeDefined()
+    expect(line).toContain('20261104150000')
+  })
+})

@@ -162,3 +162,14 @@ export function setBucketNote(notes: BucketNotes, bucket: Bucket, field: 'why' |
   - The JSON shape must satisfy the Data limits.
 - [ ] **Step 3:** Write the test, watch it pass, mutate one pinned phrase and watch it fail. Run `npm test && npm run lint && npm run build`.
 - [ ] **Step 4:** Commit: `docs(routine): AI writes per-bucket notes and a focus`.
+
+## Rollout
+
+All [OWNER] steps. Local `main` also carries the unpushed Productive-hours work and `.github/workflows/deploy.yml` deploys on any push to `main`, so one push ships both features.
+
+1. **[OWNER] Migrations first.** Both `20261104120000_productive_hours` and `20261104150000_bucket_notes_and_focus` must be on production before the push to `main`. (The schedule migration `20261104130000` goes with the hours one.)
+2. **[OWNER] Then the read-only checks.** `verify-privileges` writes test data and must not be pointed at production unless the owner says so.
+3. **[OWNER] Then push**, and confirm the live bundle hash changed. A push is not a deploy.
+4. **[OWNER] Then paste the routine text**, applying the hours paragraph first and then the notes paragraph.
+
+If the push goes first, the board breaks, because `CHECKIN_COLUMNS` selects `focus`, and every Save fails, because the upsert sends `bucket_notes` and `focus`.

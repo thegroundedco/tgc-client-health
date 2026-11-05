@@ -672,6 +672,7 @@ The order is not negotiable. The frontend must never deploy before the migration
 2. **The function and its secrets.** Set the function secrets `PRODUCTIVE_API_TOKEN`, `PRODUCTIVE_ORG_ID` and `HOURS_CRON_SECRET`, and deploy `fetch-productive-hours`. Set the three Vault secrets: `productive_hours_fn_url`, `productive_hours_cron_secret` (the same value as `HOURS_CRON_SECRET`) and `productive_hours_anon_key`.
    - Check the anon key's format before storing it as the cron's bearer. The function is deployed with `verify_jwt` on (the default), so the bearer must be a JWT: the legacy anon key (three dot-separated parts, starting `eyJ`). An `sb_publishable_…` key is not a JWT, and the gateway refuses it with 401 before the function runs. If the project has only `sb_publishable_` keys, stop and ask.
 3. **Push `productive-hours` to `main`**, then confirm the live bundle's hash changed. A push is not a deploy.
+   - Push only after 20261104150000_bucket_notes_and_focus is also on production, if the bucket-notes branch has been merged to main.
 4. **Update the live routine prompt** on `trig_01BA2jJY2nCCd1MozSm17pS3`, and the local copy, from `docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md` (the paragraph and its line changes).
 5. **Insert the confirmed links, last.** Not near a routine run: the routine runs Mondays and the 1st at 14:00 UTC, so not within a few hours before then.
 6. **Run the October fetch in user mode**, from the check-in screen or the function, for each linked client.
