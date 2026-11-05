@@ -93,3 +93,10 @@
   align-items: center;
   gap: var(--space-3);
 }
+
+/* Under a read-only project field whose month has line items: where to
+   change them instead. */
+.hint {
+  margin: var(--space-1) 0 0;
+  color: var(--text-secondary);
+}

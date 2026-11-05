@@ -826,6 +826,45 @@ begin
     end if;
   end loop;
 
+  -- 9f. The project line-items total guard
+  --     (20261105140000_project_items_total_guard.sql). The definer must
+  --     exist and be unreachable by anon and authenticated (it reads every
+  --     client's items), and both constraint triggers must exist, be
+  --     DEFERRABLE INITIALLY DEFERRED (save_month_payment passes through
+  --     mismatched states mid-transaction) and be enabled. A missing trigger
+  --     lets Revenue entry put project_cents out of step with the items.
+  if to_regprocedure('private.check_project_items_total()') is null then
+    problems := problems || 'private.check_project_items_total() does not exist -- has 20261105140000_project_items_total_guard.sql been applied?'::text;
+  elsif has_function_privilege('anon', to_regprocedure('private.check_project_items_total()'), 'EXECUTE')
+     or has_function_privilege('authenticated', to_regprocedure('private.check_project_items_total()'), 'EXECUTE') then
+    problems := problems || 'private.check_project_items_total() is EXECUTE-able by anon or authenticated -- revoke execute from public, anon, authenticated'::text;
+  end if;
+  for r in
+    select e.tbl, e.trg
+    from (values
+      ('client_month_revenue', 'client_month_revenue_items_total'),
+      ('client_month_project_items', 'client_month_project_items_total')
+    ) e (tbl, trg)
+    where not exists (
+      select 1
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relname = e.tbl
+        and t.tgname = e.trg
+        and t.tgconstraint <> 0
+        and t.tgdeferrable
+        and t.tginitdeferred
+        and t.tgenabled <> 'D'
+        and t.tgfoid = to_regprocedure('private.check_project_items_total()')
+    )
+  loop
+    problems := problems || format(
+      'public.%s has no enabled DEFERRABLE INITIALLY DEFERRED constraint trigger %s calling private.check_project_items_total() -- project_cents can drift from its line items',
+      r.tbl, r.trg);
+  end loop;
+
   ----------------------------------------------------------------------------
   -- 10. POLICY BEHAVIOUR -- what a signed-in user can actually SEE.
   --

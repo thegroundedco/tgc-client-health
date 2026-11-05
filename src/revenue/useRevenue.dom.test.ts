@@ -73,6 +73,40 @@ describe('useRevenue', () => {
     expect(result.current.loadError).toBe(null)
   })
 
+  // Review of brief 2026-11-05 B: Revenue entry must know which months have
+  // project line items, so it can leave their project amount alone.
+  it("totals the month's project line items per client", async () => {
+    const captured = given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW], error: null },
+      client_month_project_items: {
+        data: [
+          { client_id: 1, cents: 50000 },
+          { client_id: 2, cents: 100 },
+          { client_id: 1, cents: 30000 },
+        ],
+        error: null,
+      },
+    })
+
+    const { result } = renderHook(() => useRevenue('2026-09-01'))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.itemTotals).toEqual({ 1: 80000, 2: 100 })
+    expect(captured.client_month_project_items?.select[0]).toBe('client_id, cents')
+    expect(captured.client_month_project_items?.eq).toEqual([['period', '2026-09-01']])
+  })
+
+  it('reports a failed line-item read as an error, not as months with no items', async () => {
+    given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW], error: null },
+      client_month_project_items: { data: null, error: { message: 'items denied' } },
+    })
+    const { result } = renderHook(() => useRevenue('2026-09-01'))
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).toContain('items denied')
+  })
+
   it('reports a failed roster read as an error, not as an empty month', async () => {
     // The defect this project keeps guarding against: a broken tool looking
     // like an empty one. An empty roster on this screen reads as "no clients".

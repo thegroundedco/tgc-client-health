@@ -29,20 +29,28 @@ type Entry = { retainer: string; project: string }
 // from a client billed exactly nothing, and '0' would erase that distinction
 // the moment the screen opened, before anyone had typed a thing. Spec section
 // 3.3.
+//
+// A client whose month has project line items shows their sum as the project
+// figure: it is read-only here (see the field below) and is what the
+// database holds anyway.
 function buildEntries(
   clients: readonly EligibleClient[],
   rows: readonly RevenueRow[],
+  itemTotals: Readonly<Record<number, number>>,
 ): Record<number, Entry> {
   const byClient = new Map(rows.map((row) => [row.client_id, row]))
   const next: Record<number, Entry> = {}
   for (const client of clients) {
     const row = byClient.get(client.id)
+    const items = itemTotals[client.id]
     next[client.id] = row
-      ? { retainer: String(row.retainer_cents / 100), project: String(row.project_cents / 100) }
-      : { retainer: '', project: '' }
+      ? { retainer: String(row.retainer_cents / 100), project: String((items ?? row.project_cents) / 100) }
+      : { retainer: '', project: items === undefined ? '' : String(items / 100) }
   }
   return next
 }
+
+const LINE_ITEMS_HINT = 'Has line items – edit them in the check-in'
 
 export function RevenueAdmin({ onWritingChange }: Props) {
   const [period, setPeriod] = useState(defaultPeriod())
@@ -58,8 +66,8 @@ export function RevenueAdmin({ onWritingChange }: Props) {
   // gated on the fetched data instead, it fires exactly when the fields ought
   // to be replaced and never while someone is using them.
   useEffect(() => {
-    setEntries(buildEntries(revenue.clients, revenue.rows))
-  }, [revenue.clients, revenue.rows])
+    setEntries(buildEntries(revenue.clients, revenue.rows, revenue.itemTotals))
+  }, [revenue.clients, revenue.rows, revenue.itemTotals])
 
   // Cleared validation refusal, and cleared start-of-Save so a second attempt
   // after fixing the field does not leave the first refusal on screen beside a
@@ -83,7 +91,7 @@ export function RevenueAdmin({ onWritingChange }: Props) {
   function handleDiscard() {
     setValidationError(null)
     setSaveError(null)
-    setEntries(buildEntries(revenue.clients, revenue.rows))
+    setEntries(buildEntries(revenue.clients, revenue.rows, revenue.itemTotals))
   }
 
   // Requirement 6: every field is parsed before anything is written. The loop
@@ -103,6 +111,10 @@ export function RevenueAdmin({ onWritingChange }: Props) {
       project_cents: number
     }
     const pending: PendingRow[] = []
+    // Months with project line items: their project amount is the items'
+    // sum, owned by the check-in's payments box, so only the retainer goes.
+    type RetainerOnlyRow = Omit<PendingRow, 'project_cents'>
+    const retainerOnly: RetainerOnlyRow[] = []
 
     // Rows already on file, so the skip below can tell "nobody has touched
     // this yet" apart from "this was entered and is being corrected back to
@@ -147,6 +159,11 @@ export function RevenueAdmin({ onWritingChange }: Props) {
         return
       }
 
+      if (revenue.itemTotals[client.id] !== undefined) {
+        retainerOnly.push({ client_id: client.id, period, retainer_cents: retainerCents })
+        continue
+      }
+
       const projectCents = parseMoney(entry.project)
       if (projectCents === null) {
         setValidationError(
@@ -187,6 +204,30 @@ export function RevenueAdmin({ onWritingChange }: Props) {
       if (error) {
         setSaveError(describeError(error))
         return
+      }
+
+      // A SECOND upsert, for months with line items, naming no project column
+      // at all: PostgREST's conflict update sets only the columns sent, so
+      // project_cents is left exactly as the items made it. It cannot ride in
+      // the first upsert -- a bulk upsert takes one column list for every row,
+      // and a missing project_cents would be written as null or its default.
+      // The cost is that the two are not one transaction: if this one fails
+      // after the first succeeded, the error says so and the retainers here
+      // are the only figures not saved.
+      if (retainerOnly.length > 0) {
+        const second = await supabase
+          .from('client_month_revenue')
+          .upsert(
+            retainerOnly.map((row) => ({ ...row, entered_by: enteredBy })),
+            { onConflict: 'client_id,period' },
+          )
+        if (second.error) {
+          setSaveError(
+            `The other clients were saved, but the retainer for months with line items was not: ${describeError(second.error)}`,
+          )
+          revenue.reload()
+          return
+        }
       }
 
       setSavedAt(new Date().toISOString())
@@ -312,6 +353,8 @@ export function RevenueAdmin({ onWritingChange }: Props) {
             <tbody>
               {revenue.clients.map((client) => {
                 const entry = entries[client.id] ?? { retainer: '', project: '' }
+                const hasItems = revenue.itemTotals[client.id] !== undefined
+                const hintId = `revenue-items-hint-${client.id}`
                 return (
                   <tr key={client.id}>
                     {/* The marker is not decoration. This client is deliberately
@@ -341,15 +384,25 @@ export function RevenueAdmin({ onWritingChange }: Props) {
                       />
                     </td>
                     <td>
+                      {/* A month with line items: the sum, read-only, and
+                          where to change it instead. The database refuses a
+                          project amount that does not match the items. */}
                       <input
+                        aria-describedby={hasItems ? hintId : undefined}
                         aria-label={`${client.name} project work`}
                         className={styles.moneyInput}
                         disabled={saving}
                         inputMode="decimal"
                         onChange={(event) => setField(client.id, 'project', event.target.value)}
+                        readOnly={hasItems}
                         type="text"
                         value={entry.project}
                       />
+                      {hasItems && (
+                        <p className={`t-caption ${styles.hint}`} id={hintId}>
+                          {LINE_ITEMS_HINT}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 )

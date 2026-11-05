@@ -30,6 +30,7 @@ beforeEach(() => {
     loadError: null,
     clients: [],
     rows: [],
+    itemTotals: {},
     reload: vi.fn(),
   })
   vi.mocked(useRetention).mockReturnValue({

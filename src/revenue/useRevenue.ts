@@ -21,11 +21,20 @@ import type { EligibleClient, RevenueRow } from './revenueMath'
 const CLIENT_COLUMNS = 'id, name, status'
 const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents'
 
+// The month's project line items, as a total per client. A month with items
+// takes its project amount from them (save_month_payment, and the deferred
+// guard in 20261105140000_project_items_total_guard.sql), so Revenue entry
+// must show that amount read-only and never write it.
+const ITEM_COLUMNS = 'client_id, cents'
+
 export type UseRevenue = {
   status: 'loading' | 'ready' | 'error'
   loadError: string | null
   clients: EligibleClient[]
   rows: RevenueRow[]
+  // client_id -> the sum of that client's line items this month. A client
+  // with no items is absent.
+  itemTotals: Record<number, number>
   reload: () => void
 }
 
@@ -34,6 +43,7 @@ export function useRevenue(period: string): UseRevenue {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [clients, setClients] = useState<EligibleClient[]>([])
   const [rows, setRows] = useState<RevenueRow[]>([])
+  const [itemTotals, setItemTotals] = useState<Record<number, number>>({})
 
   const load = useCallback(
     async (isCancelled: () => boolean) => {
@@ -65,7 +75,9 @@ export function useRevenue(period: string): UseRevenue {
           .eq('period', period)
           .order('client_id')
 
-        const [roster, revenue] = await Promise.all([rosterQuery, revenueQuery])
+        const itemsQuery = supabase.from('client_month_project_items').select(ITEM_COLUMNS).eq('period', period)
+
+        const [roster, revenue, items] = await Promise.all([rosterQuery, revenueQuery, itemsQuery])
 
         if (isCancelled()) return
 
@@ -74,7 +86,9 @@ export function useRevenue(period: string): UseRevenue {
         // indistinguishable from a month nobody has entered, which would make
         // concentration report every client as unaccounted for and present that
         // as a fact about the data.
-        const failure = roster.error ?? revenue.error
+        // A failed items read is an error too: guessing "no items" would
+        // hand back an editable project amount the guard then refuses.
+        const failure = roster.error ?? revenue.error ?? items.error
         if (failure) {
           setLoadError(describeError(failure))
           setStatus('error')
@@ -83,6 +97,11 @@ export function useRevenue(period: string): UseRevenue {
 
         setClients((roster.data ?? []) as EligibleClient[])
         setRows((revenue.data ?? []) as RevenueRow[])
+        const totals: Record<number, number> = {}
+        for (const item of (items.data ?? []) as { client_id: number; cents: number }[]) {
+          totals[item.client_id] = (totals[item.client_id] ?? 0) + item.cents
+        }
+        setItemTotals(totals)
         setLoadError(null)
         setStatus('ready')
       } catch (thrown: unknown) {
@@ -111,6 +130,7 @@ export function useRevenue(period: string): UseRevenue {
     loadError,
     clients,
     rows,
+    itemTotals,
     reload: () => void load(() => false),
   }
 }

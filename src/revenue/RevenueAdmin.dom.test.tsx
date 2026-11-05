@@ -51,6 +51,7 @@ function given(over: Partial<ReturnType<typeof useRevenue>> = {}) {
     loadError: null,
     clients: CLIENTS,
     rows: [ROW],
+    itemTotals: {},
     reload: vi.fn(),
     ...over,
   })
@@ -275,5 +276,60 @@ describe('the revenue entry grid', () => {
     expect(acme).toBeTruthy()
     expect(acme?.retainer_cents).toBe(0)
     expect(acme?.project_cents).toBe(0)
+  })
+
+  // Review of brief 2026-11-05 B, Critical 1: a month with project line items
+  // takes its project amount from them. Revenue entry must not overwrite it.
+  describe('a month with project line items', () => {
+    const ITEMS_ROW = { ...ROW, project_cents: 80000 }
+    const withItems = () => given({ rows: [ITEMS_ROW], itemTotals: { 1: 80000 } })
+
+    it('shows the item sum read-only, with the hint', () => {
+      // A stored amount that disagrees (from before the guard) shows the sum.
+      given({ rows: [{ ...ROW, project_cents: 100000 }], itemTotals: { 1: 80000 } })
+      const field = screen.getByLabelText('Acme project work') as HTMLInputElement
+      expect(field.readOnly).toBe(true)
+      expect(field.value).toBe('800')
+      const hint = screen.getByText('Has line items – edit them in the check-in')
+      expect(field.getAttribute('aria-describedby')).toBe(hint.id)
+      // Clients without items keep an editable field and no hint.
+      const delta = screen.getByLabelText('Delta project work') as HTMLInputElement
+      expect(delta.readOnly).toBe(false)
+      expect(delta.getAttribute('aria-describedby')).toBeNull()
+      expect(screen.getAllByText('Has line items – edit them in the check-in')).toHaveLength(1)
+    })
+
+    it('never sends project_cents for that month, but still saves its retainer', async () => {
+      const user = userEvent.setup()
+      const upsert = givenUpsert()
+      withItems()
+
+      await user.clear(screen.getByLabelText('Acme retainer'))
+      await user.type(screen.getByLabelText('Acme retainer'), '4500')
+      await user.type(screen.getByLabelText('Delta project work'), '10')
+      await user.click(screen.getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(upsert).toHaveBeenCalledTimes(2))
+      const sent = upsert.mock.calls.flatMap((call) => call[0] as Array<Record<string, unknown>>)
+      const acme = sent.filter((row) => row.client_id === 1)
+      expect(acme).toHaveLength(1)
+      expect(acme[0]).not.toHaveProperty('project_cents')
+      expect(acme[0]).toMatchObject({ client_id: 1, retainer_cents: 450000, entered_by: 'user-1' })
+      // The upsert carrying it names no project column at all, so the
+      // conflict update cannot touch project_cents.
+      const acmeCall = upsert.mock.calls.find((call) => (call[0] as Array<{ client_id: number }>).some((r) => r.client_id === 1))!
+      expect((acmeCall[0] as Array<Record<string, unknown>>).every((row) => !('project_cents' in row))).toBe(true)
+      expect(acmeCall[1]).toEqual({ onConflict: 'client_id,period' })
+      // Delta, with no items, is written as before, project included.
+      expect(sent.find((row) => row.client_id === 2)).toMatchObject({ project_cents: 1000 })
+    })
+
+    it('ignores typing into the read-only field', async () => {
+      const user = userEvent.setup()
+      withItems()
+      const field = screen.getByLabelText('Acme project work') as HTMLInputElement
+      await user.type(field, '5')
+      expect(field.value).toBe('800')
+    })
   })
 })
