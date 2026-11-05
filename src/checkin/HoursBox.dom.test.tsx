@@ -32,15 +32,20 @@ function setup(r: HoursResult) {
 describe('HoursBox', () => {
   afterEach(cleanup)
 
-  it('draws one row per budget with budgeted, worked and the signed difference', () => {
+  it('draws one row per budget: name, worked/budgeted as Productive writes it, a ring, and the signed difference', () => {
     setup(result({ budgets: [budget({ budgeted_minutes: 1200, worked_minutes: 1290 })] }))
     const rows = screen.getAllByTestId('hours-line')
     expect(rows).toHaveLength(1)
     const row = within(rows[0])
     expect(row.getByText('Budget A')).toBeTruthy()
-    expect(row.getByText('20h budgeted')).toBeTruthy()
-    expect(row.getByText('21.5h worked')).toBeTruthy()
+    expect(row.getByTestId('hours-clock').textContent).toBe('21:30 h/20:00 h')
+    expect(row.getByRole('img', { name: '21:30 of 20:00 budgeted hours' })).toBeTruthy()
     expect(row.getByText('+1.5h')).toBeTruthy()
+  })
+
+  it('writes the owner\'s example exactly', () => {
+    setup(result({ budgets: [budget({ budgeted_minutes: 300, worked_minutes: 678 })] }))
+    expect(screen.getByTestId('hours-clock').textContent).toBe('11:18 h/5:00 h')
   })
 
   it('writes an under-budget difference with a minus sign', () => {
@@ -65,21 +70,48 @@ describe('HoursBox', () => {
     expect(screen.getAllByText('Outside ±6h')).toHaveLength(1)
   })
 
-  it('renders the two-budget note', () => {
+  it('shows the score and its band label when it applies, and offers no options', () => {
+    setup(result({ budgets: [budget({ budgeted_minutes: 1200, worked_minutes: 1200 - 500 })] }))
+    expect(screen.getByTestId('hours-score').textContent).toBe('Hours within budget: 2 – 8–10h under or 6–8h over')
+    expect(screen.queryByTestId('hours-reason')).toBeNull()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it.each([
+    [0, 'Hours within budget: 5 – Within 6h'],
+    [-400, 'Hours within budget: 3 – 6–8h under'],
+    [-700, 'Hours within budget: 1 – Over 10h under or 8h over'],
+  ])('a %i minute difference reads %s', (diff, text) => {
+    setup(result({ budgets: [budget({ budgeted_minutes: 1200, worked_minutes: 1200 + diff })] }))
+    expect(screen.getByTestId('hours-score').textContent).toBe(text)
+  })
+
+  it('renders the two-budget reason with both lines and no score', () => {
     setup(result({ budgets: [budget({ productive_deal_id: 'd1' }), budget({ productive_deal_id: 'd2', name: 'Budget B' })] }))
-    expect(screen.getByText('2 monthly budgets – tidy up in Productive')).toBeTruthy()
+    expect(screen.getByTestId('hours-reason').textContent).toBe('2 monthly budgets – tidy up in Productive')
+    expect(screen.getAllByTestId('hours-line')).toHaveLength(2)
+    expect(screen.queryByTestId('hours-score')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
+  it('renders the part-month reason with its line', () => {
+    setup(result({ budgets: [budget({ starts_on: '2026-10-13' })] }))
+    expect(screen.getByTestId('hours-reason').textContent).toBe('First part-month (started Oct 13) – not scored')
+    expect(screen.getAllByTestId('hours-line')).toHaveLength(1)
+    expect(screen.queryByTestId('hours-score')).toBeNull()
   })
 
   it('renders No fixed monthly budget', () => {
     setup(result({ budgets: [] }))
-    expect(screen.getByText('No fixed monthly budget')).toBeTruthy()
+    expect(screen.getByTestId('hours-reason').textContent).toBe('No fixed monthly budget')
     expect(screen.queryAllByTestId('hours-line')).toHaveLength(0)
   })
 
   it('renders Not linked to Productive', () => {
     setup(result({ linked: false }))
-    expect(screen.getByText('Not linked to Productive')).toBeTruthy()
+    expect(screen.getByTestId('hours-reason').textContent).toBe('Not linked to Productive')
   })
 
   it('renders nothing before the start month', () => {
@@ -87,19 +119,20 @@ describe('HoursBox', () => {
     expect(view.container.textContent).toBe('')
   })
 
-  it('renders Try again only for the unreachable note, and it calls onRetry', () => {
+  it('renders Try again only when Productive was not reached, and it calls onRetry', () => {
     const { onRetry } = setup(result({ fetched: false, budgets: [] }))
-    expect(screen.getByText("Couldn't reach Productive – answer by hand or try again")).toBeTruthy()
+    expect(screen.getByTestId('hours-reason').textContent).toBe("Couldn't reach Productive")
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
 
-  it('offers no Try again for the other notes or a scored month', () => {
+  it('offers no Try again for the other reasons or a scored month', () => {
     for (const r of [
       result(),
       result({ today: '2026-10-20' }),
       result({ budgets: [budget({ starts_on: '2026-10-13' })] }),
       result({ budgets: [] }),
+      result({ linked: false }),
     ]) {
       setup(r)
       expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
@@ -107,10 +140,12 @@ describe('HoursBox', () => {
     }
   })
 
-  it('shows the month-not-finished note beside the running hours', () => {
-    setup(result({ today: '2026-10-20' }))
-    expect(screen.getByText('Month not finished – hours so far')).toBeTruthy()
-    expect(screen.getAllByTestId('hours-line')).toHaveLength(1)
+  it('shows the month-not-finished reason beside the running hours and ring', () => {
+    setup(result({ today: '2026-10-20', budgets: [budget({ budgeted_minutes: 1200, worked_minutes: 600 })] }))
+    expect(screen.getByTestId('hours-reason').textContent).toBe('Month not finished – hours so far')
+    expect(screen.getByTestId('hours-clock').textContent).toBe('10:00 h/20:00 h')
+    expect(screen.getByRole('img', { name: '10:00 of 20:00 budgeted hours' })).toBeTruthy()
+    expect(screen.queryByTestId('hours-score')).toBeNull()
   })
 })
 

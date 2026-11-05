@@ -160,6 +160,7 @@ function defaultHook(): UseCheckin {
     saveState: { kind: 'clean' },
     advocacyApplies: true,
     hoursApplies: false,
+    answers: {},
     required: 21,
     scored: 0,
     localOverall: null,
@@ -233,7 +234,10 @@ type ScreenOverrides = Partial<UseCheckin> & {
 
 function render(overrides: ScreenOverrides = {}): string {
   const { startedOn, period, ...hookOverrides } = overrides
-  hookState.current = { ...defaultHook(), ...hookOverrides }
+  // The scoring answers follow the draft unless a test sets them: the real
+  // hook adds only the database's hours score to the draft's answers.
+  const merged = { ...defaultHook(), ...hookOverrides }
+  hookState.current = { ...merged, answers: hookOverrides.answers ?? merged.draft.answers }
   // `startedOn` can legitimately be `null` (no start date), so its presence
   // is checked with `in` rather than `??` -- `null ?? fallback` would read
   // "not provided" and silently discard a test's explicit null.

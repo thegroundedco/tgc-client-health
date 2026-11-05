@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET, HOURS_QUESTION, PAYMENTS_BUCKET, questionsFor } from '../lib/buckets'
 import { BAND_LABELS, MAX_SCORE, bandFor, bucketScore } from '../lib/scoreV2'
 import { advocacyGate } from '../lib/gate'
@@ -15,6 +15,7 @@ import { useMonthPayment } from '../revenue/useMonthPayment'
 import { PaymentsBox } from './PaymentsBox'
 import { useMonthHours } from './useMonthHours'
 import { HoursBox } from './HoursBox'
+import { hoursScoreText } from './hoursFromBudgets'
 import { BucketNotesPanel } from './BucketNotesPanel'
 import { FocusBox } from './FocusBox'
 import type { CheckinRow } from './useCheckin'
@@ -94,9 +95,19 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // handed to it. Gated at the read like the payment: without view_revenue no
   // fetch is made, the result is null, and useCheckin falls back to the stored
   // fin_hours_applies. Try again bumps the version.
+  //
+  // Brief 2026-11-05 A: nobody answers the hours question. The database scores
+  // it (the BEFORE trigger on checkins); the hours result's score is handed to
+  // useCheckin only so the live score on screen matches what will be stored.
   const [hoursVersion, setHoursVersion] = useState(0)
   const hours = useMonthHours(client.id, period, can(profile.role, 'view_revenue'), hoursVersion)
-  const checkin = useCheckin(client, period, profile, hours === null ? null : hours.applies)
+  const checkin = useCheckin(
+    client,
+    period,
+    profile,
+    hours === null ? null : hours.applies,
+    hours?.answer?.value ?? null,
+  )
   const {
     status,
     loadError,
@@ -109,6 +120,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     saveState,
     advocacyApplies,
     hoursApplies,
+    answers,
     required,
     scored,
     localOverall,
@@ -142,55 +154,24 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
   // because a person who clears a filled answer has decided -- refilling it on
   // the next render would overrule them.
   //
-  // Spec 2026-11-04 §7: the hours answer is filled by the same rule, in the
-  // same effect and the same setAnswers call -- two calls in one tick would
-  // each start from the same draft and the second would drop the first. It has
-  // its own once-per-visit marker because it can arrive later than the revenue
-  // answers (or only after Try again), and it is marked only once there is an
-  // answer to fill: a "couldn't reach" or "month not finished" result has none,
-  // and must not use up the visit's one fill.
-  //
-  // Spec §7, the AI's placeholder: the routine writes 3 with "hours pending –
-  // month not finished" when it scores a month that has not ended, and "a
-  // later run, or opening the check-in after month end, replaces it". So the
-  // hours answer is also filled over a stored value while the row is still an
-  // AI suggestion (suggested_at set) -- never over a row a person saved. The
-  // form opens holding the stored value (draftFromRow), so "the form has no
-  // answer of its own" means undefined OR still exactly the stored AI value;
-  // setAnswers' `replacing` names that value, so a person's own change in the
-  // form is never overwritten. It lands as an ordinary unsaved fill.
+  // The hours answer is not filled here or anywhere (brief 2026-11-05 A): the
+  // database sets it, and the form does not hold it.
   const prefilled = useRef<string | null>(null)
-  const hoursPrefilled = useRef<string | null>(null)
   useEffect(() => {
     // Edit rights too: a viewer's form is read-only, so a fill would only mark
     // it unsaved with no way to save. (canEdit is declared below this effect.)
     if (status !== 'ready' || !can(profile.role, 'edit_scores')) return
     const visit = `${client.id}:${period}`
+    if (finance === null || prefilled.current === visit) return
+    prefilled.current = visit
     const values: Record<string, number> = {}
-    const replacing: Record<string, number> = {}
-    if (finance !== null && prefilled.current !== visit) {
-      prefilled.current = visit
-      for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
-        const answer = finance[key]
-        const storedValue = stored?.[key] ?? null
-        if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
-      }
+    for (const key of ['fin_rack_rate', 'fin_rate_increased'] as const) {
+      const answer = finance[key]
+      const storedValue = stored?.[key] ?? null
+      if (answer && storedValue === null && draft.answers[key] === undefined) values[key] = answer.value
     }
-    if (hours !== null && hours.applies && hours.answer && hoursPrefilled.current !== visit) {
-      hoursPrefilled.current = visit
-      const storedValue = stored?.fin_hours_in_budget ?? null
-      const formValue = draft.answers[HOURS_QUESTION]
-      const aiSuggested = stored != null && stored.suggested_at != null
-      if (storedValue === null && formValue === undefined) {
-        values[HOURS_QUESTION] = hours.answer.value
-      } else if (aiSuggested && storedValue !== null && (formValue === undefined || formValue === storedValue)) {
-        values[HOURS_QUESTION] = hours.answer.value
-        replacing[HOURS_QUESTION] = storedValue
-      }
-    }
-    if (Object.keys(replacing).length > 0) checkin.setAnswers(values, { replacing })
-    else if (Object.keys(values).length > 0) checkin.setAnswers(values)
-  }, [status, finance, hours, client.id, period, stored, draft.answers, checkin, profile.role])
+    if (Object.keys(values).length > 0) checkin.setAnswers(values)
+  }, [status, finance, client.id, period, stored, draft.answers, checkin, profile.role])
 
   // Spec 2026-11-02 §5, separate from the once-per-visit prefill above: after a
   // payment save, the two finance answers take the newly computed values, OVER
@@ -229,9 +210,18 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
 
   const readFailed = status === 'error'
 
-  const hoursBox = hours !== null && (
-    <HoursBox onRetry={() => setHoursVersion((version) => version + 1)} result={hours} />
-  )
+  // Brief 2026-11-05 A: read-only. With the hours result, the box; without
+  // one (no view_revenue, or still loading), the stored score alone, so the
+  // bucket's score is never unexplained. `answers` holds an hours score only
+  // when it applies (useCheckin), so no separate applies check is needed.
+  const hoursBox =
+    hours !== null ? (
+      <HoursBox onRetry={() => setHoursVersion((version) => version + 1)} result={hours} />
+    ) : answers[HOURS_QUESTION] != null ? (
+      <p className="t-body" data-testid="hours-score">
+        {hoursScoreText(answers[HOURS_QUESTION] as number)}
+      </p>
+    ) : null
   const label = submitLabel(scored, required)
   // "vs Sep": the month this screen compares against, short (brief 2026-11-04 B).
   const since = monthName(lastPeriod, 'short')
@@ -527,7 +517,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           // beside last month's stored column. Only a finished bucket has a
           // score (bucketScore is null until every question is answered), and
           // a shut Advocacy bucket has neither score nor change.
-          const now = shut ? null : bucketScore(draft.answers, bucket, hoursApplies)
+          const now = shut ? null : bucketScore(answers, bucket, hoursApplies)
           const lastScore =
             bucket === GATED_BUCKET && !lastGateOpen ? null : (lastMonth?.[BUCKET_SCORE_KEY[bucket]] ?? null)
           const change = scoreChange(now, lastScore)
@@ -591,12 +581,11 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                 )}
 
                 {questions.map((question) =>
-                  question.kind === 'choice' ? (
-                    <Fragment key={question.key}>
-                      {/* Spec 2026-11-04 §7: the hours lines sit beside the
-                          question they answer, directly above it. */}
-                      {question.key === HOURS_QUESTION && hoursBox}
+                  // Brief 2026-11-05 A: no options for the hours question.
+                  // The read-only box below stands in its place.
+                  question.key === HOURS_QUESTION ? null : question.kind === 'choice' ? (
                       <ChoiceRow
+                        key={question.key}
                         question={question}
                         value={draft.answers[question.key] as number | undefined}
                         lastValue={
@@ -605,15 +594,12 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                         hint={
                           question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
                             ? finance?.[question.key]?.reason
-                            : question.key === HOURS_QUESTION && hours?.applies
-                              ? hours.answer?.reason
-                              : undefined
+                            : undefined
                         }
                         disabled={saving || !canEdit || shut}
                         onChange={(value) => checkin.setAnswer(question.key, value)}
                         onClear={() => checkin.setAnswer(question.key, null)}
                       />
-                    </Fragment>
                   ) : (
                     <QuestionRow
                       key={question.key}
@@ -629,11 +615,10 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
                   ),
                 )}
 
-                {/* No hours question this month: the box still says why (no
-                    budget, not linked), in the place the question would be. */}
-                {bucket === PAYMENTS_BUCKET &&
-                  !questions.some((question) => question.key === HOURS_QUESTION) &&
-                  hoursBox}
+                {/* Brief 2026-11-05 A: the hours, read-only, last in Finances
+                    where the hours question was -- with its score when it
+                    applies, and why not when it does not. */}
+                {bucket === PAYMENTS_BUCKET && hoursBox}
               </div>
 
               {!shut && (

@@ -3,7 +3,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Profile } from '../auth/useProfile'
-import { ALL_QUESTIONS, overallQuestions } from '../lib/buckets'
+import { ALL_QUESTIONS, HOURS_QUESTION, overallQuestions } from '../lib/buckets'
 import { requiredQuestions } from '../lib/scoreV2'
 
 // A fake of the Supabase chained builder, in the same style as
@@ -93,10 +93,12 @@ function renderCheckin(opts: {
   client: { id: number; name: string; started_on: string | null }
   period?: string
   hoursResultApplies?: boolean | null
+  hoursResultValue?: number | null
 }) {
   const period = opts.period ?? '2026-08-01'
   const hoursResultApplies = opts.hoursResultApplies ?? null
-  const rendered = renderHook(() => useCheckin(opts.client, period, PROFILE, hoursResultApplies))
+  const hoursResultValue = opts.hoursResultValue ?? null
+  const rendered = renderHook(() => useCheckin(opts.client, period, PROFILE, hoursResultApplies, hoursResultValue))
   return { ...rendered, upsert: db.upsert }
 }
 
@@ -279,9 +281,25 @@ describe('useCheckin: submit', () => {
     await waitFor(() => expect(upsert).toHaveBeenCalled())
 
     const payload = upsert.mock.calls[0][0]
-    for (const key of ALL_QUESTIONS) expect(payload).toHaveProperty(key)
+    for (const key of ALL_QUESTIONS.filter((k) => k !== HOURS_QUESTION)) expect(payload).toHaveProperty(key)
     expect(payload.comm_timely).toBe(5)
     expect(payload.adv_left_review).toBeNull()
+  })
+
+  // Brief 2026-11-05 A: the BEFORE trigger sets fin_hours_in_budget; the app
+  // never sends it, not even as null, and not when the draft somehow holds one.
+  it('never sends fin_hours_in_budget on save', async () => {
+    db.checkins = async () => ({
+      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 2, fin_hours_applies: true, notes: null }],
+      error: null,
+    })
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer(HOURS_QUESTION, 5))
+    act(() => result.current.setAnswer('comm_timely', 5))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    expect(upsert.mock.calls[0][0]).not.toHaveProperty(HOURS_QUESTION)
   })
 
   // ai_suggestion is written only by the AI routine; a DB trigger rejects any
@@ -495,49 +513,6 @@ describe('useCheckin: setAnswers', () => {
     expect(readDraft(1, '2026-08-01')?.answers.fin_rate_increased).toBe(5)
   })
 
-  // I2 / spec 2026-11-04 §7: `replacing` lets the hours fill replace the AI's
-  // stored placeholder, still as a fill: dirty, no local draft.
-  it('setAnswers with replacing replaces a form value equal to it, as an unpersisted fill', async () => {
-    db.checkins = async () => ({
-      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, comm_timely: 4, notes: null }],
-      error: null,
-    })
-    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    expect(result.current.draft.answers.fin_hours_in_budget).toBe(3)
-    act(() => result.current.setAnswers({ fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
-    expect(result.current.draft.answers.fin_hours_in_budget).toBe(1)
-    expect(result.current.draft.answers.comm_timely).toBe(4)
-    expect(result.current.saveState.kind).toBe('dirty')
-    expect(readDraft(1, '2026-08-01')).toBeNull()
-  })
-
-  it('setAnswers with replacing leaves a form value that differs from it', async () => {
-    db.checkins = async () => ({
-      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, notes: null }],
-      error: null,
-    })
-    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    act(() => result.current.setAnswer('fin_hours_in_budget', 5))
-    const draftBefore = result.current.draft
-    act(() => result.current.setAnswers({ fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
-    expect(result.current.draft).toBe(draftBefore)
-    expect(result.current.draft.answers.fin_hours_in_budget).toBe(5)
-  })
-
-  it('setAnswers with replacing does not replace a key it does not name', async () => {
-    db.checkins = async () => ({
-      data: [{ client_id: 1, period: '2026-08-01', fin_hours_in_budget: 3, fin_rack_rate: 3, notes: null }],
-      error: null,
-    })
-    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
-    await waitFor(() => expect(result.current.status).toBe('ready'))
-    act(() => result.current.setAnswers({ fin_rack_rate: 1, fin_hours_in_budget: 1 }, { replacing: { fin_hours_in_budget: 3 } }))
-    expect(result.current.draft.answers.fin_rack_rate).toBe(3)
-    expect(result.current.draft.answers.fin_hours_in_budget).toBe(1)
-  })
-
   it('setAnswers with overwrite and identical values is not an edit', async () => {
     db.checkins = async () => ({
       data: [{ client_id: 1, period: '2026-08-01', fin_rate_increased: 3, notes: null }],
@@ -584,6 +559,97 @@ describe('useCheckin: hoursApplies', () => {
     const on = renderCheckin({ client, period: '2026-10-01', hoursResultApplies: true })
     await waitFor(() => expect(on.result.current.status).toBe('ready'))
     expect(on.result.current.hoursApplies).toBe(true)
+  })
+})
+
+// Brief 2026-11-05 A: nobody answers the hours question. The database scores
+// it, and the screen counts the score it will store.
+describe('useCheckin: the hours score is the database\'s, not the form\'s', () => {
+  const client = { id: 1, name: 'Acme', started_on: null }
+  const OCT = '2026-10-01'
+  const withHours = (value: number | null, applies: boolean) => ({
+    client_id: 1, period: OCT, fin_hours_in_budget: value, fin_hours_applies: applies, notes: null,
+  })
+  const everyOtherAnswer = (set: (key: string, value: number) => void) => {
+    for (const key of requiredQuestions(false, true).filter((k) => k !== HOURS_QUESTION)) set(key, 3)
+  }
+
+  it('counts the hours result\'s score when it applies', async () => {
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: true, hoursResultValue: 1 })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.answers[HOURS_QUESTION]).toBe(1)
+    expect(result.current.scored).toBe(1)
+    expect(result.current.required).toBe(18)
+    expect(result.current.draft.answers).not.toHaveProperty(HOURS_QUESTION)
+  })
+
+  it('makes the live overall match the stored one: 17 threes and a 1 over 18', async () => {
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: true, hoursResultValue: 1 })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    everyOtherAnswer((k, v) => act(() => result.current.setAnswer(k, v)))
+    expect(result.current.scored).toBe(18)
+    expect(result.current.localOverall).toBe(Math.round(((17 * 3 + 1) / 18) * 100) / 100)
+  })
+
+  it('counts no hours when the result says it does not apply, whatever is stored', async () => {
+    db.checkins = async () => ({ data: [withHours(5, true)], error: null })
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: false, hoursResultValue: null })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.answers).not.toHaveProperty(HOURS_QUESTION)
+    expect(result.current.required).toBe(17)
+  })
+
+  it('counts no value handed in when the result says it does not apply', async () => {
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: false, hoursResultValue: 5 })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.answers).not.toHaveProperty(HOURS_QUESTION)
+  })
+
+  it('never lets a form value for hours into the scoring answers when there is no score', async () => {
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: false })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer(HOURS_QUESTION, 5))
+    expect(result.current.answers).not.toHaveProperty(HOURS_QUESTION)
+  })
+
+  it('falls back to the stored score when there is no hours result', async () => {
+    db.checkins = async () => ({ data: [withHours(2, true)], error: null })
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: null })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.answers[HOURS_QUESTION]).toBe(2)
+    expect(result.current.scored).toBe(1)
+    // Not in the form: the form never holds it.
+    expect(result.current.draft.answers).not.toHaveProperty(HOURS_QUESTION)
+  })
+
+  it('ignores a form value for hours: the database score wins', async () => {
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: true, hoursResultValue: 2 })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    act(() => result.current.setAnswer(HOURS_QUESTION, 5))
+    expect(result.current.answers[HOURS_QUESTION]).toBe(2)
+  })
+
+  it('marks a check-in complete when every other answer is in and hours applies', async () => {
+    const { result, upsert } = renderCheckin({ client, period: OCT, hoursResultApplies: true, hoursResultValue: 3 })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    everyOtherAnswer((k, v) => act(() => result.current.setAnswer(k, v)))
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    expect(upsert.mock.calls[0][0].submitted_at).not.toBeNull()
+    expect(upsert.mock.calls[0][0]).not.toHaveProperty(HOURS_QUESTION)
+  })
+
+  it('drops an hours answer from a local draft kept before it left the form', async () => {
+    db.checkins = async () => ({ data: [{ ...withHours(2, true), comm_timely: 4 }], error: null })
+    window.localStorage.setItem(
+      `checkin-draft:v5:1:${OCT}`,
+      JSON.stringify({ answers: { comm_timely: 4, [HOURS_QUESTION]: 5 }, notes: '', bucketNotes: {}, focus: '' }),
+    )
+    const { result } = renderCheckin({ client, period: OCT, hoursResultApplies: null })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.unsavedFromEarlierVisit).toBe(false)
+    expect(result.current.draft.answers).not.toHaveProperty(HOURS_QUESTION)
+    expect(result.current.answers[HOURS_QUESTION]).toBe(2)
   })
 })
 

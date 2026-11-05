@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
 import { previousPeriod } from '../lib/month'
-import { ALL_QUESTIONS } from '../lib/buckets'
+import { ALL_QUESTIONS, HOURS_QUESTION } from '../lib/buckets'
 import type { Bucket } from '../lib/buckets'
 import { advocacyApplies as gateApplies } from '../lib/gate'
 import { answeredCount, isComplete, overallScore, requiredQuestions } from '../lib/scoreV2'
+import type { Answers } from '../lib/scoreV2'
 import type { Profile } from '../auth/useProfile'
 import type { Database } from '../types/database'
 import { INITIAL_SAVE_STATE, saveReducer } from './saveState'
@@ -49,6 +50,12 @@ export type UseCheckin = {
   // Whether the hours question is asked (spec 2026-11-04 §4): the hours result
   // when the screen has read one, else the stored fin_hours_applies.
   hoursApplies: boolean
+  // The answers every score on screen is computed from: the form's, plus the
+  // hours score (brief 2026-11-05 A). Nobody answers the hours question; the
+  // database scores it, and this is that score -- from the hours result when
+  // the screen has read one, else the stored fin_hours_in_budget -- so the live
+  // score matches what the database will store.
+  answers: Answers
   required: number
   scored: number
   localOverall: number | null
@@ -60,10 +67,7 @@ export type UseCheckin = {
   draftPersisted: boolean
   unsavedFromEarlierVisit: boolean
   setAnswer: (key: string, value: number | null) => void
-  setAnswers: (
-    values: Record<string, number>,
-    options?: { overwrite?: boolean; replacing?: Record<string, number> },
-  ) => void
+  setAnswers: (values: Record<string, number>, options?: { overwrite?: boolean }) => void
   setNotes: (notes: string) => void
   setBucketNote: (bucket: Bucket, field: BucketNoteField, text: string) => void
   setFocus: (text: string) => void
@@ -77,10 +81,13 @@ export type UseCheckin = {
 //
 // Iterates the rubric rather than the row's own keys: a row carries the retired
 // pillar columns too, and they are not answers.
+//
+// The hours answer is not part of the form (brief 2026-11-05 A): the database
+// sets it, the form never holds it, and it is never saved from here.
 function draftFromRow(row: CheckinRow | null): Draft {
   if (!row) return EMPTY_DRAFT
   const answers: QuestionScores = {}
-  for (const key of ALL_QUESTIONS) {
+  for (const key of FORM_QUESTIONS) {
     const value = row[key as keyof CheckinRow]
     // "a number", not "a truthy value" and not "not undefined". The row also
     // carries client_id, the submitted fields, six generated bucket scores and
@@ -99,6 +106,19 @@ function draftFromRow(row: CheckinRow | null): Draft {
   }
 }
 
+// Every answer the form holds and saves: all but the hours question.
+const FORM_QUESTIONS: readonly string[] = ALL_QUESTIONS.filter((key) => key !== HOURS_QUESTION)
+
+// A draft kept in this browser before the hours answer left the form may still
+// carry one. Dropped on read, so it can neither differ from the database nor be
+// counted.
+function withoutHours(draft: Draft): Draft {
+  if (!(HOURS_QUESTION in draft.answers)) return draft
+  const answers: QuestionScores = { ...draft.answers }
+  delete answers[HOURS_QUESTION]
+  return { ...draft, answers }
+}
+
 export function useCheckin(
   client: { id: number; started_on: string | null },
   period: string,
@@ -108,6 +128,9 @@ export function useCheckin(
   // view_revenue). Passed in rather than read here so useMonthHours, which
   // needs nothing from this hook, can run first without a circular dependency.
   hoursResultApplies: boolean | null,
+  // The hours result's score when it applies (brief 2026-11-05 A). Read only
+  // when hoursResultApplies is true.
+  hoursResultValue: number | null = null,
 ): UseCheckin {
   const clientId = client.id
   const lastPeriod = previousPeriod(period)
@@ -216,7 +239,7 @@ export function useCheckin(
       // never had (completeRestoredDraft).
       const fromDatabase = draftFromRow(thisMonth)
       const restored = readDraft(clientId, period)
-      const fromStorage = restored === null ? null : completeRestoredDraft(restored, fromDatabase)
+      const fromStorage = restored === null ? null : withoutHours(completeRestoredDraft(restored, fromDatabase))
       const differs = fromStorage !== null && draftsDiffer(fromStorage, fromDatabase)
       setDraft(differs && fromStorage ? fromStorage : fromDatabase)
       setUnsavedFromEarlierVisit(differs)
@@ -295,21 +318,12 @@ export function useCheckin(
   // keys named in `values` change; every other answer, typed or stored, is
   // kept. A key already holding the same value is no change, so a refresh that
   // agrees with the form leaves it clean and Confirm still offered.
-  //
-  // `replacing` (spec 2026-11-04 §7) lets a FILL also replace a key whose form
-  // value is still exactly the value given there -- the AI's stored
-  // placeholder -- and nothing else. It is still a fill, not persisted; a key
-  // the person changed no longer holds that value and is left alone.
   const setAnswers = useCallback(
-    (values: Record<string, number>, options?: { overwrite?: boolean; replacing?: Record<string, number> }) => {
+    (values: Record<string, number>, options?: { overwrite?: boolean }) => {
       const answers: QuestionScores = { ...draft.answers }
       let changed = false
       for (const [key, value] of Object.entries(values)) {
-        const replaces =
-          options?.replacing !== undefined &&
-          answers[key] === options.replacing[key] &&
-          answers[key] !== value
-        const fills = options?.overwrite ? answers[key] !== value : answers[key] === undefined || replaces
+        const fills = options?.overwrite ? answers[key] !== value : answers[key] === undefined
         if (fills) {
           answers[key] = value
           changed = true
@@ -361,8 +375,23 @@ export function useCheckin(
   const lastMonthBucketNotes = cleanBucketNotes(lastMonth?.bucket_notes)
   const lastMonthFocus = focusForSave(lastMonth?.focus ?? '')
 
-  const scored = answeredCount(draft.answers, applies, hoursApplies)
-  const localOverall = overallScore(draft.answers, hoursApplies)
+  // The database's hours score, as the screen knows it: the hours result's
+  // when there is one (null when it does not apply), else the stored column.
+  const hoursValue =
+    hoursResultApplies === null
+      ? (stored?.fin_hours_in_budget ?? null)
+      : hoursResultApplies
+        ? hoursResultValue
+        : null
+  const answers = useMemo<Answers>(() => {
+    const out: Answers = { ...draft.answers }
+    delete out[HOURS_QUESTION]
+    if (hoursValue !== null) out[HOURS_QUESTION] = hoursValue
+    return out
+  }, [draft.answers, hoursValue])
+
+  const scored = answeredCount(answers, applies, hoursApplies)
+  const localOverall = overallScore(answers, hoursApplies)
   const storedOverall = scores.find((row) => row.period === period)?.overall_score ?? null
   const lastOverall = scores.find((row) => row.period === lastPeriod)?.overall_score ?? null
   const hasContent = !isDraftEmpty(draft)
@@ -378,7 +407,7 @@ export function useCheckin(
       // Against the REQUIRED count, not 21. A gated-out check-in is complete at
       // 17, and marking it submitted only at 21 would make a complete check-in
       // permanently unsubmittable for every client inside their first 90 days.
-      const complete = isComplete(draft.answers, applies, hoursApplies)
+      const complete = isComplete(answers, applies, hoursApplies)
       const now = new Date().toISOString()
 
       // Every answer column is sent, including the unanswered ones as null, and
@@ -387,8 +416,12 @@ export function useCheckin(
       // database, so the form and the row would disagree with no sign of it
       // anywhere -- and the six bucket columns are generated from these columns,
       // so the bar on the board would be the one nobody chose.
-      const answers = Object.fromEntries(
-        ALL_QUESTIONS.map((key) => [key, draft.answers[key] ?? null]),
+      //
+      // Except fin_hours_in_budget (brief 2026-11-05 A): the BEFORE trigger on
+      // checkins sets it from Productive, overriding anything sent, so it is
+      // never sent at all.
+      const formAnswers = Object.fromEntries(
+        FORM_QUESTIONS.map((key) => [key, draft.answers[key] ?? null]),
       )
 
       try {
@@ -398,7 +431,7 @@ export function useCheckin(
             {
               client_id: clientId,
               period,
-              ...answers,
+              ...formAnswers,
               notes: draft.notes.trim() === '' ? null : draft.notes,
               // Trimmed, empties removed and capped at the DB limits
               // (bucketNotes.ts): the CHECKs refuse "  ", {} for a bucket, and
@@ -492,7 +525,7 @@ export function useCheckin(
     // things it actually reads -- clientId, period, lastPeriod (read by the
     // post-save score refresh above), the draft, applies and the
     // account -- change.
-  }, [clientId, period, lastPeriod, draft, profile.id, applies, hoursApplies])
+  }, [clientId, period, lastPeriod, draft, answers, profile.id, applies, hoursApplies])
 
   return {
     status,
@@ -506,6 +539,7 @@ export function useCheckin(
     saveState,
     advocacyApplies: applies,
     hoursApplies,
+    answers,
     required,
     scored,
     localOverall,

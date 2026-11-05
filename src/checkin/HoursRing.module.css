@@ -1,0 +1,7 @@
+/* Brief 2026-11-05 A: a small progress ring beside each budget line, modelled
+   on Productive's own widget. Sized in em so it follows the line's type. The
+   colour is a second cue only; the hours text beside it is the first. */
+.ring { inline-size: 1.5em; block-size: 1.5em; flex: none; vertical-align: middle; }
+.track { fill: none; stroke: var(--rule-hairline); stroke-width: 4; }
+.fill { fill: none; stroke: var(--band-healthy); stroke-width: 4; stroke-linecap: round; }
+.over { stroke: var(--band-risk); }

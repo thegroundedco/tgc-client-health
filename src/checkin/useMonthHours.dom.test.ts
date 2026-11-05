@@ -101,7 +101,7 @@ describe('useMonthHours', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(invoke).toHaveBeenCalledTimes(0)
     expect(from).toHaveBeenCalledTimes(0)
-    expect(result.current).toEqual({ applies: false, reason: 'before_start', message: null })
+    expect(result.current).toEqual({ applies: false, reason: 'before_start', message: null, lines: [], answer: null })
   })
 
   it('still gives null for a month before October 2026 without view_revenue', async () => {
@@ -119,7 +119,7 @@ describe('useMonthHours', () => {
     expect(by('client_productive_projects')).toEqual([['client_id', 7]])
     expect(by('client_month_budgets')).toEqual([['client_id', 7], ['period', OCT]])
     expect(by('client_month_hours_fetch')).toEqual([['client_id', 7], ['period', OCT]])
-    expect(result.current).toMatchObject({ applies: true, answer: { value: 5 }, note: null })
+    expect(result.current).toMatchObject({ applies: true, answer: { value: 5 }, message: null })
   })
 
   it('treats a failed invoke with no fetch row as not fetched', async () => {
@@ -129,10 +129,11 @@ describe('useMonthHours', () => {
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
     expect(result.current).toEqual({
-      applies: true,
+      applies: false,
+      reason: 'unreachable',
       lines: [],
       answer: null,
-      note: "Couldn't reach Productive – answer by hand or try again",
+      message: "Couldn't reach Productive",
     })
   })
 
@@ -143,7 +144,7 @@ describe('useMonthHours', () => {
     db.fetches = async () => ({ data: [], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current).toMatchObject({ applies: true, answer: null })
+    expect(result.current).toMatchObject({ applies: false, reason: 'unreachable', answer: null })
   })
 
   it("keeps an older fetch when today's invoke fails", async () => {
@@ -153,7 +154,7 @@ describe('useMonthHours', () => {
     expect(result.current).toMatchObject({
       applies: true,
       answer: { value: 5, reason: 'From Productive: 21h worked vs 20h budgeted (+1h).' },
-      note: null,
+      message: null,
     })
   })
 
@@ -165,7 +166,7 @@ describe('useMonthHours', () => {
     db.fetches = async () => ({ data: [{ fetched_at: new Date(2026, 9, 20, 15, 0, 0).toISOString() }], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })
+    expect(result.current).toMatchObject({ applies: false, reason: 'not_finished', answer: null, message: 'Month not finished – hours so far' })
     expect((result.current as { lines: unknown[] }).lines).toHaveLength(1)
   })
 
@@ -173,14 +174,14 @@ describe('useMonthHours', () => {
     db.fetches = async () => ({ data: [{ fetched_at: 'not a date' }], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })
+    expect(result.current).toMatchObject({ applies: false, reason: 'not_finished', answer: null, message: 'Month not finished – hours so far' })
   })
 
   it('is not applicable for a client with no links', async () => {
     db.links = async () => ({ data: [], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current).toEqual({ applies: false, reason: 'not_linked', message: 'Not linked to Productive' })
+    expect(result.current).toEqual({ applies: false, reason: 'not_linked', message: 'Not linked to Productive', lines: [], answer: null })
   })
 
   // A fetch late on the 31st, local: its stored timestamp may already be Nov 1
@@ -190,7 +191,7 @@ describe('useMonthHours', () => {
     db.fetches = async () => ({ data: [{ fetched_at: new Date(2026, 9, 31, 23, 30, 0).toISOString() }], error: null })
     const { result } = renderHook(() => useMonthHours(7, OCT, true))
     await waitFor(() => expect(result.current).not.toBeNull())
-    expect(result.current).toMatchObject({ applies: true, answer: null, note: 'Month not finished – hours so far' })
+    expect(result.current).toMatchObject({ applies: false, reason: 'not_finished', answer: null, message: 'Month not finished – hours so far' })
   })
 
   it('stays null on a failed read', async () => {

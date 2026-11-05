@@ -61,6 +61,25 @@ describe('useRevertSuggestion', () => {
     vi.useRealTimers()
   })
 
+  // Brief 2026-11-05 A: the database sets fin_hours_in_budget. A revert never
+  // sends it, even when the AI suggestion carries one, and completeness reads
+  // the stored (database) score.
+  it('never sends fin_hours_in_budget, and counts the stored hours score toward complete', async () => {
+    const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
+    const stored: Answers = { fin_rack_rate: 5, fin_rate_increased: 1, fin_pays_on_time: 3, fin_hours_in_budget: 2 }
+    await act(async () => {
+      await result.current.revert({
+        current: stored,
+        ai: ai({ ...FULL_AI, fin_pays_on_time: 3, fin_hours_in_budget: 5 }),
+        advocacyApplies: true,
+        hoursApplies: true,
+      })
+    })
+    const payload = db.lastUpdate!
+    expect('fin_hours_in_budget' in payload).toBe(false)
+    expect(payload.submitted_at).toEqual(expect.any(String))
+  })
+
   it('writes exactly the AI columns, notes, and review fields, filtered on client and month', async () => {
     const { result } = renderHook(() => useRevertSuggestion(7, '2026-10-01', 'prof-1'))
     await act(async () => {

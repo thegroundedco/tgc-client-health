@@ -1,3 +1,5 @@
+SUPERSEDED on 2026-11-05 by 2026-11-05-routine-hours-and-focus-update.md (brief A): the database now scores hours, and the routine never writes fin_hours_in_budget. Kept as the record of what was pasted on 2026-11-04.
+
 Goes in: routine-prompt-v2.md, as a new paragraph right after the Finance paragraph in Step 3 (after line 41, "Where this gives no answer ..."), and in the live routine trig_01BA2jJY2nCCd1MozSm17pS3. Paste the text between the two lines into the prompt. Then replace the v2 lines listed under "Line changes" below, each quoted as it reads now, so the rest of the prompt agrees with the paragraph.
 
 For the owner, not the prompt: the monthly fetch is a pg_cron job calling `net.http_post`, and its failures are silent (nothing raises, nothing is logged in the job's own status). After the first cron run on the 1st, check `select id, status_code, timed_out, error_msg, created from net._http_response order by id desc limit 5;` and look for a 200 from the function. Rows there are kept for a few hours only, so check the same day.

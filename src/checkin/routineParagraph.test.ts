@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HOURS_START_PERIOD } from '../lib/buckets'
-import { hoursFromBudgets, hoursScore, signedHours, toHours } from './hoursFromBudgets'
+import { hoursScore, signedHours, toHours } from './hoursFromBudgets'
 // Read through Vite's ?raw, as the app's tsconfig has no Node types.
 import PARAGRAPH from '../../docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md?raw'
 
@@ -56,22 +56,10 @@ describe('the routine paragraph', () => {
     expect(PASTED.slice(unfinished, unreachable)).toMatch(/whether or not any hours are stored yet/)
   })
 
-  it('uses every note the rule emits, word for word', () => {
-    const base = { period: '2026-10-01', today: '2026-11-04', linked: true }
-    const row = {
-      productive_deal_id: 'd1', name: 'Budget A', starts_on: '2026-10-01', ends_on: '2026-10-31',
-      budgeted_minutes: 1200, worked_minutes: 1200,
-    }
-    const notes = [
-      hoursFromBudgets({ ...base, fetched: false, budgets: [] }),
-      hoursFromBudgets({ ...base, fetched: true, budgets: [{ ...row, starts_on: '2026-10-13' }] }),
-    ].map((r) => (r.applies ? r.note : null))
-    for (const note of notes) expect(PASTED).toContain(`"${note}"`)
-    const several = hoursFromBudgets({ ...base, fetched: true, budgets: [row, { ...row, productive_deal_id: 'd2' }] })
-    expect(several.applies && several.note).toBe('2 monthly budgets – tidy up in Productive')
-    expect(PASTED).toContain('"N monthly budgets – tidy up in Productive"')
-    expect(PASTED).toContain('"hours pending – month not finished"')
-    expect(PASTED).toContain('"From Productive: {worked}h worked vs {budgeted}h budgeted ({diff}h)."')
+  // Brief 2026-11-05 A: the screen's notes changed and the database scores
+  // hours, so this paragraph no longer matches the rule; it says so up front.
+  it('is marked superseded by the 2026-11-05 update', () => {
+    expect(PARAGRAPH.split('\n')[0]).toMatch(/^SUPERSEDED on 2026-11-05 by 2026-11-05-routine-hours-and-focus-update\.md/)
   })
 
   it('states bands that agree with hoursScore at every minute from -1000 to +1000', () => {
