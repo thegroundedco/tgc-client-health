@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest'
 // big numbers' line because the totals are ONE grid of three rows and each
 // score block is a SUBGRID of it -- the number lines share row 2, and the
 // change is placed in row 2 on their baseline. No placeholder struts, no
-// absolute positioning, no offsets; wrapping flex where it is narrow or
-// subgrid is missing. jsdom does no layout, so the rules are pinned in
+// absolute positioning, no offsets; wrapping flex where the summary box is
+// narrow or subgrid is missing. jsdom does no layout, so the rules are pinned in
 // source, comments stripped. Where it actually lands needs the owner's eyes.
 
 const ROOT = join(import.meta.dirname, '..')
@@ -34,14 +34,16 @@ function declarations(source: string, selector: string): string[] {
 }
 
 describe('the overall change beside the scores', () => {
-  it('is enhanced only where there is room, and only where subgrid exists', () => {
-    const media = css.lastIndexOf('@media (min-width: 40rem)', ENHANCED_START)
-    expect(media).toBeGreaterThan(-1)
-    expect(css.slice(media, ENHANCED_START).trim()).toBe('@media (min-width: 40rem) {')
+  it('is enhanced only where the summary box has room, and only where subgrid exists', () => {
+    const query = css.lastIndexOf('@container (min-width: 40rem)', ENHANCED_START)
+    expect(query).toBeGreaterThan(-1)
+    expect(css.slice(query, ENHANCED_START).trim()).toBe('@container (min-width: 40rem) {')
+    // The box it measures is the summary box itself.
+    expect(declarations(css, '.totals')).toContain('container-type: inline-size')
   })
 
   it('makes the totals one three-row grid, flowing by column, baseline-aligned', () => {
-    const totals = declarations(enhancement(), '.totals')
+    const totals = declarations(enhancement(), '.totalsGrid')
     expect(totals).toContain('display: grid')
     expect(totals).toContain('grid-auto-flow: column')
     expect(totals).toContain('grid-template-rows: auto auto auto')
@@ -65,8 +67,8 @@ describe('the overall change beside the scores', () => {
   })
 
   it('falls back to wrapping flex outside the enhancement', () => {
-    const base = css.slice(0, css.lastIndexOf('@media (min-width: 40rem)', ENHANCED_START))
-    const totals = declarations(base, '.totals')
+    const base = css.slice(0, css.lastIndexOf('@container (min-width: 40rem)', ENHANCED_START))
+    const totals = declarations(base, '.totalsGrid')
     expect(totals).toContain('display: flex')
     expect(totals).toContain('flex-wrap: wrap')
   })

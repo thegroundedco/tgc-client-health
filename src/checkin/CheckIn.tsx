@@ -398,6 +398,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       />
 
       <div className={styles.totals}>
+        <div className={styles.totalsGrid}>
         <div className={styles.total} data-testid="total-this-month">
           <p className="t-label">This month</p>
           <p className={styles.totalLine}>
@@ -448,6 +449,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
             <span aria-hidden="true">vs {since}</span>
           </p>
         )}
+        </div>
       </div>
 
       {/* Fix round 1: mounted unconditionally, once the screen is ready,

@@ -31,14 +31,21 @@
   display: flex;
 }
 
+/* The summary box, and the container its layout measures (below): the room
+   the box has, not the viewport. */
 .totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
   padding: var(--space-4);
   border: 1px solid var(--rule-hairline);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
+  container-type: inline-size;
+}
+
+/* The two score blocks and the overall change. Wrapping flex by default. */
+.totalsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
 }
 
 .total {
@@ -52,37 +59,6 @@
    subgrid is missing, it is one more wrapping flex item, centred. */
 .overallChange {
   align-self: center;
-}
-
-/* Where there is room, the totals become one grid of three rows -- label,
-   number line, band -- and each score block takes all three as a SUBGRID, so
-   the number lines of every block share row 2. The change sits in row 2 too,
-   baseline-aligned with them: the same line as the big numbers, by the grid
-   rather than by placeholder text or offsets. A media query rather than a
-   container query: .totals is not inside a size container. */
-@media (min-width: 40rem) {
-  @supports (grid-template-rows: subgrid) {
-    .totals {
-      display: grid;
-      grid-auto-flow: column;
-      grid-template-rows: auto auto auto;
-      justify-content: start;
-      column-gap: var(--space-5);
-      align-items: baseline;
-    }
-
-    .total {
-      display: grid;
-      grid-row: 1 / span 3;
-      grid-template-rows: subgrid;
-      row-gap: var(--space-2);
-    }
-
-    .overallChange {
-      grid-row: 2;
-      align-self: baseline;
-    }
-  }
 }
 
 .totalLine {
@@ -254,4 +230,35 @@
   flex: 1 1 var(--measure-column);
   min-width: 0;
   max-width: var(--measure-prose);
+}
+
+/* Where there is room, the totals become one grid of three rows -- label,
+   number line, band -- and each score block takes all three as a SUBGRID, so
+   the number lines of every block share row 2. The change sits in row 2 too,
+   baseline-aligned with them: the same line as the big numbers, by the grid
+   rather than by placeholder text or offsets. A container query on the
+   summary box, as the bucket grid does, and only where subgrid exists. */
+@container (min-width: 40rem) {
+  @supports (grid-template-rows: subgrid) {
+    .totalsGrid {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: auto auto auto;
+      justify-content: start;
+      column-gap: var(--space-5);
+      align-items: baseline;
+    }
+
+    .total {
+      display: grid;
+      grid-row: 1 / span 3;
+      grid-template-rows: subgrid;
+      row-gap: var(--space-2);
+    }
+
+    .overallChange {
+      grid-row: 2;
+      align-self: baseline;
+    }
+  }
 }
