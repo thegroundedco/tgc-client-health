@@ -16,7 +16,7 @@ describe('ChangeText', () => {
     expect(chip.dataset.direction).toBe('down')
   })
 
-  it('carries a class per direction, so each gets its own fill', () => {
+  it('carries a class per direction, so each gets its own text colour', () => {
     const { rerender } = render(<ChangeText change={{ direction: 'up', delta: 0.33 }} />)
     const up = screen.getByTestId('score-change').className
     rerender(<ChangeText change={{ direction: 'down', delta: -0.33 }} />)

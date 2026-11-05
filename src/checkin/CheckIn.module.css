@@ -147,7 +147,7 @@
   gap: var(--space-2) var(--space-3);
 }
 
-/* A score and its change chip on one line: "3.67 ▲ +0.33 vs Sep". */
+/* A score and its change mark on one line: "3.67 ▲ +0.33 vs Sep". */
 .change {
   display: inline-flex;
   flex-wrap: wrap;

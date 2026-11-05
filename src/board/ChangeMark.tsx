@@ -9,7 +9,7 @@ const DIRECTION_CLASS: Record<ScoreChange['direction'], string> = {
 }
 
 // The glyph alone, for the board card's bucket letters, where six "▲ +0.33"
-// chips would not fit under six bars. "=" for no change, so a flat bucket
+// marks would not fit under six bars. "=" for no change, so a flat bucket
 // still says so rather than drawing nothing.
 const GLYPH: Record<ScoreChange['direction'], string> = {
   up: '▲',
@@ -19,7 +19,7 @@ const GLYPH: Record<ScoreChange['direction'], string> = {
 
 // "▲ +0.33" as visible text, for the check-in screen and the card's overall.
 // Without a label the words are the content, read as they stand. With one
-// ("Overall up 0.33 from September") the chip is an image named by it, for a
+// ("Overall up 0.33 from September") the mark is an image named by it, for a
 // screen reader, and the same sentence is its hover title.
 export function ChangeText({ change, label }: { change: ScoreChange; label?: string }) {
   return (

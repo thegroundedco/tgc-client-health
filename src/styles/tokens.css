@@ -79,6 +79,13 @@
   --brand-rule: #CFC8B6;
   --brand-ink-muted: #6B6459;
   --brand-red-legible: #B82B25;
+  /* The teal's legible twin, for the month-over-month change mark (brief
+     2026-11-05 B1: "just make the arrow and numbers colored"). The brand teal
+     is 1.89:1 on paper; #0F766E is 5.11 on the page, 5.38 on raised, 4.64 on
+     sunken. Its dark counterpart is the brand teal itself, which passes on the
+     dark ground at 8.28 / 7.41 / 8.89 -- the same swap the red makes.
+     tests/changeMarkStyle.test.ts computes every one of these. */
+  --brand-teal-legible: #0F766E;
 
   /* PINNED — the same value in both schemes, and that is the whole point.
      --brand-stone carries the same literal as --brand-rule, and that is NOT a
@@ -195,6 +202,7 @@
   --dark-ink-muted: #A69E8E;
   --dark-rule: #4A443A;
   --dark-red-legible: #FF6B60;
+  --dark-teal-legible: #83C1C0;
   /* The comparison series' dark step. Chosen for the same job, not derived:
      2.36 against the dark page, matching the 2.06 the light value has against
      the cream one, so the mark stays equally quiet on both grounds. */
@@ -279,6 +287,15 @@
      filled-alert token — nothing in the app fills a surface with red, and an
      unused token is a colour waiting to be used without its contrast measured. */
   --alert-text: var(--brand-red-legible);
+
+  /* The month-over-month change mark, as coloured text on whatever surface it
+     sits on (brief 2026-11-05 B1). Each passes 4.5:1 on page, raised and
+     sunken in both themes -- computed, not asserted, by
+     tests/changeMarkStyle.test.ts. Colour is never the only signal: the mark
+     always carries its arrow and its sign. */
+  --change-up-text: var(--brand-teal-legible);
+  --change-down-text: var(--brand-red-legible);
+  --change-same-text: var(--brand-ink-muted);
 
   /* The one purely decorative brand colour. Never carries meaning, so nothing
      is lost if a rebrand drops it. Used by the sign-in screen's confirmation
@@ -461,6 +478,7 @@
     --brand-ink-muted: var(--dark-ink-muted);
     --brand-rule: var(--dark-rule);
     --brand-red-legible: var(--dark-red-legible);
+    --brand-teal-legible: var(--dark-teal-legible);
     --brand-chart-compare-retainer: var(--dark-chart-compare-retainer);
     --brand-chart-compare-project: var(--dark-chart-compare-project);
   }
@@ -475,6 +493,7 @@
   --brand-ink-muted: var(--dark-ink-muted);
   --brand-rule: var(--dark-rule);
   --brand-red-legible: var(--dark-red-legible);
+  --brand-teal-legible: var(--dark-teal-legible);
   --brand-chart-compare-retainer: var(--dark-chart-compare-retainer);
   --brand-chart-compare-project: var(--dark-chart-compare-project);
 }
