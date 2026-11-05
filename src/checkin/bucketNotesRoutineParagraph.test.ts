@@ -4,6 +4,7 @@ import { HEALTHY_AT } from '../lib/scoreMath'
 import { BUCKET_NOTE_MAX, FOCUS_MAX } from './bucketNotes'
 // Read through Vite's ?raw, as the app's tsconfig has no Node types.
 import PARAGRAPH from '../../docs/superpowers/plans/2026-11-04-bucket-notes-routine-paragraph.md?raw'
+import HOURS from '../../docs/superpowers/plans/2026-11-04-productive-budget-hours-routine-paragraph.md?raw'
 
 // The routine paragraph is prose the owner pastes into the live AI routine, so
 // nothing runs it. These pins hold it to the rules the database enforces.
@@ -87,5 +88,26 @@ describe('the bucket notes routine paragraph', () => {
     expect(PARAGRAPH).toContain('Leave every answer (finance and hours included)')
     expect(PARAGRAPH).not.toMatch(/\b21 answers\b/)
     expect(PARAGRAPH).not.toMatch(/never null \(see the finance rule\)\.\n/)
+  })
+
+  it('wraps each bucket object in jsonb_strip_nulls and still omits rather than writes {}', () => {
+    const text = flat(PASTED)
+    expect(text).toContain("jsonb_strip_nulls(jsonb_build_object('why', ..., 'actions', ...))")
+    expect(text).toContain('the CHECK refuses null fields')
+    expect(text).toContain('still omit a bucket rather than write {}')
+  })
+
+  // The notes paragraph quotes lines "as the hours paragraph leaves it". If the
+  // hours paragraph's replacement text changes, those quotes go stale silently.
+  it.each([57, 60, 61, 64])('quotes the hours paragraph replacement for line %i verbatim', (n) => {
+    const hoursSection = HOURS.split(`**Line ${n}**, now`)[1]
+    expect(hoursSection).toBeDefined()
+    const afterReplace = hoursSection.split('Replace with:')[1]
+    const replacement = /```\n([\s\S]*?)\n```/.exec(afterReplace)?.[1]
+    expect(replacement).toBeTruthy()
+    const notesSection = PARAGRAPH.split(`**Line ${n}**, now`)[1]
+    expect(notesSection).toBeDefined()
+    const quoted = /```\n([\s\S]*?)\n```/.exec(notesSection)?.[1]
+    expect(quoted).toBe(replacement)
   })
 })

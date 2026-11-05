@@ -31,7 +31,8 @@ Where it goes:
   - The ROW's bucket_notes and focus columns are written only for rows you may overwrite: the same rule as the answers (a new row, a row with suggested_at set, or a manually scored row whose client is in overwrite_client_ids). On a manually scored row you may not overwrite, leave the row's bucket_notes and focus untouched and update only ai_suggestion. Where you write the row, write focus = null when it does not apply, so last run's focus does not linger.
 
 Build the jsonb in SQL with jsonb_build_object (or a parameterised literal), never by pasting notes into a hand-written JSON string, so an apostrophe or a double quote in a note cannot break the statement. For example:
-  jsonb_build_object('communication', jsonb_build_object('why', $w1$...$w1$, 'actions', $a1$...$a1$), 'delivery', jsonb_build_object('why', $w2$...$w2$))
+  jsonb_build_object('communication', jsonb_strip_nulls(jsonb_build_object('why', $w1$...$w1$, 'actions', $a1$...$a1$)), 'delivery', jsonb_strip_nulls(jsonb_build_object('why', $w2$...$w2$)))
+Wrap each bucket's object in jsonb_strip_nulls(jsonb_build_object('why', ..., 'actions', ...)): the CHECK refuses null fields, and a field you have nothing for would otherwise be written as null. jsonb_strip_nulls leaves an empty object when both fields are null, so still omit a bucket rather than write {}.
 Use a different dollar-quote tag for every piece of text, as the note does. Build the same value once and use it in both places (ai_suggestion = ai || jsonb_build_object('bucket_notes', <that value>, 'focus', <text or null>); bucket_notes = <that value>; focus = <text or null>).
 
 ---
