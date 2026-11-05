@@ -197,13 +197,19 @@ export function RevenueAdmin({ onWritingChange }: Props) {
       // absence of a row is meaningful here, so a month that is half-written
       // reads as some clients having genuinely not been entered yet, which is
       // false.
-      const { error } = await supabase
-        .from('client_month_revenue')
-        .upsert(rows, { onConflict: 'client_id,period' })
+      // Skipped when there is nothing for it to carry (every client's month
+      // has line items, or nothing was entered), so a failure of the second
+      // upsert below can say truthfully whether anything was saved.
+      const firstRan = rows.length > 0
+      if (firstRan) {
+        const { error } = await supabase
+          .from('client_month_revenue')
+          .upsert(rows, { onConflict: 'client_id,period' })
 
-      if (error) {
-        setSaveError(describeError(error))
-        return
+        if (error) {
+          setSaveError(describeError(error))
+          return
+        }
       }
 
       // A SECOND upsert, for months with line items, naming no project column
@@ -223,7 +229,9 @@ export function RevenueAdmin({ onWritingChange }: Props) {
           )
         if (second.error) {
           setSaveError(
-            `The other clients were saved, but the retainer for months with line items was not: ${describeError(second.error)}`,
+            firstRan
+              ? `The other clients were saved, but the retainer for months with line items was not: ${describeError(second.error)}`
+              : `Nothing was saved: ${describeError(second.error)}`,
           )
           revenue.reload()
           return

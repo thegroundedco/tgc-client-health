@@ -324,6 +324,28 @@ describe('the revenue entry grid', () => {
       expect(sent.find((row) => row.client_id === 2)).toMatchObject({ project_cents: 1000 })
     })
 
+    it('makes no first upsert when every client has items, and claims nothing was saved when the second fails', async () => {
+      const user = userEvent.setup()
+      const upsert = vi.fn().mockResolvedValue({ error: { message: 'boom' } })
+      vi.mocked(supabase.from).mockReturnValue({ upsert } as never)
+      vi.mocked(supabase.auth.getUser).mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null } as never)
+      given({
+        clients: [CLIENTS[0]],
+        rows: [{ ...ROW, project_cents: 80000 }],
+        itemTotals: { 1: 80000 },
+      })
+
+      await user.clear(screen.getByLabelText('Acme retainer'))
+      await user.type(screen.getByLabelText('Acme retainer'), '4500')
+      await user.click(screen.getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(screen.getByText(/^Nothing was saved: /)).toBeTruthy())
+      expect(upsert).toHaveBeenCalledTimes(1)
+      const only = upsert.mock.calls[0][0] as Array<Record<string, unknown>>
+      expect(only.every((row) => !('project_cents' in row))).toBe(true)
+      expect(document.body.textContent).not.toMatch(/other clients were saved/i)
+    })
+
     it('ignores typing into the read-only field', async () => {
       const user = userEvent.setup()
       withItems()
