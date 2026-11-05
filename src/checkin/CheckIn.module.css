@@ -71,15 +71,39 @@
 }
 
 /* The section is the card, not the question. Twenty-two bordered question cards
-   is a scroll; six bordered sections is a screen with six landmarks in it. */
+   is a scroll; six bordered sections is a screen with six landmarks in it.
+
+   Spec 2026-11-04 §2: a grid, one column by default -- the notes panel stacks
+   under the questions on a narrow screen, and a shut Advocacy bucket (no panel)
+   stays one column at every width. */
 .bucket {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   padding: var(--space-4);
   border: 1px solid var(--rule-hairline);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
+}
+
+/* The questions column keeps the section's old flow: heading, legend, rows. */
+.bucketQuestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+/* Two columns from 45rem (720px at the default root size) up: questions about
+   62%, notes about 38%, in fr so the gap comes out of both rather than pushing
+   the panel past the edge. One row, so the panel spans the questions. rem, not
+   px, like the other breakpoints here (Revenue.module.css's 60rem), so a
+   reader who has raised their browser's text size gets the stacked layout
+   sooner rather than a squeezed one. */
+@media (min-width: 45rem) {
+  .bucketWithNotes {
+    grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+  }
 }
 
 /* Two pairs on one line where there is room: a caption-weight aside, not a

@@ -24,6 +24,18 @@
   gap: var(--space-2);
 }
 
+/* The focus line: two lines at most, the rest behind an ellipsis and in the
+   element's title. Ink rather than caption grey, so it reads as content. */
+.focus {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
 .score {
   display: flex;
   align-items: baseline;

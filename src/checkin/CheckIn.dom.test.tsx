@@ -32,6 +32,8 @@ vi.mock('./useCheckin', async () => {
 
 // Only the real useCheckin reaches this: the two reads its load() makes.
 const checkinRows = vi.hoisted(() => ({ current: [] as unknown[] }))
+// And the save: each upsert's row is kept, and the row comes back as stored.
+const upserts = vi.hoisted(() => ({ rows: [] as Record<string, unknown>[] }))
 vi.mock('../lib/supabase', () => ({
   supabase: {
     from: (table: string) => ({
@@ -40,6 +42,14 @@ vi.mock('../lib/supabase', () => ({
           in: async () => ({ data: table === 'checkins' ? checkinRows.current : [], error: null }),
         }),
       }),
+      upsert: (row: Record<string, unknown>) => {
+        upserts.rows.push(row)
+        return {
+          select: () => ({
+            single: async () => ({ data: { ...row, updated_at: '2026-08-31T12:00:00.000Z' }, error: null }),
+          }),
+        }
+      },
     }),
   },
 }))
@@ -1263,5 +1273,208 @@ describe('CheckIn, whether the hours question is asked', () => {
     await open(CLIENT)
     expect(hoursGroup()).toBeNull()
     expect(caption()).toBe('not scored · 0 of 21 answered')
+  })
+})
+
+// Spec 2026-11-04 §2: a notes panel beside each bucket, and the month's focus
+// above the first one.
+describe('CheckIn, bucket notes and the focus box', () => {
+  const OPEN_BUCKETS = ['communication', 'growth', 'finances', 'relationship', 'delivery', 'advocacy']
+  const panel = (bucket: string) => within(screen.getByTestId(`bucket-${bucket}`)).queryByRole('group', { name: /notes$/ })
+  const whyIn = (bucket: string) =>
+    within(screen.getByTestId(`bucket-${bucket}`)).getByLabelText('Why this score') as HTMLTextAreaElement
+  const actionsIn = (bucket: string) =>
+    within(screen.getByTestId(`bucket-${bucket}`)).getByLabelText('Action items') as HTMLTextAreaElement
+  const focusBox = () => screen.getByLabelText("This month's focus") as HTMLTextAreaElement
+
+  it('draws a panel in every open bucket, Advocacy included', () => {
+    renderAs('account_manager')
+    for (const bucket of OPEN_BUCKETS) {
+      expect(panel(bucket)).not.toBeNull()
+      expect(whyIn(bucket)).toBeTruthy()
+      expect(actionsIn(bucket)).toBeTruthy()
+    }
+    expect(document.querySelectorAll('textarea[id^="bucket-notes-"]')).toHaveLength(12)
+  })
+
+  it('a shut Advocacy bucket draws no panel; the other five still do (Review Focus 5)', () => {
+    hookState.current = mockCheckin({
+      advocacyApplies: false,
+      required: 17,
+      // Stored advocacy notes are in the draft, and still no panel is drawn.
+      draft: { answers: {}, notes: '', bucketNotes: { advocacy: { why: 'Kept' } }, focus: '' },
+    })
+    render(
+      <CheckIn
+        client={{ ...CLIENT, started_on: null }}
+        period={PERIOD}
+        profile={profile('account_manager')}
+        onBack={() => {}}
+        onEditClient={() => {}}
+      />,
+    )
+    expect(panel('advocacy')).toBeNull()
+    expect(within(screen.getByTestId('bucket-advocacy')).queryByRole('textbox')).toBeNull()
+    expect(screen.queryByDisplayValue('Kept')).toBeNull()
+    for (const bucket of OPEN_BUCKETS.filter((b) => b !== 'advocacy')) expect(panel(bucket)).not.toBeNull()
+  })
+
+  it('a viewer without edit_scores gets read-only panels and focus, still showing the text', () => {
+    renderAs('viewer', {
+      draft: { answers: {}, notes: '', bucketNotes: { growth: { why: 'Grew' } }, focus: 'Renewal' },
+    })
+    for (const bucket of OPEN_BUCKETS) {
+      expect(whyIn(bucket).disabled).toBe(true)
+      expect(actionsIn(bucket).disabled).toBe(true)
+    }
+    expect(focusBox().disabled).toBe(true)
+    expect(whyIn('growth').value).toBe('Grew')
+    expect(focusBox().value).toBe('Renewal')
+  })
+
+  it("each panel shows its own bucket's notes, and none of another's", () => {
+    renderAs('account_manager', {
+      draft: {
+        answers: {},
+        notes: '',
+        bucketNotes: { communication: { why: 'Slow replies' }, delivery: { actions: 'New timeline' } },
+        focus: '',
+      },
+    })
+    expect(whyIn('communication').value).toBe('Slow replies')
+    expect(actionsIn('communication').value).toBe('')
+    expect(actionsIn('delivery').value).toBe('New timeline')
+    expect(whyIn('delivery').value).toBe('')
+    for (const bucket of ['growth', 'finances', 'relationship', 'advocacy']) {
+      expect(whyIn(bucket).value).toBe('')
+      expect(actionsIn(bucket).value).toBe('')
+    }
+  })
+
+  it('someone who may score gets editable panels and focus', () => {
+    renderAs('account_manager')
+    for (const bucket of OPEN_BUCKETS) {
+      expect(whyIn(bucket).disabled).toBe(false)
+      expect(actionsIn(bucket).disabled).toBe(false)
+    }
+    expect(focusBox().disabled).toBe(false)
+  })
+
+  it('everything is read-only while saving', () => {
+    renderAs('account_manager', { saveState: { kind: 'saving' } })
+    for (const bucket of OPEN_BUCKETS) {
+      expect(whyIn(bucket).disabled).toBe(true)
+      expect(actionsIn(bucket).disabled).toBe(true)
+    }
+    expect(focusBox().disabled).toBe(true)
+  })
+
+  it('typing routes to setBucketNote and setFocus with the right bucket and field', () => {
+    const setBucketNote = vi.fn()
+    const setFocus = vi.fn()
+    renderAs('account_manager', { setBucketNote, setFocus })
+    fireEvent.change(whyIn('delivery'), { target: { value: 'Late twice' } })
+    expect(setBucketNote).toHaveBeenLastCalledWith('delivery', 'why', 'Late twice')
+    fireEvent.change(actionsIn('communication'), { target: { value: 'Weekly call' } })
+    expect(setBucketNote).toHaveBeenLastCalledWith('communication', 'actions', 'Weekly call')
+    fireEvent.change(focusBox(), { target: { value: 'Close the renewal' } })
+    expect(setFocus).toHaveBeenLastCalledWith('Close the renewal')
+  })
+
+  it("shows last month's actions in their own bucket, and last month's focus", () => {
+    renderAs('account_manager', {
+      lastMonthBucketNotes: { growth: { why: 'Not shown', actions: 'Pitch the retainer' } },
+      lastMonthFocus: 'Fix the timeline',
+    })
+    expect(
+      within(screen.getByTestId('bucket-growth')).getByText("Last month's actions: Pitch the retainer"),
+    ).toBeTruthy()
+    expect(screen.getAllByText(/Last month's actions:/)).toHaveLength(1)
+    // Last month's WHY is not shown -- only the actions, so the meeting can
+    // ask whether they happened.
+    expect(screen.queryByText(/Not shown/)).toBeNull()
+    expect(screen.getByText('Last month: Fix the timeline')).toBeTruthy()
+  })
+
+  it('the focus box sits above the first bucket', () => {
+    renderAs('account_manager')
+    const first = screen.getByTestId('bucket-communication')
+    const position = focusBox().compareDocumentPosition(first)
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+// Review Focus 4 and 5, with the real hook: what a keystroke does to the
+// save state, and what the save sends.
+describe('CheckIn, bucket notes through the real hook', () => {
+  const ADVOCACY_CLIENT = { ...CLIENT, started_on: null }
+  const status = () => document.getElementById('checkin-save-status')?.textContent ?? ''
+
+  async function open(client: { id: number; name: string; status: string; started_on: string | null } = CLIENT) {
+    hookState.real = true
+    window.localStorage.clear()
+    render(
+      <CheckIn client={client} period={PERIOD} profile={profile('admin')} onBack={() => {}} onEditClient={() => {}} />,
+    )
+    await screen.findByRole('heading', { name: "This month's focus" })
+  }
+
+  afterEach(() => {
+    hookState.real = false
+    checkinRows.current = []
+    upserts.rows.length = 0
+    window.localStorage.clear()
+  })
+
+  it('a note typed into an empty check-in is unsaved content, and saving sends it and clears that', async () => {
+    await open()
+    const save = () => screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement
+    expect(status()).not.toMatch(/Unsaved/)
+
+    fireEvent.change(within(screen.getByTestId('bucket-growth')).getByLabelText('Why this score'), {
+      target: { value: 'Two new briefs' },
+    })
+    expect(status()).toMatch(/Unsaved changes/)
+    // Notes alone, no answers: something to save, not "nothing to save".
+    expect(save().disabled).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(save())
+    })
+    await waitFor(() => expect(status()).not.toMatch(/Unsaved/))
+    expect(upserts.rows).toHaveLength(1)
+    expect(upserts.rows[0].bucket_notes).toEqual({ growth: { why: 'Two new briefs' } })
+  })
+
+  it('typing in the focus box marks the check-in unsaved', async () => {
+    await open()
+    fireEvent.change(screen.getByLabelText("This month's focus"), { target: { value: 'Renewal' } })
+    expect(status()).toMatch(/Unsaved changes/)
+  })
+
+  it('stored Advocacy notes survive a save while the bucket is shut and draws no panel', async () => {
+    checkinRows.current = [
+      {
+        client_id: CLIENT.id,
+        period: PERIOD,
+        notes: null,
+        bucket_notes: { advocacy: { why: 'Referred a friend', actions: 'Ask for a quote' } },
+        focus: null,
+      },
+    ]
+    await open(ADVOCACY_CLIENT)
+    expect(within(screen.getByTestId('bucket-advocacy')).queryByRole('textbox')).toBeNull()
+
+    fireEvent.change(within(screen.getByTestId('bucket-growth')).getByLabelText('Action items'), {
+      target: { value: 'Send the proposal' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save draft' }))
+    })
+    await waitFor(() => expect(upserts.rows).toHaveLength(1))
+    expect(upserts.rows[0].bucket_notes).toEqual({
+      advocacy: { why: 'Referred a friend', actions: 'Ask for a quote' },
+      growth: { actions: 'Send the proposal' },
+    })
   })
 })

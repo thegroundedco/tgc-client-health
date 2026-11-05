@@ -12,6 +12,8 @@ import { useMonthPayment } from '../revenue/useMonthPayment'
 import { PaymentsBox } from './PaymentsBox'
 import { useMonthHours } from './useMonthHours'
 import { HoursBox } from './HoursBox'
+import { BucketNotesPanel } from './BucketNotesPanel'
+import { FocusBox } from './FocusBox'
 import type { CheckinRow } from './useCheckin'
 import { QuestionRow } from './QuestionRow'
 import { ChoiceRow } from './ChoiceRow'
@@ -98,6 +100,8 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
     stored,
     lastMonth,
     lastPeriod,
+    lastMonthBucketNotes,
+    lastMonthFocus,
     draft,
     saveState,
     advocacyApplies,
@@ -475,6 +479,15 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         </p>
       )}
 
+      {/* Spec 2026-11-04 §2: above the first bucket, so the meeting opens on
+          what this month is for. Disabled exactly as the general notes are. */}
+      <FocusBox
+        disabled={saving || !canEdit}
+        lastFocus={lastMonthFocus}
+        onChange={checkin.setFocus}
+        value={draft.focus}
+      />
+
       <div className={styles.buckets}>
         {BUCKETS.map((bucket) => {
           const definition = BUCKET_DEFINITIONS[bucket]
@@ -488,84 +501,105 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
           // string so the gate has one definition (buckets.ts).
           const shut = bucket === GATED_BUCKET && !advocacyApplies
           return (
-            <section className={styles.bucket} data-testid={`bucket-${bucket}`} key={bucket}>
-              <h3 className="t-subhead" data-testid="bucket-heading">
-                {definition.label}
-              </h3>
+            // Spec 2026-11-04 §2: questions on the left, a notes panel on the
+            // right (a grid, CheckIn.module.css; one column on a narrow
+            // screen). A shut Advocacy bucket draws no panel and keeps the
+            // single-column shape -- its stored notes stay in the draft and
+            // are saved untouched (Review Focus 5).
+            <section
+              className={shut ? styles.bucket : `${styles.bucket} ${styles.bucketWithNotes}`}
+              data-testid={`bucket-${bucket}`}
+              key={bucket}
+            >
+              <div className={styles.bucketQuestions}>
+                <h3 className="t-subhead" data-testid="bucket-heading">
+                  {definition.label}
+                </h3>
 
-              {hasScale && <ScaleLegend />}
+                {hasScale && <ScaleLegend />}
 
-              {/* Spec 2026-11-02 §3, moved by the owner the same day: inside
-                  Finances, above its questions, so the payment is confirmed
-                  right where the two answers it fills are read. The box draws
-                  nothing for a role without view_revenue. */}
-              {bucket === PAYMENTS_BUCKET && (
-                <PaymentsBox
-                  canEdit={can(profile.role, 'edit_revenue')}
-                  clientId={client.id}
-                  clientName={client.name}
-                  onSaved={onPaymentSaved}
-                  payment={payment}
-                  period={period}
-                />
-              )}
+                {/* Spec 2026-11-02 §3, moved by the owner the same day: inside
+                    Finances, above its questions, so the payment is confirmed
+                    right where the two answers it fills are read. The box draws
+                    nothing for a role without view_revenue. */}
+                {bucket === PAYMENTS_BUCKET && (
+                  <PaymentsBox
+                    canEdit={can(profile.role, 'edit_revenue')}
+                    clientId={client.id}
+                    clientName={client.name}
+                    onSaved={onPaymentSaved}
+                    payment={payment}
+                    period={period}
+                  />
+                )}
 
-              {/* Shown, not hidden -- §7, "so the scorer learns the bucket
-                  exists". A hidden section is a screen that silently asks for
-                  17 questions one month and 21 the next with nothing to
-                  explain the change. The reason distinguishes the two shut
-                  cases, because one is a missing fact somebody can go and
-                  enter and the other is a client who is simply new. */}
-              {shut && !gate.open && (
-                <p className="alert prose" data-testid="advocacy-gate" role="status">
-                  {gate.reason}
-                </p>
-              )}
+                {/* Shown, not hidden -- §7, "so the scorer learns the bucket
+                    exists". A hidden section is a screen that silently asks for
+                    17 questions one month and 21 the next with nothing to
+                    explain the change. The reason distinguishes the two shut
+                    cases, because one is a missing fact somebody can go and
+                    enter and the other is a client who is simply new. */}
+                {shut && !gate.open && (
+                  <p className="alert prose" data-testid="advocacy-gate" role="status">
+                    {gate.reason}
+                  </p>
+                )}
 
-              {questions.map((question) =>
-                question.kind === 'choice' ? (
-                  <Fragment key={question.key}>
-                    {/* Spec 2026-11-04 §7: the hours lines sit beside the
-                        question they answer, directly above it. */}
-                    {question.key === HOURS_QUESTION && hoursBox}
-                    <ChoiceRow
+                {questions.map((question) =>
+                  question.kind === 'choice' ? (
+                    <Fragment key={question.key}>
+                      {/* Spec 2026-11-04 §7: the hours lines sit beside the
+                          question they answer, directly above it. */}
+                      {question.key === HOURS_QUESTION && hoursBox}
+                      <ChoiceRow
+                        question={question}
+                        value={draft.answers[question.key] as number | undefined}
+                        lastValue={
+                          (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
+                        }
+                        hint={
+                          question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
+                            ? finance?.[question.key]?.reason
+                            : question.key === HOURS_QUESTION && hours?.applies
+                              ? hours.answer?.reason
+                              : undefined
+                        }
+                        disabled={saving || !canEdit || shut}
+                        onChange={(value) => checkin.setAnswer(question.key, value)}
+                        onClear={() => checkin.setAnswer(question.key, null)}
+                      />
+                    </Fragment>
+                  ) : (
+                    <QuestionRow
+                      key={question.key}
                       question={question}
                       value={draft.answers[question.key] as number | undefined}
                       lastValue={
                         (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
                       }
-                      hint={
-                        question.key === 'fin_rack_rate' || question.key === 'fin_rate_increased'
-                          ? finance?.[question.key]?.reason
-                          : question.key === HOURS_QUESTION && hours?.applies
-                            ? hours.answer?.reason
-                            : undefined
-                      }
                       disabled={saving || !canEdit || shut}
                       onChange={(value) => checkin.setAnswer(question.key, value)}
                       onClear={() => checkin.setAnswer(question.key, null)}
                     />
-                  </Fragment>
-                ) : (
-                  <QuestionRow
-                    key={question.key}
-                    question={question}
-                    value={draft.answers[question.key] as number | undefined}
-                    lastValue={
-                      (lastMonth?.[question.key as keyof CheckinRow] as number | null) ?? null
-                    }
-                    disabled={saving || !canEdit || shut}
-                    onChange={(value) => checkin.setAnswer(question.key, value)}
-                    onClear={() => checkin.setAnswer(question.key, null)}
-                  />
-                ),
-              )}
+                  ),
+                )}
 
-              {/* No hours question this month: the box still says why (no
-                  budget, not linked), in the place the question would be. */}
-              {bucket === PAYMENTS_BUCKET &&
-                !questions.some((question) => question.key === HOURS_QUESTION) &&
-                hoursBox}
+                {/* No hours question this month: the box still says why (no
+                    budget, not linked), in the place the question would be. */}
+                {bucket === PAYMENTS_BUCKET &&
+                  !questions.some((question) => question.key === HOURS_QUESTION) &&
+                  hoursBox}
+              </div>
+
+              {!shut && (
+                <BucketNotesPanel
+                  bucket={bucket}
+                  disabled={saving || !canEdit}
+                  lastActions={lastMonthBucketNotes[bucket]?.actions}
+                  note={draft.bucketNotes[bucket]}
+                  onChange={(field, text) => checkin.setBucketNote(bucket, field, text)}
+                />
+              )}
             </section>
           )
         })}

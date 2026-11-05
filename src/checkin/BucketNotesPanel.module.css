@@ -1,0 +1,8 @@
+/* The notes column beside a bucket's questions. Flow layout and spacing tokens
+   only, no fixed positions (modelled on PaymentsBox.module.css); its width is
+   the grid track CheckIn.module.css gives it. The owner checks placement by eye. */
+.panel { display: grid; align-content: start; gap: var(--space-3); min-inline-size: 0; }
+.field { display: grid; gap: var(--space-1); }
+.box { resize: vertical; line-height: var(--leading-body); }
+/* Long words in a pasted note must wrap rather than widen the column. */
+.last { overflow-wrap: anywhere; }

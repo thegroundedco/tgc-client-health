@@ -520,3 +520,42 @@ describe('a card by membership, not by status', () => {
     expect(screen.queryByRole('button', { name: /Polar Divide/ })).toBeNull()
   })
 })
+
+// Spec 2026-11-04 §3: the month's focus, under the band, clamped to two lines
+// by CSS with the full text in `title`.
+describe('a client card, the focus line', () => {
+  const ACME: BoardClient = { id: 9, name: 'Acme', status: 'active', started_on: null, ended_on: null }
+  const ROW: CardCheckin = { client_id: 9, submitted_at: null, submitted_by: null, suggested_at: null }
+  const LONG = 'Win back the trust lost on the spring launch, and agree the summer scope before the end of the month.'
+
+  it('shows Focus: <text> when the check-in has a focus, with the full text as its title', () => {
+    renderCard({ client: ACME, checkin: { ...ROW, focus: LONG } })
+    const line = screen.getByTestId('card-focus')
+    expect(line.textContent).toBe(`Focus: ${LONG}`)
+    expect(line.getAttribute('title')).toBe(LONG)
+    // The clamp is the CSS class; jsdom does no layout, so the class is what
+    // can be asserted. Its rule lives in ClientCard.module.css.
+    expect(line.className).toMatch(/focus/)
+  })
+
+  it('sits under the band, above the score', () => {
+    renderCard({ client: ACME, checkin: { ...ROW, focus: 'Renewal' } })
+    const line = screen.getByTestId('card-focus')
+    const total = screen.getByTestId('total')
+    expect(line.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('draws nothing without a focus', () => {
+    renderCard({ client: ACME, checkin: { ...ROW, focus: null } })
+    expect(screen.queryByTestId('card-focus')).toBeNull()
+    expect(screen.queryByText(/Focus:/)).toBeNull()
+  })
+
+  it('draws nothing for an empty or whitespace focus, or no check-in', () => {
+    const { unmount } = renderCard({ client: ACME, checkin: { ...ROW, focus: '   ' } })
+    expect(screen.queryByTestId('card-focus')).toBeNull()
+    unmount()
+    renderCard({ client: ACME, checkin: null })
+    expect(screen.queryByTestId('card-focus')).toBeNull()
+  })
+})

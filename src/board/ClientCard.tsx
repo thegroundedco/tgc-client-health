@@ -32,6 +32,8 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
   // local calculation would be a second thing to keep in agreement.
   const total = score?.overall_score ?? null
   const band = bandFor(total)
+  // The column is null or 1-1000 characters, but a blank never draws a line.
+  const focus = (checkin?.focus ?? '').trim()
 
   // The gate decides how many bars there are, not whether one of them is empty.
   // An empty sixth bar reads as a score of zero, and Advocacy inside 90 days is
@@ -84,6 +86,16 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
           </span>
         )}
       </div>
+
+      {/* Spec 2026-11-04 §3: the month's focus, the first thing read in the
+          meeting for a Watch or At-risk client. Clamped to two lines by CSS,
+          with the whole of it in `title`. The words "Focus:" mark it, not a
+          colour. A card with no focus is drawn exactly as before. */}
+      {focus !== '' && (
+        <p className={`t-caption ${styles.focus}`} data-testid="card-focus" title={focus}>
+          {`Focus: ${focus}`}
+        </p>
+      )}
 
       <p className={styles.score}>
         {/* An em dash, never a 0. An incomplete check-in has no score, and a

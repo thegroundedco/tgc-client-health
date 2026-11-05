@@ -1,0 +1,13 @@
+/* The month's focus, above the first bucket. Drawn as the bucket sections are
+   (CheckIn.module.css .bucket) so it reads as one of the screen's landmarks.
+   Flow layout and spacing tokens only, no fixed positions. */
+.box {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.text { resize: vertical; line-height: var(--leading-body); }
+.last { overflow-wrap: anywhere; }
