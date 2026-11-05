@@ -11,7 +11,19 @@
      screen would suit the new row shape (a prompt and a five-point scale that
      would rather not wrap), and the token for it, --measure-admin at 90ch,
      already exists on the unmerged admin-visual-pass branch. Declaring a second
-     one here would collide with it on merge. Revisit when that branch lands. */
+     one here would collide with it on merge. Revisit when that branch lands.
+
+     Spec 2026-11-04 §2, fix round 1: the screen itself may now reach
+     --measure-dashboard, because the bucket list (questions beside a notes
+     panel) needs the room -- inside 62ch the two columns came out about 308px
+     and 189px. Every other child keeps the prose measure (rule below); only
+     .buckets, which holds the focus box and the six sections, is let out. */
+  max-width: var(--measure-dashboard);
+}
+
+/* The prose measure for everything on the screen but the bucket list: the
+   read-only notice, the general notes, the save bar and its status line. */
+.screen > * {
   max-width: var(--measure-prose);
 }
 
@@ -68,6 +80,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  /* The container the bucket grid measures itself against (below): the
+     columns depend on the room this list actually has, not on the viewport. */
+  container-type: inline-size;
+}
+
+/* Two classes, so it outranks `.screen > *` above. */
+.screen > .buckets {
+  max-width: var(--measure-dashboard);
 }
 
 /* The section is the card, not the question. Twenty-two bordered question cards
@@ -94,13 +114,13 @@
   min-inline-size: 0;
 }
 
-/* Two columns from 45rem (720px at the default root size) up: questions about
-   62%, notes about 38%, in fr so the gap comes out of both rather than pushing
-   the panel past the edge. One row, so the panel spans the questions. rem, not
-   px, like the other breakpoints here (Revenue.module.css's 60rem), so a
-   reader who has raised their browser's text size gets the stacked layout
-   sooner rather than a squeezed one. */
-@media (min-width: 45rem) {
+/* Two columns once the bucket list itself is 40rem wide: questions about 62%,
+   notes about 38%, in fr so the gap comes out of both rather than pushing the
+   panel past the edge. One row, so the panel spans the questions. A container
+   query, not a media query: the list's width is capped (--measure-dashboard),
+   so the viewport says nothing reliable about the room the columns get.
+   Narrower than that, the panel stacks under the questions. */
+@container (min-width: 40rem) {
   .bucketWithNotes {
     grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
   }

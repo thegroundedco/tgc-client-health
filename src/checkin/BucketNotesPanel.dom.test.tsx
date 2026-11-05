@@ -99,9 +99,13 @@ describe('BucketNotesPanel', () => {
     expect(actions().hasAttribute('aria-describedby')).toBe(false)
   })
 
-  it('treats an empty last-month string as absent', () => {
-    setup({ lastActions: '' })
+  it('treats an empty or whitespace-only last-month string as absent', () => {
+    const { view } = setup({ lastActions: '' })
     expect(screen.queryByText(/Last month's actions/)).toBeNull()
+    view.unmount()
+    setup({ lastActions: '  \n ' })
+    expect(screen.queryByText(/Last month's actions/)).toBeNull()
+    expect(actions().hasAttribute('aria-describedby')).toBe(false)
   })
 
   it('disabled makes both boxes uneditable', () => {

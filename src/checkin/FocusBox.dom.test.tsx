@@ -57,6 +57,11 @@ describe('FocusBox', () => {
 
     setup({ lastFocus: '' })
     expect(screen.queryByText(/Last month:/)).toBeNull()
+    cleanup()
+
+    setup({ lastFocus: '   ' })
+    expect(screen.queryByText(/Last month:/)).toBeNull()
+    expect(box().getAttribute('aria-describedby')).toBe('checkin-focus-hint')
   })
 
   it('shows the value and reports typing', () => {

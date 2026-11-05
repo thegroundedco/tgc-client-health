@@ -479,16 +479,16 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
         </p>
       )}
 
-      {/* Spec 2026-11-04 §2: above the first bucket, so the meeting opens on
-          what this month is for. Disabled exactly as the general notes are. */}
-      <FocusBox
-        disabled={saving || !canEdit}
-        lastFocus={lastMonthFocus}
-        onChange={checkin.setFocus}
-        value={draft.focus}
-      />
-
       <div className={styles.buckets}>
+        {/* Spec 2026-11-04 §2: above the first bucket, so the meeting opens on
+            what this month is for. Disabled exactly as the general notes are.
+            Inside the bucket list so it shares the list's wider measure. */}
+        <FocusBox
+          disabled={saving || !canEdit}
+          lastFocus={lastMonthFocus}
+          onChange={checkin.setFocus}
+          value={draft.focus}
+        />
         {BUCKETS.map((bucket) => {
           const definition = BUCKET_DEFINITIONS[bucket]
           const questions = questionsFor(bucket, hoursApplies)

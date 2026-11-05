@@ -25,7 +25,7 @@ export function BucketNotesPanel({ bucket, note, lastActions, disabled, onChange
   const whyId = `bucket-notes-${bucket}-why`
   const actionsId = `bucket-notes-${bucket}-actions`
   const lastId = `bucket-notes-${bucket}-last-actions`
-  const hasLast = lastActions !== undefined && lastActions !== ''
+  const hasLast = lastActions !== undefined && lastActions.trim() !== ''
 
   return (
     // A group named after its bucket: six "Why this score" boxes on one page

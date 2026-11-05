@@ -20,7 +20,7 @@ const LAST_ID = 'checkin-focus-last'
 // clicking it focuses the box. The copy is the spec's, straight apostrophes
 // and all, written as string literals so JSX entity rules do not reshape it.
 export function FocusBox({ value, lastFocus, disabled, onChange }: Props) {
-  const hasLast = lastFocus !== null && lastFocus !== ''
+  const hasLast = lastFocus !== null && lastFocus.trim() !== ''
   const describedBy = hasLast ? `${HINT_ID} ${LAST_ID}` : HINT_ID
 
   return (

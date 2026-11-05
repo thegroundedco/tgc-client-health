@@ -1401,6 +1401,9 @@ describe('CheckIn, bucket notes and the focus box', () => {
     const first = screen.getByTestId('bucket-communication')
     const position = focusBox().compareDocumentPosition(first)
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Inside the bucket list, a sibling of the sections, so it shares the
+    // list's wider measure and container (CheckIn.module.css).
+    expect(focusBox().closest('[data-testid="focus-box"]')?.parentElement).toBe(first.parentElement)
   })
 })
 
