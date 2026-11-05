@@ -448,7 +448,7 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
       <p className={`alert prose ${styles.earlierVisit}`} role="status">
         {unsavedFromEarlierVisit && (
           <>
-            These scores are from an earlier visit on this device and have not
+            These changes are from an earlier visit on this device and have not
             been saved. Press {label} to keep them.
           </>
         )}

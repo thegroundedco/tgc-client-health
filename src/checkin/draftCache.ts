@@ -1,6 +1,6 @@
 import { ALL_QUESTIONS } from '../lib/buckets'
 import { MAX_SCORE, MIN_SCORE } from '../lib/scoreMath'
-import { bucketNotesDiffer, cleanBucketNotes, hasBucketNoteText } from './bucketNotes'
+import { bucketNotesDiffer, hasBucketNoteText, keepBucketNotes } from './bucketNotes'
 import type { BucketNotes } from './bucketNotes'
 
 // The local draft. Slice 1 spec §5.5: every click and keystroke is written here,
@@ -179,7 +179,7 @@ function draftFromStored(parsed: unknown, current: boolean): RestoredDraft | nul
   const draft: RestoredDraft = {
     answers: normaliseAnswers(source.answers),
     notes: typeof source.notes === 'string' ? source.notes : '',
-    bucketNotes: current ? cleanBucketNotes(source.bucketNotes) : {},
+    bucketNotes: current ? keepBucketNotes(source.bucketNotes) : {},
     focus: current && typeof source.focus === 'string' ? source.focus : '',
   }
   if (!current) draft.legacy = true
@@ -274,7 +274,7 @@ export function writeDraft(
   const normalised: Draft = {
     answers: normaliseAnswers(draft.answers),
     notes: typeof draft.notes === 'string' ? draft.notes : '',
-    bucketNotes: cleanBucketNotes(draft.bucketNotes),
+    bucketNotes: keepBucketNotes(draft.bucketNotes),
     focus: typeof draft.focus === 'string' ? draft.focus : '',
   }
 

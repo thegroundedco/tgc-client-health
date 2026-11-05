@@ -59,6 +59,27 @@ export function cleanBucketNotes(raw: unknown): BucketNotes {
   return out
 }
 
+// The draft cache's version of cleanBucketNotes: the same structural rules
+// (known buckets, known fields, strings only, nothing that is empty after a
+// trim) but the kept text is NOT trimmed or capped, so whitespace typed
+// mid-sentence ("abc " on the way to "abc def") survives a reload, the same as
+// the general notes and the focus. Comparisons trim; the upsert cleans.
+export function keepBucketNotes(raw: unknown): BucketNotes {
+  const out: BucketNotes = {}
+  if (!isRecord(raw)) return out
+  for (const bucket of BUCKETS) {
+    const value = raw[bucket]
+    if (!isRecord(value)) continue
+    const note: BucketNote = {}
+    for (const field of BUCKET_NOTE_FIELDS) {
+      const text = value[field]
+      if (typeof text === 'string' && text.trim() !== '') note[field] = text
+    }
+    if (note.why !== undefined || note.actions !== undefined) out[bucket] = note
+  }
+  return out
+}
+
 // What the upsert sends: trimmed, empties removed, capped at the DB limit.
 // The same rules as cleanBucketNotes, named for the call site so a reader of
 // the upsert sees what it is for.

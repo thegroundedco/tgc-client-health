@@ -589,3 +589,25 @@ describe('bucket notes and focus in the draft', () => {
     expect(draftsDiffer({ ...base, focus: 'f ' }, { ...base, focus: 'f' })).toBe(false)
   })
 })
+
+describe('bucket notes in a draft keep what was typed', () => {
+  it('a note "abc " survives writeDraft then readDraft as "abc "', () => {
+    const { store } = memoryStore()
+    writeDraft(1, '2026-08-01', { answers: {}, notes: '', bucketNotes: { growth: { why: 'abc ' } }, focus: '' }, store)
+    expect(readDraft(1, '2026-08-01', store)?.bucketNotes).toEqual({ growth: { why: 'abc ' } })
+  })
+
+  it('still drops unknown keys, non-strings and empty-after-trim fields', () => {
+    const { store } = memoryStore()
+    const messy = { growth: { why: '  ', actions: 'x ', other: 'y' }, nope: { why: 'z' }, delivery: { why: 5 } }
+    writeDraft(1, '2026-08-01', { answers: {}, notes: '', bucketNotes: messy as never, focus: '' }, store)
+    expect(readDraft(1, '2026-08-01', store)?.bucketNotes).toEqual({ growth: { actions: 'x ' } })
+  })
+
+  it('compares trimmed: a trailing space is not a difference', () => {
+    const a = { ...EMPTY_DRAFT, bucketNotes: { growth: { why: 'abc ' } } }
+    const b = { ...EMPTY_DRAFT, bucketNotes: { growth: { why: 'abc' } } }
+    expect(draftsDiffer(a, b)).toBe(false)
+  })
+})
+

@@ -385,7 +385,7 @@ describe('CheckIn', () => {
   // keeps it.
   it('names the earlier-visit draft and how to keep it', () => {
     const markup = render({ unsavedFromEarlierVisit: true, hasContent: true, scored: 1 })
-    expect(markup).toContain('These scores are from an earlier visit on this device')
+    expect(markup).toContain('These changes are from an earlier visit on this device')
     expect(markup).toContain('Press Save draft to keep them.')
   })
 
