@@ -24,6 +24,13 @@ export function formatPeriod(period: string): string {
   })
 }
 
+// "Sep" or "September": the month alone, for "vs Sep" beside a change and
+// "from September" in its spoken label. Built from parts like formatPeriod.
+export function monthName(period: string, width: 'short' | 'long'): string {
+  const [year, month] = period.split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: width })
+}
+
 // Named rather than written as addMonths(period, -1) at each call site: the
 // check-in screen's whole "compare with last month" read depends on this being
 // the same month everywhere, and a stray +1 in one place would silently compare

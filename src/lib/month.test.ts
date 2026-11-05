@@ -7,6 +7,7 @@ import {
   formatPeriod,
   formatSavedAt,
   lastDayOf,
+  monthName,
   periodFor,
   periodOptions,
   previousPeriod,
@@ -157,5 +158,19 @@ describe('formatDay', () => {
   })
   it('hands back nonsense unchanged rather than printing "Invalid Date"', () => {
     expect(formatDay('soon')).toBe('soon')
+  })
+})
+
+describe('monthName', () => {
+  it('gives the short month name of a period', () => {
+    expect(monthName('2026-09-01', 'short')).toBe('Sep')
+  })
+
+  it('gives the long month name of a period', () => {
+    expect(monthName('2026-09-01', 'long')).toBe('September')
+  })
+
+  it('names December across a year boundary from January', () => {
+    expect(monthName(previousPeriod('2026-01-01'), 'short')).toBe('Dec')
   })
 })
