@@ -750,3 +750,4 @@
 }
 
 .projectNotes { text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 22rem; margin-inline-start: auto; }
+.projectItems { margin-block: 0; padding-inline-start: 0; list-style: none; }

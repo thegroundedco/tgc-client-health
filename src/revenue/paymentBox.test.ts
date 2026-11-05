@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { parseMoney } from './money'
 import {
   boxMode,
+  checkItems,
+  displayItems,
   effectiveRetainer,
   ghostRetainer,
   monthName,
   initialFields,
-  notesForSave,
   paymentCaption,
+  projectTotal,
   retainerQuestion,
   shouldAskRetainer,
   type MonthRow,
@@ -20,30 +22,107 @@ const row = (retainer_cents: number, project_cents: number): MonthRow => ({
   entered_by: null,
   updated_at: '2026-10-28T12:00:00Z',
 })
-const blank = { retainer: '', project: '', notes: '' }
+const EMPTY = { label: '', amount: '' }
+const blank = { retainer: '', items: [EMPTY] }
 
 describe('initialFields', () => {
-  it('is two empty strings with no row', () => {
-    expect(initialFields(null)).toEqual({ retainer: '', project: '', notes: '' })
+  it('is an empty retainer and one empty line item with no row', () => {
+    expect(initialFields(null, [])).toEqual({ retainer: '', items: [EMPTY] })
   })
-  it('writes saved cents as plain numbers', () => {
-    expect(initialFields(row(400000, 12345))).toEqual({ retainer: '4000', project: '123.45', notes: '' })
+  it('writes saved cents as plain numbers, one row per saved item, in order', () => {
+    expect(
+      initialFields(row(400000, 12345), [
+        { label: 'Photo shoot', cents: 12000 },
+        { label: 'Dev', cents: 345 },
+      ]),
+    ).toEqual({
+      retainer: '4000',
+      items: [
+        { label: 'Photo shoot', amount: '120' },
+        { label: 'Dev', amount: '3.45' },
+      ],
+    })
   })
-  it('carries the saved project notes, and an empty string for none', () => {
-    expect(initialFields({ ...row(1, 1), project_notes: '$1 dev' }).notes).toBe('$1 dev')
-    expect(initialFields(row(1, 1)).notes).toBe('')
+  it('turns an older month with a project amount and no items into one Project row', () => {
+    expect(initialFields(row(400000, 50000), []).items).toEqual([{ label: 'Project', amount: '500' }])
+  })
+  it('gives a saved month with no project work one empty row', () => {
+    expect(initialFields(row(400000, 0), []).items).toEqual([EMPTY])
   })
   it('round-trips through parseMoney', () => {
-    expect(parseMoney(initialFields(row(12345, 5)).retainer)).toBe(12345)
-    expect(parseMoney(initialFields(row(12345, 5)).project)).toBe(5)
+    expect(parseMoney(initialFields(row(12345, 5), []).retainer)).toBe(12345)
+    expect(parseMoney(initialFields(row(12345, 5), []).items[0].amount)).toBe(5)
   })
 })
 
-describe('notesForSave', () => {
-  it('trims, and turns blank or whitespace-only into null', () => {
-    expect(notesForSave('  $1,500 dev fees \n')).toBe('$1,500 dev fees')
-    expect(notesForSave('')).toBeNull()
-    expect(notesForSave(' \n\t ')).toBeNull()
+describe('displayItems', () => {
+  it('is the saved items when there are any', () => {
+    const items = [{ label: 'A', cents: 1 }]
+    expect(displayItems(row(1, 999), items)).toBe(items)
+  })
+  it('is one Project item for an older month with only an amount', () => {
+    expect(displayItems(row(1, 50000), [])).toEqual([{ label: 'Project', cents: 50000 }])
+  })
+  it('is nothing with no project amount, or no row', () => {
+    expect(displayItems(row(1, 0), [])).toEqual([])
+    expect(displayItems(null, [])).toEqual([])
+  })
+})
+
+describe('checkItems', () => {
+  it('ignores fully empty rows and trims labels', () => {
+    expect(
+      checkItems([EMPTY, { label: '  Photo shoot ', amount: '1,500' }, { label: ' ', amount: '  ' }, { label: 'Dev', amount: '$25.50' }]),
+    ).toEqual({
+      ok: true,
+      items: [
+        { label: 'Photo shoot', cents: 150000 },
+        { label: 'Dev', cents: 2550 },
+      ],
+      totalCents: 152550,
+    })
+  })
+  it('is an empty list, and zero, when every row is empty', () => {
+    expect(checkItems([EMPTY, EMPTY])).toEqual({ ok: true, items: [], totalCents: 0 })
+    expect(checkItems([])).toEqual({ ok: true, items: [], totalCents: 0 })
+  })
+  it('needs a label for an amount', () => {
+    const result = checkItems([{ label: '  ', amount: '10' }, { label: 'Fine', amount: '1' }])
+    expect(result).toEqual({ ok: false, errors: ['Add a label for this amount.', null], problem: null })
+  })
+  it('needs an amount above $0 for a label', () => {
+    expect(checkItems([{ label: 'Shoot', amount: '' }])).toEqual({ ok: false, errors: ['Add an amount above $0.'], problem: null })
+    expect(checkItems([{ label: 'Shoot', amount: '0' }])).toEqual({ ok: false, errors: ['Add an amount above $0.'], problem: null })
+    expect(checkItems([{ label: 'Shoot', amount: '0.00' }])).toEqual({ ok: false, errors: ['Add an amount above $0.'], problem: null })
+  })
+  it('refuses an amount that is not money', () => {
+    expect(checkItems([{ label: 'Shoot', amount: 'abc' }])).toEqual({
+      ok: false,
+      errors: ['Not a dollar amount up to $21,474,836.47.'],
+      problem: null,
+    })
+  })
+  it('refuses a label past 120 characters, counted after trimming', () => {
+    expect(checkItems([{ label: ` ${'a'.repeat(120)} `, amount: '1' }]).ok).toBe(true)
+    expect(checkItems([{ label: 'a'.repeat(121), amount: '1' }])).toEqual({
+      ok: false,
+      errors: ['Keep the label to 120 characters.'],
+      problem: null,
+    })
+  })
+  it('refuses a total past what the column holds', () => {
+    expect(checkItems([{ label: 'A', amount: '21,474,836' }, { label: 'B', amount: '1' }])).toEqual({
+      ok: false,
+      errors: [null, null],
+      problem: 'The project total is over $21,474,836.47. Nothing was saved.',
+    })
+  })
+})
+
+describe('projectTotal', () => {
+  it('sums the amounts that read as money above zero', () => {
+    expect(projectTotal([{ label: 'A', amount: '1,500' }, { label: '', amount: '2.50' }, { label: 'C', amount: 'abc' }, EMPTY])).toBe(150250)
+    expect(projectTotal([])).toBe(0)
   })
 })
 
@@ -78,12 +157,15 @@ describe('boxMode', () => {
   it('is readonly without edit rights, whatever else is true', () => {
     expect(boxMode({ canEdit: false, row: null, storedRetainer: 400000, fields: blank })).toBe('readonly')
   })
-  it('confirms when nothing is entered, a retainer exists and both fields are blank', () => {
+  it('confirms when nothing is entered, a retainer exists and every field is blank', () => {
     expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: blank })).toBe('confirm')
+    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: ' ', items: [EMPTY, { label: ' ', amount: '' }] } })).toBe('confirm')
+    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '', items: [] } })).toBe('confirm')
   })
   it('saves when a field has text', () => {
-    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '', project: '5' } })).toBe('save')
-    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '1', project: '' } })).toBe('save')
+    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '', items: [{ label: '', amount: '5' }] } })).toBe('save')
+    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '', items: [EMPTY, { label: 'x', amount: '' }] } })).toBe('save')
+    expect(boxMode({ canEdit: true, row: null, storedRetainer: 400000, fields: { retainer: '1', items: [EMPTY] } })).toBe('save')
   })
   it('saves when there is a row', () => {
     expect(boxMode({ canEdit: true, row: row(1, 1), storedRetainer: 400000, fields: blank })).toBe('save')

@@ -1,9 +1,11 @@
 import { useEffect, useId, useState } from 'react'
 import { shortDay } from '../lib/month'
-import { formatMoney, MAX_CENTS, parseMoney } from '../revenue/money'
+import { formatMoney, MAX_CENTS } from '../revenue/money'
 import {
-  boxMode, effectiveRetainer, ghostRetainer, initialFields, monthName, notesForSave, paymentCaption, retainerQuestion, shouldAskRetainer,
+  boxMode, checkItems, displayItems, effectiveRetainer, ghostRetainer, initialFields, LABEL_MAX, monthName, paymentCaption,
+  projectTotal, retainerQuestion, shouldAskRetainer,
 } from '../revenue/paymentBox'
+import type { Fields, ItemField, ProjectItem } from '../revenue/paymentBox'
 import type { UseMonthPayment } from '../revenue/useMonthPayment'
 import styles from './PaymentsBox.module.css'
 
@@ -19,26 +21,30 @@ type Props = {
   onSaved: () => void
 }
 
-type Ask = { retainerCents: number; projectCents: number }
+type Ask = { retainerCents: number; projectCents: number; items: ProjectItem[] }
 
-const NOTES_MAX = 500
+const EMPTY_ITEM: ItemField = { label: '', amount: '' }
 
 // Spec 2026-11-02 §3-4. Draws what paymentBox.ts decided; no rule lives here.
 export function PaymentsBox({ clientId, clientName, period, canEdit, payment, onSaved }: Props) {
-  const { status, row, storedRetainer } = payment
-  const [fields, setFields] = useState(() => initialFields(row))
+  const { status, row, items, storedRetainer } = payment
+  const [fields, setFields] = useState<Fields>(() => initialFields(row, items))
+  // One per line item, null where the row is fine. Set by a refused save and
+  // cleared row by row as the person edits.
+  const [itemErrors, setItemErrors] = useState<(string | null)[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [ask, setAsk] = useState<Ask | null>(null)
   const [saving, setSaving] = useState(false)
-  const notesId = useId()
+  const errorIdBase = useId()
 
-  // Reset when the row is replaced (a reload after save, or another month),
-  // not on every render: typing must survive a re-render.
+  // Reset when the row or its items are replaced (a reload after save, or
+  // another month), not on every render: typing must survive a re-render.
   useEffect(() => {
-    setFields(initialFields(row))
+    setFields(initialFields(row, items))
+    setItemErrors([])
     setProblem(null)
     setAsk(null)
-  }, [clientId, period, row])
+  }, [clientId, period, row, items])
 
   if (status === 'off') return null
 
@@ -59,18 +65,37 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
 
   const mode = boxMode({ canEdit, row, storedRetainer, fields })
 
+  const earlierNote = row?.project_notes ? (
+    <p className={`t-caption ${styles.notesText}`} data-testid="earlier-note">
+      Earlier note: {row.project_notes}
+    </p>
+  ) : null
+
   if (mode === 'readonly') {
+    const shown = displayItems(row, items)
     return (
       <div className={styles.box}>
         {heading}
         {row ? (
-          <dl className={styles.figures}>
-            <div className={styles.figure}><dt className="t-label">Retainer</dt><dd className="numeric">{formatMoney(row.retainer_cents)}</dd></div>
-            <div className={styles.figure}><dt className="t-label">Project</dt><dd className="numeric">{formatMoney(row.project_cents)}</dd></div>
-            {row.project_notes && (
-              <div className={styles.figure}><dt className="t-label">Project notes</dt><dd className={styles.notesText}>{row.project_notes}</dd></div>
-            )}
-          </dl>
+          <>
+            <dl className={styles.figures}>
+              <div className={styles.figure}><dt className="t-label">Retainer</dt><dd className="numeric">{formatMoney(row.retainer_cents)}</dd></div>
+            </dl>
+            <div className={styles.items}>
+              <p className="t-label">Project line items</p>
+              {shown.length > 0 && (
+                <ul className={styles.itemList}>
+                  {shown.map((item, index) => (
+                    <li data-testid="project-item" key={index}>
+                      {item.label} – <span className="numeric">{formatMoney(item.cents)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="t-body numeric" data-testid="project-total">Project total: {formatMoney(row.project_cents)}</p>
+              {earlierNote}
+            </div>
+          </>
         ) : (
           <p className="t-body">Not entered yet</p>
         )}
@@ -79,11 +104,18 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
     )
   }
 
-  async function write(retainerCents: number, projectCents: number, setRetainer: boolean) {
-    const projectNotes = notesForSave(fields.notes)
+  // The earlier note goes back unchanged, so a save never erases it: there
+  // are no new notes, only the line items.
+  async function write(next: Ask, setRetainer: boolean) {
     setSaving(true)
     setProblem(null)
-    const result = await payment.save({ retainerCents, projectCents, projectNotes, setRetainer })
+    const result = await payment.save({
+      retainerCents: next.retainerCents,
+      projectCents: next.projectCents,
+      projectNotes: row?.project_notes ?? null,
+      items: next.items,
+      setRetainer,
+    })
     setSaving(false)
     setAsk(null)
     if (result.ok) onSaved()
@@ -92,20 +124,44 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
 
   function submit() {
     const retainerCents = effectiveRetainer(fields.retainer, ghostRetainer(row, storedRetainer))
-    const projectCents = parseMoney(fields.project)
-    const bad = retainerCents === null ? 'Retainer' : projectCents === null ? 'Project' : null
-    if (bad || retainerCents === null || projectCents === null) {
+    if (retainerCents === null) {
       setAsk(null)
-      setProblem(`${bad} is not a dollar amount up to ${formatMoney(MAX_CENTS)}. Nothing was saved.`)
+      setProblem(`Retainer is not a dollar amount up to ${formatMoney(MAX_CENTS)}. Nothing was saved.`)
       return
     }
-    const retainerEdited = fields.retainer !== initialFields(row).retainer
+    const checked = checkItems(fields.items)
+    if (!checked.ok) {
+      setAsk(null)
+      setItemErrors(checked.errors)
+      setProblem(checked.problem ?? 'Fix the line items marked above. Nothing was saved.')
+      return
+    }
+    setItemErrors([])
+    const next: Ask = { retainerCents, projectCents: checked.totalCents, items: checked.items }
+    const retainerEdited = fields.retainer !== initialFields(row, items).retainer
     if (shouldAskRetainer({ retainerEdited, retainerCents, storedRetainer })) {
       setProblem(null)
-      setAsk({ retainerCents, projectCents })
+      setAsk(next)
       return
     }
-    void write(retainerCents, projectCents, false)
+    void write(next, false)
+  }
+
+  function editItem(index: number, change: Partial<ItemField>) {
+    setFields({ ...fields, items: fields.items.map((item, i) => (i === index ? { ...item, ...change } : item)) })
+    setItemErrors(itemErrors.map((error, i) => (i === index ? null : error)))
+    setAsk(null)
+  }
+
+  function addItem() {
+    setFields({ ...fields, items: [...fields.items, EMPTY_ITEM] })
+    setAsk(null)
+  }
+
+  function removeItem(index: number) {
+    setFields({ ...fields, items: fields.items.filter((_, i) => i !== index) })
+    setItemErrors(itemErrors.filter((_, i) => i !== index))
+    setAsk(null)
   }
 
   const question = ask ? retainerQuestion(clientName, period, storedRetainer, ask.retainerCents) : null
@@ -127,41 +183,67 @@ export function PaymentsBox({ clientId, clientName, period, canEdit, payment, on
             value={fields.retainer}
           />
         </label>
-        <label className={styles.field}>
-          <span className="t-label">Project</span>
-          <input
-            className="field numeric"
-            inputMode="decimal"
-            onChange={(e) => { setFields({ ...fields, project: e.target.value }); setAsk(null) }}
-            disabled={saving}
-            placeholder="$0"
-            value={fields.project}
-          />
-        </label>
-        <label className={`${styles.field} ${styles.notes}`} htmlFor={notesId}>
-          <span className="t-label">Project notes</span>
-          <textarea
-            className="field"
-            id={notesId}
-            maxLength={NOTES_MAX}
-            onChange={(e) => { setFields({ ...fields, notes: e.target.value }); setAsk(null) }}
-            disabled={saving}
-            placeholder="e.g. $1,500 dev fees · $2,500 photo shoot"
-            rows={2}
-            value={fields.notes}
-          />
-        </label>
       </div>
+      <fieldset className={styles.items}>
+        <legend className="t-label">Project line items</legend>
+        {fields.items.map((item, index) => {
+          const n = index + 1
+          const error = itemErrors[index] ?? null
+          const errorId = `${errorIdBase}-item-${index}`
+          const described = error ? { 'aria-describedby': errorId, 'aria-invalid': true as const } : {}
+          return (
+            <div className={styles.itemRow} key={index}>
+              <input
+                aria-label={`Line item ${n} label`}
+                className={`field ${styles.itemLabel}`}
+                disabled={saving}
+                maxLength={LABEL_MAX}
+                onChange={(e) => editItem(index, { label: e.target.value })}
+                placeholder="e.g. Photo shoot"
+                value={item.label}
+                {...described}
+              />
+              <input
+                aria-label={`Line item ${n} amount`}
+                className={`field numeric ${styles.itemAmount}`}
+                disabled={saving}
+                inputMode="decimal"
+                onChange={(e) => editItem(index, { amount: e.target.value })}
+                placeholder="$0"
+                value={item.amount}
+                {...described}
+              />
+              <button
+                aria-label={`Remove line item ${n}`}
+                className="button button--quiet"
+                disabled={saving}
+                onClick={() => removeItem(index)}
+                type="button"
+              >
+                Remove
+              </button>
+              {error && <p className={`alert ${styles.itemError}`} id={errorId}>{error}</p>}
+            </div>
+          )
+        })}
+        <div className={styles.actions}>
+          <button className="button button--quiet" disabled={saving} onClick={addItem} type="button">
+            Add line item
+          </button>
+        </div>
+        <p className="t-body numeric" data-testid="project-total">Project total: {formatMoney(projectTotal(fields.items))}</p>
+        {earlierNote}
+      </fieldset>
       {row && <p className="t-caption">{enteredLine(payment)}</p>}
       {problem && <p className="alert prose" role="alert">{problem}</p>}
       {ask && question ? (
         <div className={styles.ask}>
           <p className="t-body prose">{question.text}</p>
           <div className={styles.actions}>
-            <button className="button" disabled={saving} onClick={() => void write(ask.retainerCents, ask.projectCents, true)} type="button">
+            <button className="button" disabled={saving} onClick={() => void write(ask, true)} type="button">
               {question.yes}
             </button>
-            <button className="button button--quiet" disabled={saving} onClick={() => void write(ask.retainerCents, ask.projectCents, false)} type="button">
+            <button className="button button--quiet" disabled={saving} onClick={() => void write(ask, false)} type="button">
               {question.no}
             </button>
             <button className="button button--quiet" disabled={saving} onClick={() => setAsk(null)} type="button">

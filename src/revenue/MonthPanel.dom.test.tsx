@@ -67,6 +67,37 @@ describe('MonthPanel project notes', () => {
   })
 })
 
+describe('MonthPanel project line items', () => {
+  it("lists a client's line items under its project amount, label – amount, in order", () => {
+    show({
+      rows: [
+        ...ROWS.slice(0, 2),
+        {
+          ...row(1, PERIOD, 500000, 100000),
+          project_notes: 'older words',
+          project_items: [
+            { label: 'Photo shoot', cents: 60000 },
+            { label: 'Dev', cents: 40000 },
+          ],
+        },
+        row(2, PERIOD, 200000),
+      ],
+    })
+
+    const items = screen.getAllByTestId('month-panel-project-item')
+    expect(items.map((item) => item.textContent)).toEqual(['Photo shoot – $600', 'Dev – $400'])
+    expect(items.every((item) => item.closest('tr')?.textContent?.includes('Acme'))).toBe(true)
+    // The items replace the notes line.
+    expect(screen.queryByTestId('month-panel-project-notes')).toBeNull()
+  })
+
+  it('shows the notes line when a client has notes and no items', () => {
+    show({ rows: [...ROWS.slice(0, 2), { ...row(1, PERIOD, 500000, 100000), project_notes: 'old', project_items: [] }, row(2, PERIOD, 200000)] })
+    expect(screen.queryAllByTestId('month-panel-project-item')).toEqual([])
+    expect(screen.getByTestId('month-panel-project-notes').textContent).toBe('Project notes: old')
+  })
+})
+
 describe('MonthPanel', () => {
   it('names the month it is showing', () => {
     show()

@@ -15,6 +15,10 @@ export type RevenueRow = {
   // Only the revenue page's read selects it, to show under a month's project
   // amount. Absent everywhere else, and every total ignores it.
   project_notes?: string | null
+  // The month's project line items, in order. Attached by the revenue page's
+  // read, absent everywhere else and on a month with none; every total
+  // ignores it (project_cents is already their sum).
+  project_items?: { label: string; cents: number }[]
 }
 
 // `entered` is the whole point of this type. A month with rows totalling zero

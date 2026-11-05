@@ -49,12 +49,16 @@ vi.mock('./useRevertSuggestion', () => ({
 
 // The payments box mounted in CheckIn pulls in lib/supabase through
 // useMonthPayment; stubbed 'off' (draws nothing), tested in CheckIn.dom.test.tsx.
-vi.mock('../revenue/useMonthPayment', () => ({
-  useMonthPayment: () => ({
-    status: 'off', loadError: null, row: null, storedRetainer: null, enteredByName: null,
-    save: async () => ({ ok: true }), reload: () => {},
-  }),
-}))
+vi.mock('../revenue/useMonthPayment', () => {
+  // One array for every render, as the real hook's state is.
+  const items: never[] = []
+  return {
+    useMonthPayment: () => ({
+      status: 'off', loadError: null, row: null, items, storedRetainer: null, enteredByName: null,
+      save: async () => ({ ok: true }), reload: () => {},
+    }),
+  }
+})
 
 // Finance suggestion reads Supabase; stubbed, controllable per test.
 const finance = vi.hoisted(() => ({ current: null as unknown }))

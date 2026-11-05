@@ -62,6 +62,9 @@ vi.mock('../lib/supabase', () => ({
 // as a seam, honouring canRead the way the real hook does ('off', no query).
 const payments = vi.hoisted(() => ({
   calls: [] as [number, string, boolean][],
+  // One array for every render, as the real hook's state is: a fresh [] each
+  // render would re-run the box's reset effect forever.
+  items: [] as { label: string; cents: number }[],
   save: null as null | ((p: unknown) => Promise<{ ok: true } | { ok: false; error: string }>),
 }))
 vi.mock('../revenue/useMonthPayment', () => ({
@@ -71,6 +74,7 @@ vi.mock('../revenue/useMonthPayment', () => ({
       status: canRead ? 'ready' : 'off',
       loadError: null,
       row: null,
+      items: payments.items,
       storedRetainer: 400000,
       enteredByName: null,
       save: async (p: unknown) => (payments.save ? payments.save(p) : { ok: true }),

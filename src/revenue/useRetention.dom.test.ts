@@ -86,6 +86,47 @@ describe('useRetention', () => {
     expect(result.current.rows).toEqual([])
   })
 
+  // Brief 2026-11-05 B3: the month panel lists each month's line items.
+  it("attaches each month's line items to its row, in position order, and nothing to a row with none", async () => {
+    const OTHER = { client_id: 1, period: '2026-10-01', retainer_cents: 400000 }
+    const captured = given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW, OTHER], error: null },
+      client_month_project_items: {
+        data: [
+          { client_id: 1, period: '2026-09-01', label: 'Photo shoot', cents: 60000 },
+          { client_id: 2, period: '2026-09-01', label: 'Orphan', cents: 1 },
+          { client_id: 1, period: '2026-09-01', label: 'Dev', cents: 40000 },
+        ],
+        error: null,
+      },
+    })
+
+    const { result } = renderHook(() => useRetention())
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+
+    expect(result.current.rows).toEqual([
+      { ...ROW, project_items: [{ label: 'Photo shoot', cents: 60000 }, { label: 'Dev', cents: 40000 }] },
+      OTHER,
+    ])
+    expect(result.current.rows[1]).not.toHaveProperty('project_items')
+    expect(captured.client_month_project_items?.select[0]).toBe('client_id, period, label, cents')
+    expect(captured.client_month_project_items?.order).toEqual(['position'])
+  })
+
+  it('reports a failed line-item read as an error, not as months with no items', async () => {
+    given({
+      clients: { data: [CLIENT], error: null },
+      client_month_revenue: { data: [ROW], error: null },
+      client_month_project_items: { data: null, error: { message: 'items denied' } },
+    })
+
+    const { result } = renderHook(() => useRetention())
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).toContain('items denied')
+    expect(result.current.rows).toEqual([])
+  })
+
   it('asks for the columns the classification rule needs', async () => {
     // THE CAST IS WHY THIS TEST EXISTS. The hook casts its response, so a
     // column missing from the select is invisible to tsc -- proven in slice 6c,

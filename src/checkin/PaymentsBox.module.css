@@ -6,5 +6,12 @@
 .ask { display: grid; gap: var(--space-2); }
 .figures { display: flex; flex-wrap: wrap; gap: var(--space-5); margin: 0; }
 .figure { display: grid; gap: var(--space-1); }
-.notes { flex-basis: 100%; }
 .notesText { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 36rem; }
+/* Project line items (brief 2026-11-05 B3): label wide, amount narrow, Remove
+   at the end, wrapping on a narrow screen; a row's error under its row. */
+.items { display: grid; gap: var(--space-2); margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.itemList { margin: 0; padding-inline-start: var(--space-4); }
+.itemRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.itemLabel { flex: 2 1 12rem; min-inline-size: 0; }
+.itemAmount { flex: 1 1 6rem; min-inline-size: 0; }
+.itemError { flex-basis: 100%; margin: 0; }

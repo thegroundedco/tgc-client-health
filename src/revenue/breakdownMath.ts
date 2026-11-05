@@ -17,6 +17,8 @@ export type ClientMonth = {
   projectCents: number
   /** What the project amount covers, or null when none was entered. */
   projectNotes: string | null
+  /** The month's project line items, in order; empty when there are none. */
+  projectItems: { label: string; cents: number }[]
   totalCents: number
 }
 
@@ -104,6 +106,7 @@ export function monthBreakdown(
       retainerCents: row.retainer_cents,
       projectCents: row.project_cents,
       projectNotes: row.project_notes?.trim() || null,
+      projectItems: row.project_items ?? [],
       totalCents: row.retainer_cents + row.project_cents,
     })
   }

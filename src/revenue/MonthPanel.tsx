@@ -113,10 +113,22 @@ export function MonthPanel({
                   <td className={styles.figure}>{formatMoney(entry.retainerCents)}</td>
                   <td className={styles.figure}>
                     {formatMoney(entry.projectCents)}
-                    {entry.projectNotes && (
-                      <div className={`t-caption ${styles.projectNotes}`} data-testid="month-panel-project-notes">
-                        Project notes: {entry.projectNotes}
-                      </div>
+                    {/* Brief 2026-11-05 B3: the month's line items when it has
+                        any, otherwise the older free-text notes. */}
+                    {entry.projectItems.length > 0 ? (
+                      <ul className={`t-caption ${styles.projectNotes} ${styles.projectItems}`}>
+                        {entry.projectItems.map((item, index) => (
+                          <li data-testid="month-panel-project-item" key={index}>
+                            {item.label} – {formatMoney(item.cents)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      entry.projectNotes && (
+                        <div className={`t-caption ${styles.projectNotes}`} data-testid="month-panel-project-notes">
+                          Project notes: {entry.projectNotes}
+                        </div>
+                      )
                     )}
                   </td>
                   <td className={styles.figure}>{formatMoney(entry.totalCents)}</td>

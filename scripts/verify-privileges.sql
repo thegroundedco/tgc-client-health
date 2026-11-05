@@ -450,6 +450,17 @@ begin
         ('client_retainers', 'authenticated', 'UPDATE'),
         ('client_retainers', 'authenticated', 'DELETE'),
 
+        -- public.client_month_project_items: added by
+        -- 20261105130000_project_line_items.sql. All four verbs, like
+        -- client_retainers: save_month_payment (security INVOKER) replaces a
+        -- month's items with a delete and an insert. RLS decides who
+        -- (view_revenue reads, edit_revenue writes); these say only that the
+        -- verbs exist.
+        ('client_month_project_items', 'authenticated', 'SELECT'),
+        ('client_month_project_items', 'authenticated', 'INSERT'),
+        ('client_month_project_items', 'authenticated', 'UPDATE'),
+        ('client_month_project_items', 'authenticated', 'DELETE'),
+
         -- public.client_packages (20260912140000_add_client_packages.sql) and
         -- public.ai_runs (20261031090000_ai_suggestion_runs.sql). Both
         -- migrations grant these deliberately, and this list was never
@@ -548,7 +559,8 @@ begin
   --    only (allowlisted below): can_run_ai_suggestions()
   --    (20261031090000_ai_suggestion_runs.sql), save_month_payment(...)
   --    (20261102120000_client_retainers.sql, re-created with a sixth argument by
-  --    20261104170000_project_notes.sql) and can_view_revenue()
+  --    20261104170000_project_notes.sql and a seventh by
+  --    20261105130000_project_line_items.sql) and can_view_revenue()
   --    (20261104120000_productive_hours.sql). Anything else, or ANY function
   --    anon can execute, is a failure; this assertion is what makes that stay
   --    deliberate.
@@ -564,7 +576,7 @@ begin
       -- never in it: an anon-callable function is always a failure.
       and (g, (p.oid::regprocedure)::text) not in (
         ('authenticated', 'can_run_ai_suggestions()'),
-        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean,text)'),
+        ('authenticated', 'save_month_payment(bigint,date,integer,integer,boolean,text,jsonb)'),
         -- 20261104120000_productive_hours.sql. record_month_budgets is NOT
         -- here: it is executable by service_role only, and this sweep would
         -- report it if authenticated or anon could reach it.
@@ -1152,6 +1164,12 @@ begin
         ('client_retainers', 'client_retainers_insert_edit_revenue'),
         ('client_retainers', 'client_retainers_update_edit_revenue'),
         ('client_retainers', 'client_retainers_delete_edit_revenue'),
+        -- client_month_project_items, 20261105130000. Same four as
+        -- client_retainers, same reason: a dropped policy reads as a denial.
+        ('client_month_project_items', 'client_month_project_items_select_view_revenue'),
+        ('client_month_project_items', 'client_month_project_items_insert_edit_revenue'),
+        ('client_month_project_items', 'client_month_project_items_update_edit_revenue'),
+        ('client_month_project_items', 'client_month_project_items_delete_edit_revenue'),
         -- Productive hours, 20261104120000. scripts/verify-hours.sql probes a
         -- viewer's zero rows and refused writes against these; a dropped
         -- policy would make those pass for the wrong reason.

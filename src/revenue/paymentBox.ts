@@ -1,5 +1,5 @@
 import { formatPeriod } from '../lib/month'
-import { formatMoney, parseMoney } from './money'
+import { formatMoney, MAX_CENTS, parseMoney } from './money'
 
 // The check-in screen's payments box, decided here so a component only draws.
 // Its own module for the same reason as financeFromRevenue: the cases that go
@@ -15,22 +15,75 @@ export type MonthRow = {
 }
 export type BoxMode = 'confirm' | 'save' | 'readonly'
 
+// A month's project fees (brief 2026-11-05 B3, the owner: "a spot for
+// additional 'line items' in case we charge multiple project fees"). Saved, in
+// cents; and as typed, two strings per row.
+export type ProjectItem = { label: string; cents: number }
+export type ItemField = { label: string; amount: string }
+export type Fields = { retainer: string; items: ItemField[] }
+
+// The table's own check: char_length(btrim(label)) between 1 and 120.
+export const LABEL_MAX = 120
+
+const EMPTY_ITEM: ItemField = { label: '', amount: '' }
+const isEmptyItem = (item: ItemField) => item.label.trim() === '' && item.amount.trim() === ''
+
 // Plain-number strings, NOT formatMoney output: no "$" and no commas, so
 // parseMoney reads them back to the same cents. Whole dollars drop the tail,
 // anything else keeps both digits so no cent is lost on the round trip.
 const plain = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2))
 
-export function initialFields(row: MonthRow | null): { retainer: string; project: string; notes: string } {
-  if (!row) return { retainer: '', project: '', notes: '' }
-  return { retainer: plain(row.retainer_cents), project: plain(row.project_cents), notes: row.project_notes ?? '' }
+// What a month shows as its line items, read-only. An older month saved before
+// items existed has only an amount: it shows as one item labelled Project, so
+// the figure is never hidden.
+export function displayItems(row: MonthRow | null, items: ProjectItem[]): ProjectItem[] {
+  if (items.length > 0) return items
+  if (row && row.project_cents > 0) return [{ label: 'Project', cents: row.project_cents }]
+  return []
 }
 
-// What the notes field sends: trimmed, and null when nothing is left, so a
-// whitespace-only note is no note. The database does the same (nullif/btrim);
-// this keeps the wire value honest too.
-export function notesForSave(typed: string): string | null {
-  const trimmed = typed.trim()
-  return trimmed === '' ? null : trimmed
+// The fields a month opens with. The older month's amount becomes a Project
+// row, so saving keeps it as an item. Always at least one row to type into.
+export function initialFields(row: MonthRow | null, items: ProjectItem[]): Fields {
+  const shown = displayItems(row, items).map((item) => ({ label: item.label, amount: plain(item.cents) }))
+  return { retainer: row ? plain(row.retainer_cents) : '', items: shown.length > 0 ? shown : [EMPTY_ITEM] }
+}
+
+// The rows as the save will send them, or why not. One error per row (null for
+// a row that is fine), plus a problem for the form as a whole. Fully empty rows
+// are ignored; labels are trimmed.
+export type ItemCheck =
+  | { ok: true; items: ProjectItem[]; totalCents: number }
+  | { ok: false; errors: (string | null)[]; problem: string | null }
+
+export function checkItems(fields: ItemField[]): ItemCheck {
+  const items: ProjectItem[] = []
+  const errors = fields.map((field): string | null => {
+    if (isEmptyItem(field)) return null
+    const label = field.label.trim()
+    const cents = parseMoney(field.amount)
+    if (cents === null) return `Not a dollar amount up to ${formatMoney(MAX_CENTS)}.`
+    if (label === '') return 'Add a label for this amount.'
+    if (cents <= 0) return 'Add an amount above $0.'
+    if (label.length > LABEL_MAX) return `Keep the label to ${LABEL_MAX} characters.`
+    items.push({ label, cents })
+    return null
+  })
+  if (errors.some((error) => error !== null)) return { ok: false, errors, problem: null }
+  const totalCents = items.reduce((sum, item) => sum + item.cents, 0)
+  if (totalCents > MAX_CENTS) {
+    return { ok: false, errors, problem: `The project total is over ${formatMoney(MAX_CENTS)}. Nothing was saved.` }
+  }
+  return { ok: true, items, totalCents }
+}
+
+// "Project total: $X" as the person types: every amount that reads as money
+// above zero, whatever its label says yet.
+export function projectTotal(fields: ItemField[]): number {
+  return fields.reduce((sum, field) => {
+    const cents = parseMoney(field.amount)
+    return cents !== null && cents > 0 ? sum + cents : sum
+  }, 0)
 }
 
 // Blank under a ghost means the ghost: the person who types only a project
@@ -63,10 +116,10 @@ export function boxMode(args: {
   canEdit: boolean
   row: MonthRow | null
   storedRetainer: number | null
-  fields: { retainer: string; project: string }
+  fields: Fields
 }): BoxMode {
   if (!args.canEdit) return 'readonly'
-  const blank = args.fields.retainer.trim() === '' && args.fields.project.trim() === ''
+  const blank = args.fields.retainer.trim() === '' && args.fields.items.every(isEmptyItem)
   // Confirm: nothing entered yet, a retainer to confirm, and nothing typed.
   if (args.row === null && args.storedRetainer !== null && blank) return 'confirm'
   return 'save'

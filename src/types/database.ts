@@ -335,6 +335,44 @@ export type Database = {
           },
         ]
       }
+      client_month_project_items: {
+        Row: {
+          cents: number
+          client_id: number
+          created_at: string
+          id: number
+          label: string
+          period: string
+          position: number
+        }
+        Insert: {
+          cents: number
+          client_id: number
+          created_at?: string
+          id?: never
+          label: string
+          period: string
+          position?: number
+        }
+        Update: {
+          cents?: number
+          client_id?: number
+          created_at?: string
+          id?: never
+          label?: string
+          period?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_month_project_items_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_month_revenue: {
         Row: {
           client_id: number
@@ -603,6 +641,7 @@ export type Database = {
       save_month_payment: {
         Args: {
           p_client_id: number
+          p_items?: Json
           p_period: string
           p_project_cents: number
           p_project_notes?: string | null

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { describeError } from '../lib/errorText'
 import { supabase } from '../lib/supabase'
-import type { MonthRow } from './paymentBox'
+import type { MonthRow, ProjectItem } from './paymentBox'
 
 // One client's payment for one month, plus the retainer on file, and the save.
 //
@@ -17,9 +17,20 @@ export type UseMonthPayment = {
   status: 'loading' | 'ready' | 'error' | 'off'
   loadError: string | null
   row: MonthRow | null
+  // The month's project line items, in position order. Empty for a month
+  // with none, including every month saved before items existed.
+  items: ProjectItem[]
   storedRetainer: number | null
   enteredByName: string | null
-  save: (p: { retainerCents: number; projectCents: number; projectNotes: string | null; setRetainer: boolean }) => Promise<{ ok: true } | { ok: false; error: string }>
+  // items REPLACES the month's line items, and the database sets the project
+  // amount to their sum (projectCents is then ignored there).
+  save: (p: {
+    retainerCents: number
+    projectCents: number
+    projectNotes: string | null
+    items: ProjectItem[]
+    setRetainer: boolean
+  }) => Promise<{ ok: true } | { ok: false; error: string }>
   reload: () => void
 }
 
@@ -27,6 +38,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
   const [status, setStatus] = useState<UseMonthPayment['status']>(canRead ? 'loading' : 'off')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [row, setRow] = useState<MonthRow | null>(null)
+  const [items, setItems] = useState<ProjectItem[]>([])
   const [storedRetainer, setStoredRetainer] = useState<number | null>(null)
   const [enteredByName, setEnteredByName] = useState<string | null>(null)
   // Bumped by every refresh and by cleanup: a response belonging to an older
@@ -44,6 +56,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
       const isCancelled = () => generation.current !== mine
       if (fresh) {
         setRow(null)
+        setItems([])
         setStoredRetainer(null)
         setEnteredByName(null)
         setLoadError(null)
@@ -80,6 +93,21 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
           return
         }
 
+        // Its own read, select-gated by the same view_revenue policy. A failure
+        // is an error like the two above: no items is a claim about the month.
+        const lineItems = await supabase
+          .from('client_month_project_items')
+          .select('label, cents')
+          .eq('client_id', clientId)
+          .eq('period', period)
+          .order('position')
+        if (isCancelled()) return
+        if (lineItems.error) {
+          setLoadError(describeError(lineItems.error))
+          setStatus('error')
+          return
+        }
+
         const monthRow = (month.data ?? null) as MonthRow | null
         let name: string | null = null
         if (monthRow?.entered_by) {
@@ -98,6 +126,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
         if (isCancelled()) return
 
         setRow(monthRow)
+        setItems((lineItems.data ?? []) as ProjectItem[])
         setStoredRetainer(retainer.data?.monthly_cents ?? null)
         setEnteredByName(name)
         setLoadError(null)
@@ -127,7 +156,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
   const reload = useCallback(() => void refresh(false), [refresh])
 
   const save = useCallback<UseMonthPayment['save']>(
-    async ({ retainerCents, projectCents, projectNotes, setRetainer }) => {
+    async ({ retainerCents, projectCents, projectNotes, items: lineItems, setRetainer }) => {
       try {
         const { error } = await supabase.rpc('save_month_payment', {
           p_client_id: clientId,
@@ -136,6 +165,7 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
           p_project_cents: projectCents,
           p_set_retainer: setRetainer,
           p_project_notes: projectNotes,
+          p_items: lineItems,
         })
         if (error) return { ok: false, error: describeError(error) }
         // Resolve only once the refreshed read has landed (or failed), so a
@@ -151,5 +181,5 @@ export function useMonthPayment(clientId: number, period: string, canRead: boole
     [clientId, period, refresh],
   )
 
-  return { status, loadError, row, storedRetainer, enteredByName, save, reload }
+  return { status, loadError, row, items, storedRetainer, enteredByName, save, reload }
 }

@@ -6,6 +6,8 @@ type Result = { data: unknown; error: unknown }
 
 const ROW = { retainer_cents: 500000, project_cents: 120000, project_notes: '$1,200 dev fees', entered_by: 'user-1', updated_at: '2026-10-28T10:00:00Z' }
 
+const ITEMS = [{ label: 'Photo shoot', cents: 100000 }, { label: 'Dev', cents: 20000 }]
+
 // One fake per table, recording every filter, so a hook that drops an .eq or
 // reads the wrong table fails.
 const db = vi.hoisted(() => ({
@@ -32,7 +34,13 @@ vi.mock('../lib/supabase', () => ({
           f.push([column, value])
           return chain
         },
+        order: (column: string) => {
+          f.push(['order', column])
+          return chain
+        },
         maybeSingle: () => db.results[table](),
+        // A list read is awaited on the chain itself.
+        then: (resolve: (r: Result) => unknown, reject: (e: unknown) => unknown) => db.results[table]().then(resolve, reject),
       }
       return chain
     },
@@ -55,6 +63,7 @@ describe('useMonthPayment', () => {
       client_month_revenue: async () => ({ data: ROW, error: null }),
       client_retainers: async () => ({ data: { monthly_cents: 500000 }, error: null }),
       profiles: async () => ({ data: { full_name: 'Dana Delta', email: 'dana@example.com' }, error: null }),
+      client_month_project_items: async () => ({ data: ITEMS, error: null }),
     }
     db.rpc = async () => ({ data: null, error: null })
   })
@@ -76,6 +85,29 @@ describe('useMonthPayment', () => {
     expect(db.filters['client_month_revenue']).toEqual([['client_id', 7], ['period', '2026-10-01']])
     expect(db.filters['client_retainers']).toEqual([['client_id', 7]])
     expect(db.filters['profiles']).toEqual([['id', 'user-1']])
+  })
+
+  it("reads the month's line items, in position order", async () => {
+    const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.items).toEqual(ITEMS)
+    expect(db.selects['client_month_project_items']).toBe('label, cents')
+    expect(db.filters['client_month_project_items']).toEqual([['client_id', 7], ['period', '2026-10-01'], ['order', 'position']])
+  })
+
+  it('a failed line-item read is an error, not a month with no items', async () => {
+    db.results.client_month_project_items = async () => ({ data: null, error: { message: 'no items for you' } })
+    const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).toBe('no items for you')
+    expect(result.current.items).toEqual([])
+  })
+
+  it('treats no item rows as an empty list', async () => {
+    db.results.client_month_project_items = async () => ({ data: null, error: null })
+    const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.items).toEqual([])
   })
 
   it('falls back to the email, and to null when the profile read fails', async () => {
@@ -122,18 +154,21 @@ describe('useMonthPayment', () => {
     expect(c.result.current.loadError).toBe('no retainers for you')
   })
 
-  it('save sends the five arguments and reloads', async () => {
+  it('save sends the seven arguments, the items as p_items, and reloads', async () => {
     const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
     await waitFor(() => expect(result.current.status).toBe('ready'))
     const before = db.tables.filter((t) => t === 'client_month_revenue').length
     let out: unknown
     await act(async () => {
-      out = await result.current.save({ retainerCents: 400000, projectCents: 25000, projectNotes: null, setRetainer: true })
+      out = await result.current.save({
+        retainerCents: 400000, projectCents: 25000, projectNotes: null, items: [{ label: 'Shoot', cents: 25000 }], setRetainer: true,
+      })
     })
     expect(out).toEqual({ ok: true })
     expect(db.rpcCalls).toEqual([
       ['save_month_payment', {
         p_client_id: 7, p_period: '2026-10-01', p_retainer_cents: 400000, p_project_cents: 25000, p_set_retainer: true, p_project_notes: null,
+        p_items: [{ label: 'Shoot', cents: 25000 }],
       }],
     ])
     await waitFor(() => expect(db.tables.filter((t) => t === 'client_month_revenue').length).toBe(before + 1))
@@ -154,7 +189,7 @@ describe('useMonthPayment', () => {
     const { result } = renderHook(() => useMonthPayment(7, '2026-10-01', true))
     await waitFor(() => expect(result.current.status).toBe('ready'))
     await act(async () => {
-      await result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: '$2 of dev', setRetainer: false })
+      await result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: '$2 of dev', items: [], setRetainer: false })
     })
     expect(db.rpcCalls[0][1]).toMatchObject({ p_project_notes: '$2 of dev' })
   })
@@ -170,7 +205,7 @@ describe('useMonthPayment', () => {
     let settled = false
     let saving: Promise<unknown> = Promise.resolve()
     await act(async () => {
-      saving = result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, setRetainer: false }).then(() => { settled = true })
+      saving = result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, items: [], setRetainer: false }).then(() => { settled = true })
     })
     // The second read is still pending: nothing blanked, save not resolved.
     expect(result.current.status).toBe('ready')
@@ -197,7 +232,7 @@ describe('useMonthPayment', () => {
     let out: unknown
     let saving: Promise<unknown> = Promise.resolve()
     await act(async () => {
-      saving = result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, setRetainer: false }).then((r) => { out = r })
+      saving = result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, items: [], setRetainer: false }).then((r) => { out = r })
     })
 
     db.results.client_month_revenue = async () => ({ data: NOV, error: null })
@@ -218,6 +253,7 @@ describe('useMonthPayment', () => {
     rerender({ p: '2026-11-01' })
     expect(result.current.status).toBe('loading')
     expect(result.current.row).toBeNull()
+    expect(result.current.items).toEqual([])
   })
 
   it('a rejected rpc error object resolves to an error without reloading', async () => {
@@ -227,7 +263,7 @@ describe('useMonthPayment', () => {
     const before = db.tables.length
     let out: unknown
     await act(async () => {
-      out = await result.current.save({ retainerCents: 0, projectCents: 0, projectNotes: null, setRetainer: false })
+      out = await result.current.save({ retainerCents: 0, projectCents: 0, projectNotes: null, items: [], setRetainer: false })
     })
     expect(out).toEqual({ ok: false, error: 'not allowed' })
     expect(db.tables.length).toBe(before)
@@ -239,7 +275,7 @@ describe('useMonthPayment', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'))
     let out: unknown
     await act(async () => {
-      out = await result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, setRetainer: false })
+      out = await result.current.save({ retainerCents: 1, projectCents: 2, projectNotes: null, items: [], setRetainer: false })
     })
     expect(out).toEqual({ ok: false, error: 'the connection failed' })
   })

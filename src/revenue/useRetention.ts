@@ -39,6 +39,29 @@ const ROSTER_COLUMNS = 'id, name, status, started_on, ended_on, end_reason_code'
 // a column missing from a string.
 const REVENUE_COLUMNS = 'client_id, period, retainer_cents, project_cents, project_notes'
 
+// The whole line-items table too, for the month panel (brief 2026-11-05 B3).
+// Same read gate (view_revenue), same size argument: a few rows a month.
+const ITEM_COLUMNS = 'client_id, period, label, cents'
+
+type ItemRow = { client_id: number; period: string; label: string; cents: number }
+
+// Each month's items onto its row, in the order read (position). A row with
+// none gets no property at all, so it is exactly the row that was read; an
+// item with no revenue row has nowhere to show and is dropped.
+function withItems(rows: RevenueRow[], items: ItemRow[]): RevenueRow[] {
+  const byMonth = new Map<string, { label: string; cents: number }[]>()
+  for (const item of items) {
+    const key = `${item.client_id}|${item.period}`
+    const list = byMonth.get(key) ?? []
+    list.push({ label: item.label, cents: item.cents })
+    byMonth.set(key, list)
+  }
+  return rows.map((row) => {
+    const list = byMonth.get(`${row.client_id}|${row.period}`)
+    return list ? { ...row, project_items: list } : row
+  })
+}
+
 export type UseRetention = {
   status: 'loading' | 'ready' | 'error'
   loadError: string | null
@@ -63,7 +86,12 @@ export function useRetention(): UseRetention {
         .select(REVENUE_COLUMNS)
         .order('period')
 
-      const [roster, revenue] = await Promise.all([rosterQuery, revenueQuery])
+      const itemsQuery = supabase
+        .from('client_month_project_items')
+        .select(ITEM_COLUMNS)
+        .order('position')
+
+      const [roster, revenue, items] = await Promise.all([rosterQuery, revenueQuery, itemsQuery])
 
       if (isCancelled()) return
 
@@ -71,7 +99,8 @@ export function useRetention(): UseRetention {
       // array. An empty roster reads as "no clients"; an empty revenue array
       // reads as a year in which nobody billed anything, which on a retention
       // report is the most alarming possible lie.
-      const failure = roster.error ?? revenue.error
+      // The items too: a failed read must not show months as having none.
+      const failure = roster.error ?? revenue.error ?? items.error
       if (failure) {
         setLoadError(describeError(failure))
         setStatus('error')
@@ -79,7 +108,7 @@ export function useRetention(): UseRetention {
       }
 
       setClients((roster.data ?? []) as RetentionClient[])
-      setRows((revenue.data ?? []) as RevenueRow[])
+      setRows(withItems((revenue.data ?? []) as RevenueRow[], (items.data ?? []) as ItemRow[]))
       setLoadError(null)
       setStatus('ready')
     } catch (thrown: unknown) {
