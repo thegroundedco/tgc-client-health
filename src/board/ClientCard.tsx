@@ -3,7 +3,10 @@ import { BUCKETS, BUCKET_DEFINITIONS, GATED_BUCKET } from '../lib/buckets'
 import { bandClassName } from '../styles/bandClass'
 import { BUCKET_SCORE_KEY, cardFooter } from './cardSummary'
 import type { CardCheckin } from './cardSummary'
-import type { BoardClient, BoardScore } from './useBoard'
+import type { BoardClient, BoardScore, LastMonthScores } from './useBoard'
+import { describeChange, scoreChange } from '../lib/scoreChange'
+import { monthName, previousPeriod } from '../lib/month'
+import { ChangeArrow, ChangeText } from './ChangeMark'
 import type { ClientRate } from './rateMath'
 import styles from './ClientCard.module.css'
 import { isChurned, statusLabel } from '../clients/clientForm'
@@ -23,15 +26,21 @@ type Props = {
   // client who left in September read as locked on September's board.
   openable: boolean
   period: string
+  // Brief 2026-11-04 B: last month's bucket scores and overall, for the
+  // arrows. Null when the client had nothing scored last month.
+  last: LastMonthScores | null
 }
 
-export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, openable, period }: Props) {
+export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, openable, period, last }: Props) {
   // From the view, never recomputed here. The overall cannot be a generated
   // column (spec §6), so the view is the one place it exists -- and `npm run
   // verify:scoring-view` is what proves that expression is right. A second
   // local calculation would be a second thing to keep in agreement.
   const total = score?.overall_score ?? null
   const band = bandFor(total)
+  // "from September": the month the arrows compare against.
+  const since = monthName(previousPeriod(period), 'long')
+  const totalChange = scoreChange(total, last?.overall_score ?? null)
   // The column is null or 1-1000 characters, but a blank never draws a line.
   const focus = (checkin?.focus ?? '').trim()
 
@@ -106,6 +115,13 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
           {total === null ? '—' : total.toFixed(2)}
         </span>
         <span className="t-caption numeric">/ {MAX_SCORE}</span>
+        {/* Against last month's overall, from the same view. No mark when
+            either month has no overall. */}
+        {totalChange !== null && (
+          <span className={styles.change} data-testid="overall-change">
+            <ChangeText change={totalChange} label={describeChange('Overall', totalChange, since)} />
+          </span>
+        )}
       </p>
 
       {/* Revenue, for a viewer who may see it -- gated at the READ in Board.tsx,
@@ -145,12 +161,19 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
           // as `number | null`, beside its wider index signature, so this
           // reads as `number | null` on its own -- no cast needed.
           const value = checkin?.[BUCKET_SCORE_KEY[bucket]] ?? null
+          // Against last month's column for the same bucket. Advocacy shut
+          // means no Advocacy bar at all, so no arrow either.
+          const change = scoreChange(value, last?.[BUCKET_SCORE_KEY[bucket]] ?? null)
           return (
             <span
+              // The bar is role="img", which hides its children from a screen
+              // reader, so the change is said here as well as on the arrow.
               aria-label={
                 value === null
                   ? `${definition.label}: not scored`
-                  : `${definition.label}: ${value} of ${MAX_SCORE}`
+                  : change === null
+                    ? `${definition.label}: ${value} of ${MAX_SCORE}`
+                    : `${definition.label}: ${value} of ${MAX_SCORE}, ${describeChange('', change, since).trim()}`
               }
               className={styles.bucket}
               data-testid="bucket-bar"
@@ -166,8 +189,11 @@ export function ClientCard({ client, checkin, score, viewerId, onOpen, rate, ope
                   style={{ blockSize: `${((value ?? 0) / MAX_SCORE) * 100}%` }}
                 />
               </span>
-              <span aria-hidden="true" className={styles.initial} data-testid="bucket-initial">
-                {definition.initial}
+              <span className={styles.initialRow}>
+                <span aria-hidden="true" className={styles.initial} data-testid="bucket-initial">
+                  {definition.initial}
+                </span>
+                {change !== null && <ChangeArrow change={change} label={definition.label} since={since} />}
               </span>
             </span>
           )

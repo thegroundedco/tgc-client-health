@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ClientCard } from './ClientCard'
 import type { CardCheckin } from './cardSummary'
-import type { BoardClient, BoardScore } from './useBoard'
+import type { BoardClient, BoardScore, LastMonthScores } from './useBoard'
 import type { ClientRate } from './rateMath'
 
 afterEach(() => {
@@ -27,6 +27,7 @@ type RenderOptions = {
   rate?: ClientRate
   openable?: boolean
   period?: string
+  last?: LastMonthScores | null
 }
 
 function renderCard(overrides: RenderOptions = {}) {
@@ -40,11 +41,13 @@ function renderCard(overrides: RenderOptions = {}) {
     // What the old status rule implied: only an active client was openable.
     openable = client.status === 'active',
     period = '2026-09-01',
+    last = null,
   } = overrides
   return render(
     <ClientCard
       checkin={checkin}
       client={client}
+      last={last}
       onOpen={onOpen}
       openable={openable}
       period={period}
@@ -557,5 +560,103 @@ describe('a client card, the focus line', () => {
     unmount()
     renderCard({ client: ACME, checkin: null })
     expect(screen.queryByTestId('card-focus')).toBeNull()
+  })
+})
+
+// Brief 2026-11-04 B: a small arrow under each bucket letter, and on the
+// overall, against last month. The card's period is 2026-09-01, so last month
+// is August. Never colour alone: the glyph, aria-label and title say it.
+describe('ClientCard, month-over-month change', () => {
+  const LAST: LastMonthScores = {
+    comm_score: 3.34,
+    growth_score: 4,
+    fin_score: 3,
+    rel_score: null,
+    del_score: 2,
+    adv_score: 3,
+    overall_score: 3.5,
+  }
+  const THIS = {
+    client_id: 7,
+    submitted_at: null,
+    submitted_by: null,
+    suggested_at: null,
+    comm_score: 3.67,
+    growth_score: 3.5,
+    fin_score: 3.004,
+    rel_score: 4,
+    del_score: null,
+    adv_score: 4,
+  } as CardCheckin
+  const SCORE: BoardScore = { client_id: 7, overall_score: 3.83, advocacy_applies: true }
+  const arrows = () => screen.queryAllByTestId('change-arrow')
+
+  it('marks a rise, a fall and no change, each named in words', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST })
+    expect(screen.getByRole('img', { name: 'Communication up 0.33 from August' }).textContent).toBe('▲')
+    expect(screen.getByRole('img', { name: 'Growth down 0.50 from August' }).textContent).toBe('▼')
+    expect(screen.getByRole('img', { name: 'Finances and Hours unchanged from August' }).textContent).toBe('=')
+    expect(screen.getByRole('img', { name: 'Advocacy up 1.00 from August' }).textContent).toBe('▲')
+    const communication = screen.getByRole('img', { name: 'Communication up 0.33 from August' })
+    expect(communication.getAttribute('title')).toBe('Communication up 0.33 from August')
+  })
+
+  it('draws no arrow where either month is null', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST })
+    // Relationship has no score last month; Delivery none this month.
+    const labels = arrows().map((arrow) => arrow.getAttribute('aria-label'))
+    expect(labels.some((label) => label?.startsWith('Relationship'))).toBe(false)
+    expect(labels.some((label) => label?.startsWith('Delivery'))).toBe(false)
+    expect(labels.filter((label) => !label?.startsWith('Overall'))).toHaveLength(4)
+  })
+
+  it('puts each arrow under its own bucket letter', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST })
+    const communication = bars()[0]
+    expect(within(communication).getByTestId('bucket-initial').textContent).toBe('C')
+    expect(within(communication).getByTestId('change-arrow').dataset.direction).toBe('up')
+    // The bar's own spoken label carries the change too, since a role="img"
+    // hides its children from a screen reader.
+    expect(communication.getAttribute('aria-label')).toBe('Communication: 3.67 of 5, up 0.33 from August')
+  })
+
+  it('leaves a bar label alone when there is no change to report', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST })
+    expect(bars()[3].getAttribute('aria-label')).toBe('Relationship: 4 of 5')
+  })
+
+  it('gives the overall its change, with the sign in the text', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST })
+    const overall = screen.getByTestId('overall-change')
+    expect(overall.textContent).toBe('▲ +0.33')
+    const chip = within(overall).getByRole('img', { name: 'Overall up 0.33 from August' })
+    expect(chip.getAttribute('title')).toBe('Overall up 0.33 from August')
+    expect(chip.dataset.direction).toBe('up')
+  })
+
+  it('draws no overall change when last month has no overall', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: { ...LAST, overall_score: null } })
+    expect(screen.queryByTestId('overall-change')).toBeNull()
+  })
+
+  it('draws no overall change when this month has no overall', () => {
+    renderCard({ checkin: THIS, score: { ...SCORE, overall_score: null }, last: LAST })
+    expect(screen.queryByTestId('overall-change')).toBeNull()
+  })
+
+  it('draws nothing at all with no last month', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: null })
+    expect(arrows()).toHaveLength(0)
+    expect(screen.queryByTestId('overall-change')).toBeNull()
+  })
+
+  it('draws no Advocacy arrow while the gate is shut', () => {
+    renderCard({ checkin: THIS, score: { ...SCORE, advocacy_applies: false }, last: LAST })
+    expect(arrows().some((arrow) => arrow.getAttribute('aria-label')?.startsWith('Advocacy'))).toBe(false)
+  })
+
+  it('names the month across a year boundary', () => {
+    renderCard({ checkin: THIS, score: SCORE, last: LAST, period: '2026-01-01' })
+    expect(screen.getByRole('img', { name: 'Communication up 0.33 from December' })).toBeTruthy()
   })
 })

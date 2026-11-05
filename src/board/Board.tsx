@@ -349,6 +349,7 @@ export function Board({ profile, onEditClient }: Props) {
               checkin={board.checkins.get(client.id) ?? null}
               client={client}
               key={client.id}
+              last={board.lastMonth.get(client.id) ?? null}
               onOpen={() => setSelected(client)}
               openable={board.members.has(client.id)}
               period={period}

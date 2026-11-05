@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { describeError } from '../lib/errorText'
-import { CHECKIN_COLUMNS } from './cardSummary'
-import type { CardCheckin } from './cardSummary'
+import { BUCKET_SCORE_KEY, CHECKIN_COLUMNS } from './cardSummary'
+import type { BucketScoreKey, CardCheckin } from './cardSummary'
 import { boardMembers } from './boardScope'
+import { previousPeriod } from '../lib/month'
+import { BUCKETS } from '../lib/buckets'
 
 // `status` joins the row in Slice 2 step 5, because the board now reads every
 // client and decides in the browser which ones to draw. It is `string`, not a
@@ -35,12 +37,35 @@ export type BoardScore = {
 
 export const SCORE_COLUMNS = 'client_id, overall_score, advocacy_applies'
 
+// Brief 2026-11-04 B: last month's six bucket scores and its overall, for the
+// card's month-over-month arrows. Only what the arrows read. A null is a
+// bucket or a month with no score, and draws no arrow.
+export type LastMonthScores = Record<BucketScoreKey, number | null> & { overall_score: number | null }
+
+// Built from BUCKET_SCORE_KEY so the six columns cannot drift from the ones
+// the card draws this month. useBoard.dom.test.ts pins the list.
+export const LAST_CHECKIN_COLUMNS = ['client_id', ...BUCKETS.map((bucket) => BUCKET_SCORE_KEY[bucket])].join(', ')
+export const LAST_SCORE_COLUMNS = 'client_id, overall_score'
+
+const NO_LAST_SCORES: LastMonthScores = {
+  comm_score: null,
+  growth_score: null,
+  fin_score: null,
+  rel_score: null,
+  del_score: null,
+  adv_score: null,
+  overall_score: null,
+}
+
 export type UseBoard = {
   status: 'loading' | 'ready' | 'error'
   loadError: string | null
   clients: BoardClient[]
   checkins: Map<number, CardCheckin>
   scores: Map<number, BoardScore>
+  // Last month's bucket scores and overall, keyed by client. No entry for a
+  // client with nothing scored last month.
+  lastMonth: Map<number, LastMonthScores>
   // Members of the month who have submitted: the N of the progress line.
   submitted: number
   // Members of the month whose check-in is an unreviewed AI suggestion; counted
@@ -61,6 +86,7 @@ export function useBoard(period: string): UseBoard {
   const [clients, setClients] = useState<BoardClient[]>([])
   const [checkins, setCheckins] = useState<Map<number, CardCheckin>>(new Map())
   const [scores, setScores] = useState<Map<number, BoardScore>>(new Map())
+  const [lastMonth, setLastMonth] = useState<Map<number, LastMonthScores>>(new Map())
 
   // `isCancelled` is a parameter, and the flag it closes over belongs to the
   // effect below -- the same shape as useCheckin and useProfile. It cannot be a
@@ -157,12 +183,63 @@ export function useBoard(period: string): UseBoard {
           })
         }
 
+        // Brief 2026-11-04 B: last month, for the arrows. One extra query per
+        // table, the same shape and the same failure handling as this
+        // month's: a failed read is a failed board, never a board whose
+        // arrows silently vanish.
+        const lastPeriod = previousPeriod(period)
+        const lastCheckinResult = await supabase
+          .from('checkins')
+          .select(LAST_CHECKIN_COLUMNS)
+          .eq('period', lastPeriod)
+
+        if (isCancelled()) return
+
+        if (lastCheckinResult.error) {
+          setLoadError(describeError(lastCheckinResult.error))
+          setStatus('error')
+          return
+        }
+
+        const lastScoreResult = await supabase
+          .from('checkin_scores')
+          .select(LAST_SCORE_COLUMNS)
+          .eq('period', lastPeriod)
+
+        if (isCancelled()) return
+
+        if (lastScoreResult.error) {
+          setLoadError(describeError(lastScoreResult.error))
+          setStatus('error')
+          return
+        }
+
+        // A string column list, so the row type is asserted here, as
+        // checkinRows is above.
+        const lastCheckinRows = lastCheckinResult.data as unknown as (Partial<LastMonthScores> & {
+          client_id: number
+        })[]
+        const lastByClient = new Map<number, LastMonthScores>()
+        for (const row of lastCheckinRows) {
+          const { client_id: clientId, ...columns } = row
+          lastByClient.set(clientId, { ...NO_LAST_SCORES, ...columns, overall_score: null })
+        }
+        for (const row of lastScoreResult.data) {
+          // Nullable in the view's types, as above; nothing to key by.
+          if (row.client_id === null) continue
+          lastByClient.set(row.client_id, {
+            ...(lastByClient.get(row.client_id) ?? NO_LAST_SCORES),
+            overall_score: row.overall_score,
+          })
+        }
+
         // Never write after a failed read: everything below runs only because
-        // all three queries succeeded.
+        // all five queries succeeded.
         setLoadError(null)
         setClients(clientResult.data)
         setCheckins(byClient)
         setScores(scoreByClient)
+        setLastMonth(lastByClient)
         setStatus('ready')
       } catch (thrown) {
         if (isCancelled()) return
@@ -202,5 +279,5 @@ export function useBoard(period: string): UseBoard {
   const activeTotal = members.size
 
   // A manual reload has nothing to be cancelled by, so it uses the default.
-  return { status, loadError, clients, checkins, scores, submitted, toReview, activeTotal, members, reload: () => void load() }
+  return { status, loadError, clients, checkins, scores, lastMonth, submitted, toReview, activeTotal, members, reload: () => void load() }
 }

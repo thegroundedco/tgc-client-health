@@ -124,6 +124,7 @@ function board(overrides: Partial<UseBoard> = {}): UseBoard {
     // UseBoard, so this helper stopped typechecking without it. `overrides`
     // below replaces it exactly as it already does for the other fields.
     scores: new Map(),
+    lastMonth: new Map(),
     submitted: 0,
     toReview: 0,
     // All three of CLIENTS are active, so this is the same number as
@@ -161,6 +162,7 @@ const READY = {
   // Same repair as board()'s, above: task 2 added `scores` to UseBoard, and
   // this fixture is a second place it must exist for the file to typecheck.
   scores: new Map(),
+  lastMonth: new Map(),
   submitted: 0,
   toReview: 0,
   activeTotal: 1,
@@ -311,6 +313,30 @@ describe('the board', () => {
     })
 
     expect(screen.getAllByTestId('bucket-bar')).toHaveLength(11)
+  })
+
+  it("gives each card its own last month, for the arrows", () => {
+    // Brief 2026-11-04 B: useBoard's lastMonth map has to reach the right
+    // card. Acme rose; Beta has no last month and draws no arrow.
+    const none = { comm_score: null, growth_score: null, fin_score: null, rel_score: null, del_score: null, adv_score: null }
+    given({
+      clients: [
+        { id: 1, name: 'Acme', status: 'active', started_on: '2026-01-01', ended_on: null },
+        { id: 2, name: 'Beta', status: 'active', started_on: '2026-01-01', ended_on: null },
+      ],
+      activeTotal: 2,
+      scores: new Map([
+        [1, { client_id: 1, overall_score: 4.5, advocacy_applies: true }],
+        [2, { client_id: 2, overall_score: 2.0, advocacy_applies: true }],
+      ]),
+      lastMonth: new Map([[1, { ...none, overall_score: 4 }]]),
+    })
+
+    const cards = within(clientList()!).getAllByRole('listitem')
+    const acme = cards.find((card) => card.textContent?.includes('Acme'))!
+    const beta = cards.find((card) => card.textContent?.includes('Beta'))!
+    expect(within(acme).getByTestId('overall-change').textContent).toBe('▲ +0.50')
+    expect(within(beta).queryByTestId('overall-change')).toBeNull()
   })
 
   it('says it is loading, and shows no list', () => {

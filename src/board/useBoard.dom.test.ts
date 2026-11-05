@@ -23,6 +23,13 @@ const db = vi.hoisted(() => ({
   // awaiting an earlier query when the new run starts making the same call.
   checkins: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
   scores: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
+  // Brief 2026-11-04 B: last month's bucket scores and overall, for the
+  // card's arrows. Told apart from this month's reads by their column list,
+  // and each records the period it was asked for.
+  lastCheckins: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
+  lastScores: async (_period?: string): Promise<Result> => ({ data: [], error: null }),
+  // Every [table, columns, period] the checkins and checkin_scores reads made.
+  reads: [] as [string, string | undefined, unknown][],
 }))
 
 vi.mock('../lib/supabase', () => ({
@@ -43,11 +50,17 @@ vi.mock('../lib/supabase', () => ({
           },
         }
       }
-      if (table === 'checkins') {
-        return { select: () => ({ eq: (_column: string, value: unknown) => db.checkins(value as string) }) }
-      }
-      if (table === 'checkin_scores') {
-        return { select: () => ({ eq: (_column: string, value: unknown) => db.scores(value as string) }) }
+      if (table === 'checkins' || table === 'checkin_scores') {
+        return {
+          select: (columns?: string) => ({
+            eq: (_column: string, value: unknown) => {
+              db.reads.push([table, columns, value])
+              const last = columns === (table === 'checkins' ? LAST_CHECKIN_COLUMNS : LAST_SCORE_COLUMNS)
+              if (table === 'checkins') return last ? db.lastCheckins(value as string) : db.checkins(value as string)
+              return last ? db.lastScores(value as string) : db.scores(value as string)
+            },
+          }),
+        }
       }
       // Unmocked table: throw rather than silently fall through to some other
       // table's double. Before this branch existed, anything that was not
@@ -60,7 +73,7 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
-import { useBoard } from './useBoard'
+import { LAST_CHECKIN_COLUMNS, LAST_SCORE_COLUMNS, useBoard } from './useBoard'
 
 const ROSTER = [
   { id: 1, name: 'Zinc', status: 'active', ended_on: null },
@@ -76,6 +89,9 @@ beforeEach(() => {
   db.clients = async () => ({ data: ROSTER, error: null })
   db.checkins = async () => ({ data: [], error: null })
   db.scores = async () => ({ data: [], error: null })
+  db.lastCheckins = async () => ({ data: [], error: null })
+  db.lastScores = async () => ({ data: [], error: null })
+  db.reads = []
 })
 
 // An arrow, not a bare reference: useBoard takes the period argument, and
@@ -326,5 +342,112 @@ describe('the board hook', () => {
     expect(result.current.clients.map((client) => client.id)).toEqual([1])
     expect(result.current.scores.get(1)?.overall_score).toBe(4.5)
     expect(result.current.scores.get(2)).toBe(undefined)
+  })
+})
+
+describe('the board hook, last month', () => {
+  it('reads the previous period, from both tables, with one extra query each', async () => {
+    await ready()
+    const last = db.reads.filter(([, , period]) => period === '2026-07-01')
+    expect(last).toEqual([
+      ['checkins', LAST_CHECKIN_COLUMNS, '2026-07-01'],
+      ['checkin_scores', LAST_SCORE_COLUMNS, '2026-07-01'],
+    ])
+    // And this month's reads are still there, unchanged.
+    expect(db.reads.filter(([, , period]) => period === '2026-08-01')).toHaveLength(2)
+  })
+
+  it('steps back across a year boundary', async () => {
+    const rendered = renderHook(() => useBoard('2026-01-01'))
+    await waitFor(() => expect(rendered.result.current.status).toBe('ready'))
+    expect(db.reads.filter(([, , period]) => period === '2025-12-01')).toHaveLength(2)
+  })
+
+  it('selects the six bucket score columns and the overall, keyed by client', () => {
+    expect(LAST_CHECKIN_COLUMNS.split(', ').sort()).toEqual(
+      ['adv_score', 'client_id', 'comm_score', 'del_score', 'fin_score', 'growth_score', 'rel_score'],
+    )
+    expect(LAST_SCORE_COLUMNS).toBe('client_id, overall_score')
+  })
+
+  it("hands back last month's bucket scores and overall per client", async () => {
+    db.lastCheckins = async () => ({
+      data: [
+        { client_id: 1, comm_score: 3.33, growth_score: 4, fin_score: null, rel_score: 2, del_score: 5, adv_score: null },
+        { client_id: 2, comm_score: 1, growth_score: 1, fin_score: 1, rel_score: 1, del_score: 1, adv_score: 1 },
+      ],
+      error: null,
+    })
+    db.lastScores = async () => ({
+      data: [
+        { client_id: 1, overall_score: 3.5 },
+        { client_id: null, overall_score: 2 },
+      ],
+      error: null,
+    })
+    const { result } = await ready()
+    expect(result.current.lastMonth.get(1)).toEqual({
+      comm_score: 3.33,
+      growth_score: 4,
+      fin_score: null,
+      rel_score: 2,
+      del_score: 5,
+      adv_score: null,
+      overall_score: 3.5,
+    })
+    // A client with last month's check-in but no row in the view has no overall.
+    expect(result.current.lastMonth.get(2)?.overall_score).toBeNull()
+    expect(result.current.lastMonth.get(2)?.comm_score).toBe(1)
+    // No check-in last month: no entry at all.
+    expect(result.current.lastMonth.has(3)).toBe(false)
+  })
+
+  it("keeps last month's overall for a client whose view row has no check-in row", async () => {
+    db.lastScores = async () => ({ data: [{ client_id: 4, overall_score: 2.25 }], error: null })
+    const { result } = await ready()
+    expect(result.current.lastMonth.get(4)).toEqual({
+      comm_score: null,
+      growth_score: null,
+      fin_score: null,
+      rel_score: null,
+      del_score: null,
+      adv_score: null,
+      overall_score: 2.25,
+    })
+  })
+
+  it("reports a failed read of last month's check-ins, like this month's", async () => {
+    db.lastCheckins = async () => ({ data: null, error: { message: 'last month refused' } })
+    const { result } = renderHook(() => useBoard('2026-08-01'))
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).toContain('last month refused')
+    expect(result.current.clients).toEqual([])
+  })
+
+  it("reports a failed read of last month's scores, like this month's", async () => {
+    db.lastScores = async () => ({ data: null, error: { message: 'last view refused' } })
+    const { result } = renderHook(() => useBoard('2026-08-01'))
+    await waitFor(() => expect(result.current.status).toBe('error'))
+    expect(result.current.loadError).toContain('last view refused')
+    expect(result.current.clients).toEqual([])
+  })
+
+  it("stops a cancelled run before it asks for last month's overall", async () => {
+    // The period changes while last month's check-ins are in flight: the old
+    // run must make no further request, not merely discard what comes back.
+    let release!: (value: Result) => void
+    const held = new Promise<Result>((resolve) => {
+      release = resolve
+    })
+    db.lastCheckins = (period) => (period === '2026-07-01' ? held : Promise.resolve({ data: [], error: null }))
+    const { result, rerender } = renderHook(({ period }: { period: string }) => useBoard(period), {
+      initialProps: { period: '2026-08-01' },
+    })
+    await waitFor(() => expect(db.reads.some(([table, , period]) => table === 'checkins' && period === '2026-07-01')).toBe(true))
+    rerender({ period: '2026-10-01' })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    release({ data: [], error: null })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(db.reads).not.toContainEqual(['checkin_scores', LAST_SCORE_COLUMNS, '2026-07-01'])
   })
 })

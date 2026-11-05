@@ -99,6 +99,7 @@ const BOARD: UseBoard = {
   members: new Set([1]),
   checkins: new Map(),
   scores: new Map(),
+  lastMonth: new Map(),
   submitted: 0,
   toReview: 0,
   activeTotal: 1,

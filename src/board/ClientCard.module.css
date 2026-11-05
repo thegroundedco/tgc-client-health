@@ -86,6 +86,23 @@
   color: var(--text-secondary);
 }
 
+/* The letter and, beside it, its month-over-month arrow (brief 2026-11-04 B).
+   Centred under the track as the letter alone was; wraps rather than
+   overflowing a narrow column. */
+.initialRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* The overall's change chip, on the score's line. */
+.change {
+  display: inline-flex;
+  align-self: center;
+}
+
 /* Ink rather than a band colour, deliberately. The band chip beside it already
    carries the health meaning; colouring the bars by band would say the same
    thing twice and imply a per-bucket band that does not exist. Its height is

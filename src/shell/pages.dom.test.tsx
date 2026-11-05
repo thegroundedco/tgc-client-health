@@ -36,6 +36,7 @@ beforeEach(() => {
     members: new Set<number>(),
     checkins: new Map(),
     scores: new Map(),
+    lastMonth: new Map(),
     submitted: 0,
     toReview: 0,
     activeTotal: 0,
