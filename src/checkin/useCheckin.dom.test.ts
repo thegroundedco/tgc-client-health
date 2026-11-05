@@ -750,6 +750,46 @@ describe('useCheckin: bucket notes and focus', () => {
     expect(result.current.saveState.kind).toBe('clean')
   })
 
+  // Fix round 1. A v4 draft says nothing about bucket notes or focus, so a
+  // row that has since gained them (from another person, or the AI) must not
+  // make it differ...
+  it('a v4 draft matching the row\'s answers is not an unsaved change when the row holds notes', async () => {
+    db.checkins = async () => ({ data: [ROW], error: null })
+    window.localStorage.setItem(
+      'checkin-draft:v4:1:2026-08-01',
+      JSON.stringify({ answers: { comm_timely: 4 }, notes: '' }),
+    )
+    const { result } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.unsavedFromEarlierVisit).toBe(false)
+    expect(result.current.saveState.kind).toBe('clean')
+    expect(result.current.draft.bucketNotes).toEqual(ROW.bucket_notes)
+    expect(result.current.draft.focus).toBe('renewal')
+  })
+
+  // ...and must not wipe them when its real unsaved answers win and are saved.
+  it('a v4 draft with different answers keeps the row\'s notes and focus, and saves them', async () => {
+    db.checkins = async () => ({ data: [ROW], error: null })
+    window.localStorage.setItem(
+      'checkin-draft:v4:1:2026-08-01',
+      JSON.stringify({ answers: { comm_timely: 2 }, notes: '' }),
+    )
+    const { result, upsert } = renderCheckin({ client: { id: 1, name: 'Acme', started_on: null } })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    expect(result.current.unsavedFromEarlierVisit).toBe(true)
+    expect(result.current.draft.answers.comm_timely).toBe(2)
+    expect(result.current.draft.bucketNotes).toEqual(ROW.bucket_notes)
+    expect(result.current.draft.focus).toBe('renewal')
+    expect(result.current.draft).not.toHaveProperty('legacy')
+
+    act(() => result.current.submit())
+    await waitFor(() => expect(upsert).toHaveBeenCalled())
+    const payload = upsert.mock.calls[0][0]
+    expect(payload.comm_timely).toBe(2)
+    expect(payload.bucket_notes).toEqual({ growth: { why: 'stalled', actions: 'plan a call' } })
+    expect(payload.focus).toBe('renewal')
+  })
+
   // Review Focus 1, through the hook: a v4 draft from before this change
   // still wins over the row with its answers, and does not crash.
   it('restores a v4 local draft\'s answers with empty notes', async () => {

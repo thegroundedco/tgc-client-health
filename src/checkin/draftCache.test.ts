@@ -5,6 +5,7 @@ import {
   DRAFT_VERSION,
   EMPTY_DRAFT,
   clearDraft,
+  completeRestoredDraft,
   draftKey,
   draftsDiffer,
   isDraftEmpty,
@@ -356,7 +357,32 @@ describe('the version bump to v5', () => {
       notes: 'from v4',
       bucketNotes: {},
       focus: '',
+      legacy: true,
     })
+  })
+
+  it('marks only a v4 draft as legacy', () => {
+    const { store } = memoryStore({
+      [draftKey(7, '2026-08-01')]: JSON.stringify({ answers: { comm_timely: 5 }, notes: '' }),
+    })
+    expect(readDraft(7, '2026-08-01', store)).not.toHaveProperty('legacy')
+  })
+
+  it('completeRestoredDraft fills a v4 draft\'s notes and focus from the row, and strips the marker', () => {
+    const stored = { answers: { comm_timely: 1 }, notes: 'row', bucketNotes: { growth: { why: 'row why' } }, focus: 'row focus' }
+    const legacy = { answers: { comm_timely: 4 }, notes: 'mine', bucketNotes: {}, focus: '', legacy: true as const }
+    expect(completeRestoredDraft(legacy, stored)).toEqual({
+      answers: { comm_timely: 4 },
+      notes: 'mine',
+      bucketNotes: { growth: { why: 'row why' } },
+      focus: 'row focus',
+    })
+  })
+
+  it('completeRestoredDraft leaves a v5 draft\'s own notes and focus alone', () => {
+    const stored = { answers: {}, notes: '', bucketNotes: { growth: { why: 'row' } }, focus: 'row' }
+    const v5 = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
+    expect(completeRestoredDraft(v5, stored)).toEqual(v5)
   })
 
   it('ignores bucket notes or focus a v4 entry somehow holds', () => {
@@ -400,6 +426,30 @@ describe('the version bump to v5', () => {
     const { store, map } = memoryStore({ [v4Key]: JSON.stringify({ answers: { comm_timely: 1 }, notes: '' }) })
     writeDraft(7, '2026-08-01', { answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' }, store)
     expect(map.has(v4Key)).toBe(false)
+  })
+
+  it('writeDraft keeps the v4 entry when the v5 write fails', () => {
+    const { store: base, map } = memoryStore({ [v4Key]: JSON.stringify({ answers: { comm_timely: 1 }, notes: '' }) })
+    const store: StorageLike = { ...base, setItem: () => { throw new Error('quota') } }
+    expect(
+      writeDraft(7, '2026-08-01', { answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' }, store),
+    ).toBe(false)
+    expect(map.has(v4Key)).toBe(true)
+  })
+
+  it('a throwing v4 removal after a good write still reports success', () => {
+    const { store: base, map } = memoryStore()
+    const store: StorageLike = {
+      ...base,
+      removeItem: (key) => {
+        if (key === v4Key) throw new Error('nope')
+        base.removeItem(key)
+      },
+    }
+    expect(
+      writeDraft(7, '2026-08-01', { answers: { comm_timely: 2 }, notes: '', bucketNotes: {}, focus: '' }, store),
+    ).toBe(true)
+    expect(map.has(draftKey(7, '2026-08-01'))).toBe(true)
   })
 
   it('clearDraft removes a v4 entry too', () => {

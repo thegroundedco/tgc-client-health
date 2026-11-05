@@ -50,7 +50,17 @@ export function parseAiSuggestion(value: unknown): AiSuggestion | null {
   // costs only that field, never the whole suggestion -- the answers are what
   // revert exists for. Malformed reads as not carried, so revert keeps the
   // person's own text rather than writing nothing over it.
-  if (isRecord(value.bucket_notes)) parsed.bucket_notes = cleanBucketNotes(value.bucket_notes)
+  //
+  // An object with keys that cleans to {} (nothing valid in it) is also not
+  // carried: the AI did not say "no notes", it said something unreadable, and
+  // writing {} for it would wipe the person's notes. Only a literal {} is an
+  // AI saying it has none.
+  if (isRecord(value.bucket_notes)) {
+    const cleaned = cleanBucketNotes(value.bucket_notes)
+    if (Object.keys(cleaned).length > 0 || Object.keys(value.bucket_notes).length === 0) {
+      parsed.bucket_notes = cleaned
+    }
+  }
   if (value.focus === null) parsed.focus = null
   else if (typeof value.focus === 'string') parsed.focus = focusForSave(value.focus)
   return parsed

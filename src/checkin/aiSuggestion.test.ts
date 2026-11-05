@@ -59,6 +59,18 @@ describe('parseAiSuggestion', () => {
     expect(parseAiSuggestion({ ...good, bucket_notes: null })?.bucket_notes).toBeUndefined()
   })
 
+  // Something unreadable is not "no notes": writing {} for it would wipe the
+  // person's notes on revert.
+  it('treats a bucket_notes object with nothing valid in it as not carried', () => {
+    const parsed = parseAiSuggestion({ ...good, bucket_notes: { sentiment: { why: 'x' }, growth: { why: '  ' } } })
+    expect(parsed).not.toBeNull()
+    expect(parsed?.bucket_notes).toBeUndefined()
+  })
+
+  it('treats a literal {} as carried: the AI has no notes', () => {
+    expect(parseAiSuggestion({ ...good, bucket_notes: {} })?.bucket_notes).toEqual({})
+  })
+
   it.each([
     ['null', null],
     ['undefined', undefined],

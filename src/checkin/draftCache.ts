@@ -66,6 +66,16 @@ export type QuestionScores = Partial<Record<string, number>>
 // (bucketNotesForSave, focusForSave) and comparisons trim.
 export type Draft = { answers: QuestionScores; notes: string; bucketNotes: BucketNotes; focus: string }
 
+// What readDraft returns. `legacy` is set only on a draft read from a v4 entry,
+// which predates bucketNotes and focus and so says NOTHING about them -- its
+// empty values there are placeholders, not the person's choice. The caller
+// must fill those two fields from the stored row before comparing or using
+// the draft (useCheckin's load does), the same "only when carried" rule a
+// revert follows. Treating the placeholders as real would let a stale v4 draft
+// differ from a row that has since gained notes, win as "unsaved changes",
+// and then save {} and null over those notes.
+export type RestoredDraft = Draft & { legacy?: true }
+
 export const EMPTY_DRAFT: Draft = { answers: {}, notes: '', bucketNotes: {}, focus: '' }
 export const DRAFT_KEY_PREFIX = 'checkin-draft'
 export const DRAFT_VERSION = 'v5'
@@ -163,22 +173,33 @@ export function isDraftEmpty(draft: Draft): boolean {
 // Untrusted JSON into a Draft. `current` is false for a v4 entry, which
 // predates bucketNotes and focus: anything it holds under those names was not
 // written by this app and is ignored.
-function draftFromStored(parsed: unknown, current: boolean): Draft | null {
+function draftFromStored(parsed: unknown, current: boolean): RestoredDraft | null {
   if (typeof parsed !== 'object' || parsed === null) return null
   const source = parsed as { answers?: unknown; notes?: unknown; bucketNotes?: unknown; focus?: unknown }
-  return {
+  const draft: RestoredDraft = {
     answers: normaliseAnswers(source.answers),
     notes: typeof source.notes === 'string' ? source.notes : '',
     bucketNotes: current ? cleanBucketNotes(source.bucketNotes) : {},
     focus: current && typeof source.focus === 'string' ? source.focus : '',
   }
+  if (!current) draft.legacy = true
+  return draft
+}
+
+// A restored draft made whole: a v4 draft's bucketNotes and focus come from
+// `stored` (the row's), since it carried none of its own. A v5 draft is
+// returned as it is, minus the marker. See RestoredDraft.
+export function completeRestoredDraft(restored: RestoredDraft, stored: Draft): Draft {
+  const { legacy, ...draft } = restored
+  if (!legacy) return draft
+  return { ...draft, bucketNotes: stored.bucketNotes, focus: stored.focus }
 }
 
 export function readDraft(
   clientId: number,
   period: string,
   store: StorageLike | null = defaultStorage(),
-): Draft | null {
+): RestoredDraft | null {
   if (!store) return null
 
   // Before anything else, and its own try/catch: a throwing removeItem must not
@@ -257,15 +278,6 @@ export function writeDraft(
     focus: typeof draft.focus === 'string' ? draft.focus : '',
   }
 
-  // This write supersedes any v4 entry (see the header). Its own try/catch,
-  // and before the write, so a failure here cannot cost the write itself.
-  try {
-    store.removeItem(v4DraftKey(clientId, period))
-  } catch {
-    // Nothing to do: readDraft prefers v5, so a surviving v4 entry only
-    // matters once v5 is gone, and clearDraft removes it then too.
-  }
-
   try {
     if (isDraftEmpty(normalised)) {
       // Removed rather than stored. A stored empty value would sit as dead
@@ -277,13 +289,25 @@ export function writeDraft(
       // through readDraft sees no entry for a client and period with nothing
       // saved, rather than one it would have to inspect to find empty.
       store.removeItem(key)
-      return true
+    } else {
+      store.setItem(key, JSON.stringify(normalised))
     }
-    store.setItem(key, JSON.stringify(normalised))
-    return true
   } catch {
+    // The v4 entry is kept: this write did not land, so it is still the only
+    // copy of whatever it holds.
     return false
   }
+
+  // This write supersedes any v4 entry (see the header), so it goes -- but
+  // only now, after the write succeeded. Its own try/catch, so a failure here
+  // cannot turn a successful write into a reported failure; readDraft prefers
+  // v5, and clearDraft removes the v4 entry on save too.
+  try {
+    store.removeItem(v4DraftKey(clientId, period))
+  } catch {
+    // Nothing to do.
+  }
+  return true
 }
 
 export function clearDraft(

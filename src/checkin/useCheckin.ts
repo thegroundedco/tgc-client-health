@@ -13,6 +13,7 @@ import type { SaveState } from './saveState'
 import {
   EMPTY_DRAFT,
   clearDraft,
+  completeRestoredDraft,
   draftsDiffer,
   isDraftEmpty,
   readDraft,
@@ -209,8 +210,13 @@ export function useCheckin(
       // §5.5: if a saved row and a local draft disagree, the draft wins and the
       // screen says it has not been saved. The stored row is the fallback, not
       // the default -- somebody typed the draft, and nobody typed the fallback.
-      const fromStorage = readDraft(clientId, period)
+      //
+      // A v4 draft carries no bucket notes or focus, so it takes the row's
+      // before it is compared: it cannot differ over, or overwrite, fields it
+      // never had (completeRestoredDraft).
       const fromDatabase = draftFromRow(thisMonth)
+      const restored = readDraft(clientId, period)
+      const fromStorage = restored === null ? null : completeRestoredDraft(restored, fromDatabase)
       const differs = fromStorage !== null && draftsDiffer(fromStorage, fromDatabase)
       setDraft(differs && fromStorage ? fromStorage : fromDatabase)
       setUnsavedFromEarlierVisit(differs)
