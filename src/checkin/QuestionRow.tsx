@@ -107,7 +107,7 @@ export function QuestionRow({ question, value, lastValue, disabled, onChange, on
             same line as the scale rather than below it, because 21 rows each
             carrying their own trailing line is a third of the screen's height
             spent on a value that is context, not the task. */}
-        <p className={`t-caption ${styles.last}`}>
+        <p className="t-caption">
           {lastValue === null ? (
             'No score last month'
           ) : (

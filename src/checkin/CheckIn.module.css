@@ -85,8 +85,19 @@
   container-type: inline-size;
 }
 
-/* Two classes, so it outranks `.screen > *` above. */
+/* Two classes, so it outranks `.screen > *` above.
+
+   Brief 2026-11-04, A2: the summary box shares the bucket list's measure, so
+   the three boxes the owner reads down the page -- this month's totals, the
+   focus box and the bucket sections -- have one left edge and one right edge.
+   The focus box and the sections are inside .buckets and fill it; the totals
+   box is let out to the same cap here. The prose inside each keeps its own
+   readable measure through .prose and the type roles. */
 .screen > .buckets {
+  max-width: var(--measure-dashboard);
+}
+
+.screen > .totals {
   max-width: var(--measure-dashboard);
 }
 

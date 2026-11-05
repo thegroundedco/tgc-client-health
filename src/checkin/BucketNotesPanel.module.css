@@ -3,6 +3,15 @@
    the grid track CheckIn.module.css gives it. The owner checks placement by eye. */
 .panel { display: grid; align-content: start; gap: var(--space-3); min-inline-size: 0; }
 .field { display: grid; gap: var(--space-1); }
-.box { resize: vertical; line-height: var(--leading-body); }
+/* About three rows tall (brief 2026-11-04, A3), so the panel reads lighter
+   than the questions beside it: three line-heights plus .field's padding on
+   both sides and its 1px border on both sides (border-box, base.css). Matches
+   rows={3} in the markup; stated here as well so no stretch or UA default can
+   make the box taller than the questions it annotates. Still resizable. */
+.box {
+  block-size: calc(3lh + 2 * var(--space-3) + 2px);
+  resize: vertical;
+  line-height: var(--leading-body);
+}
 /* Long words in a pasted note must wrap rather than widen the column. */
 .last { overflow-wrap: anywhere; }

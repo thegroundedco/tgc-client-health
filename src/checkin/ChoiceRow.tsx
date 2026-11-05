@@ -123,7 +123,7 @@ export function ChoiceRow({ question, value, lastValue, hint, disabled, onChange
             through choiceLabel, falling back to the raw number for a value no
             control can write -- a legacy 2 or 4 in a Finance column, which is
             real data and must not be rendered as though it were a choice. */}
-        <p className={`t-caption ${styles.last}`}>
+        <p className="t-caption">
           {lastValue === null ? (
             'No answer last month'
           ) : (

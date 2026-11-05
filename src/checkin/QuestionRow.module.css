@@ -120,9 +120,9 @@
   padding: var(--space-1) var(--space-3);
 }
 
-/* Pushed to the end of the scale row so it sits opposite the numbers rather
-   than under them. Wraps below on a narrow viewport, which .scale's flex-wrap
-   already handles. */
-.last {
-  margin-inline-start: auto;
-}
+/* Last month's value has no rule of its own: it is the scale row's last flex
+   item, so it sits straight after the scale and Clear at .scale's gap, and
+   wraps below them on a narrow viewport through .scale's flex-wrap. It used to
+   carry an auto inline-start margin that threw it to the far edge of the
+   column -- on a wide desktop, a 1500px gap the owner read as a separate
+   control (brief 2026-11-04, A1). */
