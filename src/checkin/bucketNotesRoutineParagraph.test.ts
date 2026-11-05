@@ -42,8 +42,25 @@ describe('the bucket notes routine paragraph', () => {
   })
 
   it('writes focus only below the healthy threshold', () => {
-    expect(flat(PASTED)).toContain(`ONLY when the suggested overall is below ${HEALTHY_AT}`)
-    expect(PASTED).toContain(`When the overall is ${HEALTHY_AT} or higher, focus is null`)
+    expect(flat(PASTED)).toContain(`ONLY when the gate value is below ${HEALTHY_AT}`)
+    expect(PASTED).toContain(`When the gate value is ${HEALTHY_AT} or higher, focus is null`)
+  })
+
+  it('defines the gate value as the tool does: 17 or 18 answers, rounded, with a blank-hours fallback', () => {
+    const text = flat(PASTED)
+    expect(text).toContain('the mean of the 17 answers outside Advocacy, plus fin_hours_in_budget when hours applies (18 answers), rounded to 2 decimal places')
+    expect(text).toContain('3.597 rounds to 3.60, which is Healthy')
+    expect(text).toContain('only because fin_hours_in_budget is blank')
+    expect(text).toContain('use the mean of the other 17, rounded to 2 decimal places')
+    expect(text).toContain('a struggling client still gets a focus')
+  })
+
+  it('keeps a length safety margin and one construction for ai', () => {
+    const text = flat(PASTED + PARAGRAPH)
+    expect(text).toContain('under about 1500 characters')
+    expect(text).toContain('focus under about 750')
+    expect(text).toContain('do not put them inside the dollar-quoted literal')
+    expect(PARAGRAPH).not.toContain('"bucket_notes": <the bucket_notes object')
   })
 
   it('never invents evidence', () => {

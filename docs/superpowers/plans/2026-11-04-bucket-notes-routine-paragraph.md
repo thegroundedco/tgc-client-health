@@ -14,13 +14,13 @@ bucket_notes: a JSON object with one key per bucket you scored, and only these s
   - Never invent evidence. If there is no evidence for a bucket, why says so ("No calls, emails or messages about this in the month."), and you write no actions that pretend otherwise.
   - Leave Advocacy out while its gate is shut (all four adv_* null). Use finances the way the finance rules do: say "finance pending revenue" or the hours placeholder where that is the state, never made-up figures.
 
-Limits (the database refuses anything outside them, and a refused statement skips the client):
+Limits (the database refuses anything outside them, and a refused statement loses the whole row write for that client). As a safety margin, keep each why and actions under about 1500 characters and focus under about 750:
   - Only the six bucket keys above. Only why and actions inside a bucket.
   - Every field is a non-empty string of at most 2000 characters. No empty strings, no nulls.
   - A bucket with neither field is OMITTED. Never write an empty object {} for a bucket.
   - If no bucket has anything to say, bucket_notes is {}.
 
-focus: the one or two most important things to work on with this client this month, in one or two sentences, 1-1000 characters. Write it ONLY when the suggested overall is below 3.6 (Watch or At-risk); the overall is the mean of the answers outside Advocacy, the same one the tool shows. When the overall is 3.6 or higher, focus is null. It is either null or a non-empty string, never "".
+focus: the one or two most important things to work on with this client this month, in one or two sentences, 1-1000 characters. Write it ONLY when the gate value is below 3.6 (Watch or At-risk). The gate value is the tool's overall: the mean of the 17 answers outside Advocacy, plus fin_hours_in_budget when hours applies (18 answers), rounded to 2 decimal places (3.597 rounds to 3.60, which is Healthy, so no focus). If that overall would be null only because fin_hours_in_budget is blank (hours applies but was left for a person), use the mean of the other 17, rounded to 2 decimal places: a struggling client still gets a focus. When the gate value is 3.6 or higher, focus is null. It is either null or a non-empty string, never "".
 
 Exact shape (the same object goes in ai_suggestion and, where allowed, in the row):
   "bucket_notes": {"communication": {"why": "<text>", "actions": "<text>"}, "delivery": {"why": "<text>"}}
@@ -57,7 +57,7 @@ For each scored client build ai = {"suggested_at": <now, ISO>, "run_id": <run_id
 Replace with:
 
 ```
-For each scored client build ai = {"suggested_at": <now, ISO>, "run_id": <run_id>, "notes": <note>, "answers": {<the 19 judged keys (every answer column except fin_rack_rate, fin_rate_increased and fin_hours_in_budget), each a JSON number or null — never quoted>}, "bucket_notes": <the bucket_notes object from step 4b, {} if none>, "focus": <the focus text, or null>}.
+For each scored client build ai = {"suggested_at": <now, ISO>, "run_id": <run_id>, "notes": <note>, "answers": {<the 19 judged keys (every answer column except fin_rack_rate, fin_rate_increased and fin_hours_in_budget), each a JSON number or null — never quoted>}}, then merge in bucket_notes and focus as step 4b says (ai = <that literal>::jsonb || jsonb_build_object('bucket_notes', <step 4b value>, 'focus', <text or null>)); do not put them inside the dollar-quoted literal.
 ```
 
 **Line 59**, now (unchanged by the hours paragraph):
