@@ -440,26 +440,13 @@ export function CheckIn({ client, period, profile, onBack, onEditClient }: Props
             stored one. Nothing when either is missing -- an arrow against a
             month with no score would invent a rise or a fall.
             Brief 2026-11-05 B2: beside the big numbers, the next item after
-            last month's block, not under this month's band. It is a third
-            column shaped like the two before it -- an empty label row, then a
-            line with a display-size strut -- so flex baseline alignment puts
-            the mark on the numbers' baseline with no offsets. Both struts are
-            aria-hidden non-breaking spaces. */}
+            last month's block, not under this month's band. The grid in
+            CheckIn.module.css puts it in the number row, on their baseline. */}
         {overallChange !== null && (
-          <div className={styles.total} data-testid="overall-change">
-            <p aria-hidden="true" className="t-label">
-              {'\u00a0'}
-            </p>
-            <p className={styles.totalLine}>
-              <span aria-hidden="true" className={`t-display ${styles.totalValue}`}>
-                {'\u00a0'}
-              </span>
-              <span className={`t-caption ${styles.change}`}>
-                <ChangeText change={overallChange} label={describeChange('Overall', overallChange, sinceLong)} />{' '}
-                <span aria-hidden="true">vs {since}</span>
-              </span>
-            </p>
-          </div>
+          <p className={`t-caption ${styles.change} ${styles.overallChange}`} data-testid="overall-change">
+            <ChangeText change={overallChange} label={describeChange('Overall', overallChange, sinceLong)} />{' '}
+            <span aria-hidden="true">vs {since}</span>
+          </p>
         )}
       </div>
 
