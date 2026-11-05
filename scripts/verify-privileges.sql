@@ -795,6 +795,25 @@ begin
       '%s is granted EXECUTE to PUBLIC -- every role reaches it implicitly; revoke execute from public', r.fn);
   end loop;
 
+  -- 9e. The hours definers, by name (20261104120000_productive_hours.sql and
+  --     20261105120000_hours_scored_by_db.sql). 9b already catches either one
+  --     becoming callable; this also fails if one is MISSING -- the BEFORE
+  --     trigger on checkins calls both, so a missing hours_score fails every
+  --     check-in save. Neither may be executable by anon or authenticated: the
+  --     triggers run them as the definer, and a caller could otherwise probe
+  --     another client's budgets through them.
+  for r in
+    select sig
+    from unnest(array['private.hours_applies(bigint,date)', 'private.hours_score(bigint,date)']) sig
+  loop
+    if to_regprocedure(r.sig) is null then
+      problems := problems || format('%s does not exist -- has 20261105120000_hours_scored_by_db.sql been applied?', r.sig);
+    elsif has_function_privilege('anon', to_regprocedure(r.sig), 'EXECUTE')
+       or has_function_privilege('authenticated', to_regprocedure(r.sig), 'EXECUTE') then
+      problems := problems || format('%s is EXECUTE-able by anon or authenticated -- revoke execute from public, anon, authenticated', r.sig);
+    end if;
+  end loop;
+
   ----------------------------------------------------------------------------
   -- 10. POLICY BEHAVIOUR -- what a signed-in user can actually SEE.
   --
