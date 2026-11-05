@@ -103,10 +103,15 @@ describe('cardFooter', () => {
     expect(cardFooter(row, VIEWER, true, false)).toBe('Not started')
   })
 
-  // Parity with notes, which the footer has never counted: a focus is not a
-  // score, and "Draft, 0 of 21" would send the reader looking for one.
-  it('still says Not started for a row holding only a focus', () => {
-    expect(cardFooter({ ...blankCheckin(), focus: 'renewal' }, VIEWER, true, false)).toBe('Not started')
+  // A focus is content, as on the check-in screen where notes alone count as
+  // a draft, so the footer says Draft rather than Not started.
+  it('says Draft, 0 of N scored for a row holding only a focus', () => {
+    expect(cardFooter({ ...blankCheckin(), focus: 'renewal' }, VIEWER, true, false)).toBe('Draft, 0 of 21 scored')
+    expect(cardFooter({ ...blankCheckin(), focus: 'renewal' }, VIEWER, false, false)).toBe('Draft, 0 of 17 scored')
+  })
+
+  it.each(['', '   ', '\n', null])('still says Not started for an empty focus %j with no answers', (focus) => {
+    expect(cardFooter({ ...blankCheckin(), focus }, VIEWER, true, false)).toBe('Not started')
   })
 
   // Gate open: the denominator is 21, not 17. This is the number that decides

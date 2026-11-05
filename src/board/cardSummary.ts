@@ -117,9 +117,11 @@ export function cardFooter(
   }
 
   const scored = answeredCount(answers, advocacyApplies, hoursApplies)
-  // A row can exist with notes and no answers. "Draft, 0 of 21" would send the
-  // reader looking for scores that were never entered.
-  if (scored === 0) return 'Not started'
+  // A row can exist with notes and no answers; those alone stay "Not started"
+  // (the board does not read notes). A focus is content, as on the check-in
+  // screen, so it makes a draft: "Draft, 0 of 21 scored".
+  const hasFocus = typeof checkin.focus === 'string' && checkin.focus.trim() !== ''
+  if (scored === 0 && !hasFocus) return 'Not started'
   return `Draft, ${scored} of ${requiredQuestions(advocacyApplies, hoursApplies).length} scored`
 }
 
